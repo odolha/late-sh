@@ -213,6 +213,21 @@ fn toggle_selected_room_favorite(app: &mut App) -> bool {
     true
 }
 
+fn move_selected_favorite(app: &mut App, delta: isize) -> bool {
+    let Some(room_id) = app.chat.selected_favorite_room_id() else {
+        return false;
+    };
+    if !app.chat.favorite_room_ids().contains(&room_id) {
+        return false;
+    }
+    if !app.profile_state.move_favorite_room(room_id, delta) {
+        return false;
+    }
+    app.chat
+        .set_favorite_room_ids(app.profile_state.profile().favorite_room_ids.clone());
+    true
+}
+
 /// Shared message-list navigation and actions. Consumed by both the chat page
 /// and the dashboard card so that d/r/e/p/j/k/etc. behave identically on both
 /// screens and new message actions only need to be wired here.
@@ -496,6 +511,13 @@ pub fn handle_byte(app: &mut App, byte: u8) -> bool {
             return true;
         }
         return super::work::input::handle_byte(app, byte);
+    }
+
+    if byte == b'[' && move_selected_favorite(app, -1) {
+        return true;
+    }
+    if byte == b']' && move_selected_favorite(app, 1) {
+        return true;
     }
 
     if handle_message_action(app, byte) {

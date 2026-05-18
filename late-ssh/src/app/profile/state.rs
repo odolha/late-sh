@@ -66,6 +66,24 @@ impl ProfileState {
         added
     }
 
+    pub fn move_favorite_room(&mut self, room_id: Uuid, delta: isize) -> bool {
+        let Some(index) = self
+            .profile
+            .favorite_room_ids
+            .iter()
+            .position(|id| *id == room_id)
+        else {
+            return false;
+        };
+        let target = index as isize + delta;
+        if target < 0 || target >= self.profile.favorite_room_ids.len() as isize {
+            return false;
+        }
+        self.profile.favorite_room_ids.swap(index, target as usize);
+        self.save_profile();
+        true
+    }
+
     fn save_profile(&self) {
         self.profile_service
             .edit_profile(self.user_id, profile_params_from_profile(&self.profile));

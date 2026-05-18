@@ -419,6 +419,7 @@ fn overview_lines() -> Vec<String> {
         "",
         "Room favorites",
         "  f                 favorite / unfavorite the selected room",
+        "  [ / ]             move the selected favorite up / down",
         "  favorites appear first in the room rail and room picker",
         "  `                 toggle Dashboard / last game",
         "",

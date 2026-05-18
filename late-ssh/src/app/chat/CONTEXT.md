@@ -185,8 +185,8 @@ There is no top-level `Screen::Chat`. `Screen::Dashboard` renders as Home and ow
 
 Room favorites:
 - Press `f` on a selected real room to toggle it in `ProfileState::toggle_favorite_room`.
-- Favorites are stored in `users.settings.favorite_room_ids`.
-- Favorites render first in the Home room rail and in the global room picker.
+- Press `[` / `]` on a selected favorite to move it up/down via `ProfileState::move_favorite_room`. No-op when the selection isn't a favorite or is already at the edge.
+- Favorites are stored in `users.settings.favorite_room_ids` and the vec order drives both the Home room rail and the global picker.
 - Favorites are no longer edited through a Settings tab.
 
 Home hot-room shortcuts:
@@ -458,6 +458,7 @@ Cache:
 | `p` | Open selected author's read-only profile |
 | `c` | Copy selected message body |
 | `f` | Favorite/unfavorite the selected real room |
+| `[` / `]` | Move the selected favorite up/down in the room rail |
 | `f` then `1..8` | React to selected message |
 | `f` then `f` | Open reaction-owner overlay |
 | `Ctrl+P` | Admin toggle selected-message pin |
