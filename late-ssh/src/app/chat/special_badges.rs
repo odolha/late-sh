@@ -3,9 +3,9 @@
 //! have multiple badges; array order determines render order (first = closest
 //! to the username).
 
-const MODERATOR: &str = "◆";
-const ARTIST: &str = "✎";
-const DEVELOPER: &str = "⌘";
+const MODERATOR: &str = "🛡️";
+const ARTIST: &str = "🎨";
+const DEVELOPER: &str = "🔨";
 
 const SPECIAL_BADGES: &[(&str, &[&str])] = &[
     ("mevanlc", &[MODERATOR, DEVELOPER]),
@@ -28,9 +28,9 @@ mod tests {
     use unicode_width::UnicodeWidthStr;
 
     #[test]
-    fn badges_use_single_cell_glyphs() {
+    fn badges_use_emoji_width_glyphs() {
         for badge in [MODERATOR, ARTIST, DEVELOPER] {
-            assert_eq!(UnicodeWidthStr::width(badge), 1);
+            assert_eq!(UnicodeWidthStr::width(badge), 2);
         }
     }
 
