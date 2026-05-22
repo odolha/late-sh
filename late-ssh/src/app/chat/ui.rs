@@ -533,7 +533,7 @@ fn ensure_chat_rows_cache(
                 .add_modifier(Modifier::BOLD)
         } else if is_friend {
             Style::default()
-                .fg(theme::AMBER_GLOW())
+                .fg(theme::BADGE_GOLD())
                 .add_modifier(Modifier::BOLD)
         } else if is_bot {
             Style::default().fg(theme::BOT())

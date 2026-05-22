@@ -322,6 +322,10 @@ pub(crate) fn iterm2_capabilities_probe() -> Vec<u8> {
     b"\x1b]1337;Capabilities\x1b\\".to_vec()
 }
 
+pub(crate) fn terminal_string_terminator() -> &'static [u8] {
+    b"\x1b\\"
+}
+
 fn kitty_delete_command(control: impl AsRef<str>) -> Vec<u8> {
     format!("\x1b_G{}\x1b\\", control.as_ref()).into_bytes()
 }
