@@ -129,6 +129,11 @@ impl WebviewPlaybackController {
         let child = match Command::new(exe)
             .arg("webview-pair")
             .env("LATE_API_BASE_URL", &self.api_base_url)
+            // The helper is an undecorated media surface, not an accessibility
+            // target. Opting out avoids host AT-SPI bridge crashes from stale
+            // at-spi-bus-launcher/dbus state while leaving the terminal app's
+            // own environment untouched.
+            .env("NO_AT_BRIDGE", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(helper_stderr.stdio)
