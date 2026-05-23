@@ -16,7 +16,7 @@ use crate::app::ai::ghost::DEALER_FINGERPRINT;
 pub use late_core::models::game_room::GameKind;
 
 const MAX_TABLES_PER_USER: i64 = 3;
-const INACTIVE_TABLE_TTL: Duration = Duration::from_secs(12 * 60 * 60);
+const INACTIVE_TABLE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const INACTIVE_TABLE_CLEANUP_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 #[derive(Clone)]
