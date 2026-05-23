@@ -744,6 +744,16 @@ fn handle_parsed_input(app: &mut App, event: ParsedInput) {
         return;
     }
 
+    // Ctrl+A opens the admin/mod aquarium preview. Artboard keeps Ctrl+A for
+    // swatch slot 1.
+    if matches!(event, ParsedInput::Byte(0x01))
+        && app.screen != Screen::Artboard
+        && (app.is_admin || app.is_moderator)
+    {
+        open_aquarium_modal_globally(app);
+        return;
+    }
+
     // Ctrl+L (0x0C) is the global terminal/runtime FAQ chord. Toggles the
     // modal so users can dismiss with the same key.
     if matches!(event, ParsedInput::Byte(0x0C)) && !app.show_mod_modal {
@@ -773,6 +783,11 @@ fn handle_parsed_input(app: &mut App, event: ParsedInput) {
 
     if app.show_hub_modal {
         hub::input::handle_input(app, event);
+        return;
+    }
+
+    if app.show_aquarium_modal {
+        crate::app::hub::aquarium::input::handle_input(app, event);
         return;
     }
 
@@ -1236,6 +1251,10 @@ fn dispatch_escape(app: &mut App) {
     }
     if app.show_hub_modal {
         hub::input::handle_escape(app);
+        return;
+    }
+    if app.show_aquarium_modal {
+        crate::app::hub::aquarium::input::handle_escape(app);
         return;
     }
     if app.show_settings {
@@ -1767,6 +1786,7 @@ fn open_room_search_modal_globally(app: &mut App) {
     app.show_help = false;
     app.show_mod_modal = false;
     app.show_hub_modal = false;
+    app.show_aquarium_modal = false;
     app.show_profile_modal = false;
     app.show_bonsai_modal = false;
     app.cat_state.cancel_play();
@@ -1789,6 +1809,7 @@ fn open_settings_modal_globally(app: &mut App) {
     app.show_help = false;
     app.show_mod_modal = false;
     app.show_hub_modal = false;
+    app.show_aquarium_modal = false;
     app.show_profile_modal = false;
     app.show_bonsai_modal = false;
     app.cat_state.cancel_play();
@@ -1810,6 +1831,7 @@ fn open_hub_modal_globally(app: &mut App) {
     clear_prefix_arms(app);
     app.show_help = false;
     app.show_mod_modal = false;
+    app.show_aquarium_modal = false;
     app.show_profile_modal = false;
     app.show_bonsai_modal = false;
     app.cat_state.cancel_play();
@@ -1829,11 +1851,34 @@ fn open_hub_modal_globally(app: &mut App) {
     app.show_hub_modal = true;
 }
 
+fn open_aquarium_modal_globally(app: &mut App) {
+    clear_prefix_arms(app);
+    app.show_help = false;
+    app.show_mod_modal = false;
+    app.show_hub_modal = false;
+    app.show_profile_modal = false;
+    app.show_bonsai_modal = false;
+    app.cat_state.cancel_play();
+    app.show_cat_modal = false;
+    app.show_settings = false;
+    app.show_terminal_help = false;
+    app.show_web_chat_qr = false;
+    app.web_chat_qr_url = None;
+    app.show_pair_modal = false;
+    app.show_quit_confirm = false;
+    app.icon_picker_open = false;
+    app.chat.close_overlay();
+    app.chat.close_news_modal();
+    app.chat.cancel_room_jump();
+    app.show_aquarium_modal = true;
+}
+
 fn open_terminal_help_modal_globally(app: &mut App) {
     clear_prefix_arms(app);
     app.show_help = false;
     app.show_mod_modal = false;
     app.show_hub_modal = false;
+    app.show_aquarium_modal = false;
     app.show_profile_modal = false;
     app.show_bonsai_modal = false;
     app.cat_state.cancel_play();
@@ -2051,6 +2096,7 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
             app.show_profile_modal = false;
             app.show_settings = false;
             app.show_hub_modal = false;
+            app.show_aquarium_modal = false;
             app.show_quit_confirm = false;
             app.show_bonsai_modal = true;
             true
@@ -2064,6 +2110,7 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
                 app.show_profile_modal = false;
                 app.show_settings = false;
                 app.show_quit_confirm = false;
+                app.show_aquarium_modal = false;
                 app.show_bonsai_modal = false;
                 app.cat_state.cancel_play();
                 app.show_cat_modal = false;
@@ -2075,6 +2122,7 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
             app.show_profile_modal = false;
             app.show_settings = false;
             app.show_hub_modal = false;
+            app.show_aquarium_modal = false;
             app.show_quit_confirm = false;
             app.show_cat_modal = true;
             true

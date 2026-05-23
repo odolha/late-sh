@@ -3072,8 +3072,8 @@ impl ChatState {
     ) -> HashMap<Uuid, Option<DateTime<Utc>>> {
         for (room_id, current) in &self.room_last_message_at {
             if let Some(incoming_value) = incoming.get_mut(room_id) {
-                let current_value = current.clone();
-                if current_value > incoming_value.clone() {
+                let current_value = *current;
+                if current_value > *incoming_value {
                     *incoming_value = current_value;
                 }
             }
@@ -3085,7 +3085,7 @@ impl ChatState {
         let latest = self.room_last_message_at.entry(room_id).or_insert(None);
         let should_update = latest
             .as_ref()
-            .map(|current| created > current.clone())
+            .map(|current| created > *current)
             .unwrap_or(true);
         if should_update {
             *latest = Some(created);

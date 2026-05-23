@@ -178,6 +178,8 @@ struct DrawContext<'a> {
     show_quit_confirm: bool,
     show_mod_modal: bool,
     show_hub_modal: bool,
+    show_aquarium_modal: bool,
+    aquarium_state: &'a crate::app::hub::aquarium::state::AquariumState,
     hub_state: &'a crate::app::hub::state::HubState,
     shop_state: &'a crate::app::hub::shop::state::ShopState,
     mod_modal_state: &'a mod_modal::state::ModModalState,
@@ -594,6 +596,8 @@ impl App {
                         show_quit_confirm: self.show_quit_confirm,
                         show_mod_modal: self.show_mod_modal,
                         show_hub_modal: self.show_hub_modal,
+                        show_aquarium_modal: self.show_aquarium_modal,
+                        aquarium_state: &self.aquarium_state,
                         hub_state: &self.hub_state,
                         shop_state: &self.shop_state,
                         mod_modal_state: &self.mod_modal_state,
@@ -956,6 +960,10 @@ impl App {
                 ctx.leaderboard,
                 ctx.user_id,
             );
+        }
+
+        if ctx.show_aquarium_modal {
+            crate::app::hub::aquarium::ui::draw_modal(frame, inner, ctx.aquarium_state);
         }
 
         if ctx.show_profile_modal {
