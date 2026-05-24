@@ -144,6 +144,45 @@ pub(crate) enum RoomSlot {
     Work,
 }
 
+/// Collapsible groupings of the room-list rail. Each maps to one section
+/// header drawn by `build_cozy_room_rail_rows`. A section in
+/// `ChatState::collapsed_sections` renders header-only and its rooms drop out
+/// of `visual_order` (so navigation skips them too).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RoomSection {
+    Favorites,
+    Core,
+    Channels,
+    Updates,
+    Dms,
+}
+
+impl RoomSection {
+    /// The header label as rendered in the rail. Used to map a clicked header
+    /// row back to its section.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            RoomSection::Favorites => "favorites",
+            RoomSection::Core => "core",
+            RoomSection::Channels => "channels",
+            RoomSection::Updates => "updates",
+            RoomSection::Dms => "dms",
+        }
+    }
+
+    /// Resolve a header label back to its section (inverse of `label`).
+    pub(crate) fn from_label(label: &str) -> Option<RoomSection> {
+        match label {
+            "favorites" => Some(RoomSection::Favorites),
+            "core" => Some(RoomSection::Core),
+            "channels" => Some(RoomSection::Channels),
+            "updates" => Some(RoomSection::Updates),
+            "dms" => Some(RoomSection::Dms),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct SelectedRoomSlotState {
     pub selected_room_id: Option<Uuid>,
@@ -182,6 +221,28 @@ fn synthetic_entry_selected(selected: SelectedRoomSlotState) -> bool {
         || selected.discover_selected
         || selected.showcase_selected
         || selected.work_selected
+}
+
+fn current_slot_from_state(state: SelectedRoomSlotState) -> Option<RoomSlot> {
+    if state.feeds_selected {
+        return Some(RoomSlot::Feeds);
+    }
+    if state.news_selected {
+        return Some(RoomSlot::News);
+    }
+    if state.notifications_selected {
+        return Some(RoomSlot::Notifications);
+    }
+    if state.discover_selected {
+        return Some(RoomSlot::Discover);
+    }
+    if state.showcase_selected {
+        return Some(RoomSlot::Showcase);
+    }
+    if state.work_selected {
+        return Some(RoomSlot::Work);
+    }
+    state.selected_room_id.map(RoomSlot::Room)
 }
 
 fn room_membership_command_target(
@@ -286,6 +347,10 @@ pub struct ChatState {
     requested_audio_fallback_url: Option<String>,
     requested_audio_skip: bool,
     pending_mod_outputs: VecDeque<ModCommandOutput>,
+
+    /// Room-list sections the user has collapsed. Empty = all expanded
+    /// (the default). Session-only — resets on reconnect.
+    pub(crate) collapsed_sections: HashSet<RoomSection>,
 
     // image upload
     pub(crate) image_upload_rx: Option<tokio::sync::oneshot::Receiver<Result<String, String>>>,
@@ -436,6 +501,7 @@ impl ChatState {
             requested_audio_fallback_url: None,
             requested_audio_skip: false,
             pending_mod_outputs: VecDeque::new(),
+            collapsed_sections: HashSet::new(),
             image_upload_rx: None,
             image_upload_pending: false,
             image_upload_target_room_id: None,
@@ -1032,6 +1098,28 @@ impl ChatState {
         }
     }
 
+    /// The room slot currently selected, if any.
+    fn current_slot(&self) -> Option<RoomSlot> {
+        current_slot_from_state(self.selected_slot_state())
+    }
+
+    /// Collapse/expand a room-list section. If collapsing hides the currently
+    /// selected room, selection snaps to the first still-visible slot so the
+    /// cursor never ends up stranded inside a hidden section.
+    pub(crate) fn toggle_section(&mut self, section: RoomSection) {
+        if !self.collapsed_sections.remove(&section) {
+            self.collapsed_sections.insert(section);
+        }
+        let order = self.visual_order();
+        let still_visible = match self.current_slot() {
+            Some(slot) => order.contains(&slot),
+            None => true,
+        };
+        if !still_visible && let Some(&first) = order.first() {
+            self.select_room_slot(first);
+        }
+    }
+
     fn selected_synthetic_entry_label(&self) -> Option<&'static str> {
         if self.news_selected {
             Some("news")
@@ -1121,6 +1209,7 @@ impl ChatState {
             &self.room_last_message_at,
             self.feeds.has_feeds(),
             &self.favorite_room_ids,
+            &self.collapsed_sections,
         )
     }
 
@@ -3245,52 +3334,68 @@ pub(crate) fn visual_order_for_rooms(
     room_last_message_at: &HashMap<Uuid, Option<DateTime<Utc>>>,
     feeds_available: bool,
     favorite_room_ids: &[Uuid],
+    collapsed_sections: &HashSet<RoomSection>,
 ) -> Vec<RoomSlot> {
     let mut order = Vec::new();
     let mut pushed_rooms = HashSet::new();
 
+    // `pushed_rooms` must track membership even for collapsed sections so a
+    // room can't reappear later (e.g. a collapsed favorite leaking into
+    // Channels). Each section computes its slots, records them as pushed,
+    // then only appends to `order` when the section is expanded.
+    let favorites_collapsed = collapsed_sections.contains(&RoomSection::Favorites);
     for favorite_id in favorite_room_ids {
         if rooms
             .iter()
             .any(|(room, _)| room.id == *favorite_id && is_chat_list_room(room))
             && pushed_rooms.insert(*favorite_id)
+            && !favorites_collapsed
         {
             order.push(RoomSlot::Room(*favorite_id));
         }
     }
 
     // Core: permanent rooms, hardcoded order
+    let core_collapsed = collapsed_sections.contains(&RoomSection::Core);
     let core_order = ["general", "announcements", "suggestions", "bugs"];
     for slug in &core_order {
         if let Some((room, _)) = rooms
             .iter()
             .find(|(r, _)| is_chat_list_room(r) && r.permanent && r.slug.as_deref() == Some(slug))
             && pushed_rooms.insert(room.id)
+            && !core_collapsed
         {
             order.push(RoomSlot::Room(room.id));
         }
     }
-    order.push(RoomSlot::Notifications);
-    order.push(RoomSlot::News);
-    if feeds_available {
-        order.push(RoomSlot::Feeds);
+    if !core_collapsed {
+        order.push(RoomSlot::Notifications);
+        order.push(RoomSlot::News);
+        if feeds_available {
+            order.push(RoomSlot::Feeds);
+        }
     }
 
     // Channels: all non-DM rooms outside Core, public + private merged.
+    let channels_collapsed = collapsed_sections.contains(&RoomSection::Channels);
     for (room, _) in rooms {
         if is_chat_list_room(room)
             && room.kind != "dm"
             && !core_order.contains(&room.slug.as_deref().unwrap_or(""))
             && pushed_rooms.insert(room.id)
+            && !channels_collapsed
         {
             order.push(RoomSlot::Room(room.id));
         }
     }
 
-    order.push(RoomSlot::Showcase);
-    order.push(RoomSlot::Work);
+    if !collapsed_sections.contains(&RoomSection::Updates) {
+        order.push(RoomSlot::Showcase);
+        order.push(RoomSlot::Work);
+    }
 
     // DMs: unread rooms first, then newest message, then display name.
+    let dms_collapsed = collapsed_sections.contains(&RoomSection::Dms);
     let mut dms: Vec<_> = rooms.iter().filter(|(r, _)| r.kind == "dm").collect();
     dms.sort_by(|(a_room, _), (b_room, _)| {
         compare_dm_rooms_for_nav(
@@ -3302,10 +3407,9 @@ pub(crate) fn visual_order_for_rooms(
             room_last_message_at,
         )
     });
-    order.extend(
-        dms.iter()
-            .filter_map(|(r, _)| pushed_rooms.insert(r.id).then_some(RoomSlot::Room(r.id))),
-    );
+    order.extend(dms.iter().filter_map(|(r, _)| {
+        (pushed_rooms.insert(r.id) && !dms_collapsed).then_some(RoomSlot::Room(r.id))
+    }));
     order.push(RoomSlot::Discover);
 
     order
@@ -4401,6 +4505,7 @@ mod tests {
                 &HashMap::new(),
                 true,
                 &[],
+                &HashSet::new(),
             ),
             vec![
                 RoomSlot::Room(general),
@@ -4418,6 +4523,94 @@ mod tests {
                 RoomSlot::Discover,
             ]
         );
+    }
+
+    #[test]
+    fn room_section_label_round_trips() {
+        for section in [
+            RoomSection::Favorites,
+            RoomSection::Core,
+            RoomSection::Channels,
+            RoomSection::Updates,
+            RoomSection::Dms,
+        ] {
+            assert_eq!(RoomSection::from_label(section.label()), Some(section));
+        }
+        assert_eq!(RoomSection::from_label("not-a-section"), None);
+    }
+
+    #[test]
+    fn collapsed_sections_drop_their_rooms_from_visual_order() {
+        let me = Uuid::from_u128(1);
+        let bob = Uuid::from_u128(3);
+        let general = Uuid::from_u128(10);
+        let announcements = Uuid::from_u128(11);
+        let public_alpha = Uuid::from_u128(20);
+        let dm_bob = make_dm(bob, me);
+        let usernames = HashMap::new();
+
+        let rooms = vec![
+            make_room(general, "general", "public", true, Some("general")),
+            make_room(
+                announcements,
+                "topic",
+                "public",
+                true,
+                Some("announcements"),
+            ),
+            make_room(public_alpha, "topic", "public", false, Some("alpha")),
+            (dm_bob.clone(), Vec::new()),
+        ];
+        let order = |collapsed: &HashSet<RoomSection>| {
+            visual_order_for_rooms(
+                &rooms,
+                me,
+                &usernames,
+                &HashMap::new(),
+                &HashMap::new(),
+                false,
+                &[],
+                collapsed,
+            )
+        };
+
+        // Nothing collapsed: every section's rooms are present.
+        let full = order(&HashSet::new());
+        assert!(full.contains(&RoomSlot::Room(general)));
+        assert!(full.contains(&RoomSlot::Room(public_alpha)));
+        assert!(full.contains(&RoomSlot::Room(dm_bob.id)));
+
+        // Channels collapsed: the channel drops out, Core/Updates/DMs stay.
+        let channels_collapsed = HashSet::from([RoomSection::Channels]);
+        let c = order(&channels_collapsed);
+        assert!(!c.contains(&RoomSlot::Room(public_alpha)));
+        assert!(c.contains(&RoomSlot::Room(general)));
+        assert!(c.contains(&RoomSlot::News));
+        assert!(c.contains(&RoomSlot::Room(dm_bob.id)));
+
+        // Core collapsed: core rooms and the core synthetic slots drop out.
+        let core_collapsed = HashSet::from([RoomSection::Core]);
+        let co = order(&core_collapsed);
+        assert!(!co.contains(&RoomSlot::Room(general)));
+        assert!(!co.contains(&RoomSlot::Room(announcements)));
+        assert!(!co.contains(&RoomSlot::Notifications));
+        assert!(!co.contains(&RoomSlot::News));
+        assert!(co.contains(&RoomSlot::Room(public_alpha)));
+
+        // Updates collapsed: Showcase/Work drop out. News belongs to Core.
+        let updates_collapsed = HashSet::from([RoomSection::Updates]);
+        let u = order(&updates_collapsed);
+        assert!(u.contains(&RoomSlot::News));
+        assert!(!u.contains(&RoomSlot::Showcase));
+        assert!(!u.contains(&RoomSlot::Work));
+        // Discover is not part of a collapsible section — always present.
+        assert!(u.contains(&RoomSlot::Discover));
+
+        // DMs collapsed: the DM drops out.
+        let dms_collapsed = HashSet::from([RoomSection::Dms]);
+        let d = order(&dms_collapsed);
+        assert!(!d.contains(&RoomSlot::Room(dm_bob.id)));
+        assert!(d.contains(&RoomSlot::Room(general)));
     }
 
     #[test]
@@ -4459,6 +4652,7 @@ mod tests {
             &room_last_message_at,
             false,
             &[],
+            &HashSet::new(),
         );
         let dm_order: Vec<_> = order
             .into_iter()
@@ -4523,6 +4717,18 @@ mod tests {
         };
 
         assert_eq!(room_membership_command_target(None, selected), None);
+    }
+
+    #[test]
+    fn current_slot_prefers_synthetic_entry_over_stale_room_id() {
+        let stale_room = Uuid::from_u128(1);
+        let selected = SelectedRoomSlotState {
+            selected_room_id: Some(stale_room),
+            work_selected: true,
+            ..SelectedRoomSlotState::default()
+        };
+
+        assert_eq!(current_slot_from_state(selected), Some(RoomSlot::Work));
     }
 
     #[test]
