@@ -1790,6 +1790,7 @@ fn chat_room_list_view(app: &App) -> crate::app::chat::ui::ChatRoomListView<'_> 
         collapsed_sections: &app.chat.collapsed_sections,
         selected_room_id: app.chat.selected_room_id,
         room_jump_active: app.chat.room_jump_active,
+        room_section_prefix_armed: app.room_section_prefix_armed,
         current_user_id: app.user_id,
         feeds_available: app.chat.feeds.has_feeds(),
         feeds_selected: app.chat.feeds_selected,
