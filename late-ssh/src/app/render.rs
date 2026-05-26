@@ -333,6 +333,7 @@ impl App {
         let chat_usernames = self.chat.usernames();
         let chat_countries = self.chat.countries();
         let bonsai_glyphs = self.chat.bonsai_glyphs();
+        let chat_badges = self.chat.chat_badges();
         let message_reactions = self.chat.message_reactions();
         let image_modal = self
             .chat
@@ -406,6 +407,7 @@ impl App {
                 reply_author: self.chat.reply_target().map(|reply| reply.author.as_str()),
                 is_editing: self.chat.edited_message_id.is_some(),
                 bonsai_glyphs,
+                chat_badges,
                 inline_images: &self.chat.inline_image_cache,
             },
         };
@@ -512,6 +514,7 @@ impl App {
             reply_author: self.chat.reply_target().map(|reply| reply.author.as_str()),
             is_editing: self.chat.edited_message_id.is_some(),
             bonsai_glyphs,
+            chat_badges,
             news_composer: self.chat.news.composer(),
             news_composing: self.chat.news.composing(),
             news_processing: self.chat.news.processing(),
@@ -560,6 +563,7 @@ impl App {
                     reply_author: self.chat.reply_target().map(|reply| reply.author.as_str()),
                     is_editing: self.chat.edited_message_id.is_some(),
                     bonsai_glyphs,
+                    chat_badges,
                 });
         let mut terminal_image_frame = TerminalImageFrame::default();
         let terminal = &mut self.terminal;

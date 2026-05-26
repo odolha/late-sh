@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Paragraph,
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::app::common::theme;
 
@@ -70,12 +71,74 @@ fn draw_item_list(frame: &mut Frame, area: Rect, state: &ShopState) {
         return;
     }
 
-    let lines = items
+    let rows = item_list_rows(state.selected_category(), &items);
+    let selected_row = rows
         .iter()
-        .enumerate()
-        .map(|(index, item)| item_row(index == state.selected_index(), item))
+        .position(
+            |row| matches!(row, ItemListRow::Item { index, .. } if *index == state.selected_index()),
+        )
+        .unwrap_or(state.selected_index());
+    let height = area.height.max(1) as usize;
+    let start = visible_window_start(selected_row, rows.len(), height);
+    let lines = rows
+        .iter()
+        .skip(start)
+        .take(height)
+        .map(|row| match row {
+            ItemListRow::Section(label) => section_row(label),
+            ItemListRow::Item { index, item } => item_row(*index == state.selected_index(), item),
+        })
         .collect::<Vec<_>>();
     frame.render_widget(Paragraph::new(lines), area);
+}
+
+enum ItemListRow<'a> {
+    Section(&'static str),
+    Item { index: usize, item: &'a ShopCatalogItem },
+}
+
+fn item_list_rows<'a>(
+    category: ShopCategory,
+    items: &[&'a ShopCatalogItem],
+) -> Vec<ItemListRow<'a>> {
+    if category != ShopCategory::Badges {
+        return items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| ItemListRow::Item { index, item: *item })
+            .collect();
+    }
+
+    let mut rows = Vec::with_capacity(items.len() + 2);
+    let mut current_section = None;
+    for (index, item) in items.iter().enumerate() {
+        let section = badge_section_label(item);
+        if current_section != Some(section) {
+            rows.push(ItemListRow::Section(section));
+            current_section = Some(section);
+        }
+        rows.push(ItemListRow::Item { index, item: *item });
+    }
+    rows
+}
+
+fn badge_section_label(item: &ShopCatalogItem) -> &'static str {
+    match item.badge_tier.as_deref() {
+        Some("premium") => "Premium",
+        Some("basic") => "Basic",
+        _ => "Other",
+    }
+}
+
+fn visible_window_start(selected_index: usize, item_count: usize, height: usize) -> usize {
+    if item_count <= height {
+        return 0;
+    }
+
+    let half_height = height / 2;
+    selected_index
+        .saturating_sub(half_height)
+        .min(item_count.saturating_sub(height))
 }
 
 fn draw_item_detail(frame: &mut Frame, area: Rect, item: Option<&ShopCatalogItem>) {
@@ -83,10 +146,16 @@ fn draw_item_detail(frame: &mut Frame, area: Rect, item: Option<&ShopCatalogItem
         return;
     };
 
-    let action = if item.owned {
+    let action = if item.equipped {
+        "displaying"
+    } else if item.owned && item.slot.is_some() {
+        "owned"
+    } else if item.owned {
         "unlocked"
     } else if item.is_cat_companion() {
         "unlock cat"
+    } else if item.is_chat_badge() {
+        "buy badge"
     } else {
         "buy"
     };
@@ -141,14 +210,27 @@ fn draw_item_detail(frame: &mut Frame, area: Rect, item: Option<&ShopCatalogItem
             Span::styled(slot.clone(), Style::default().fg(theme::TEXT_DIM())),
         ]));
     }
+    if item.equipped {
+        lines.push(Line::from(vec![
+            Span::raw("  chat   "),
+            Span::styled(
+                "shown next to your name",
+                Style::default().fg(theme::SUCCESS()),
+            ),
+        ]));
+    }
 
     frame.render_widget(Paragraph::new(lines), area);
 }
 
 fn draw_footer(frame: &mut Frame, area: Rect, state: &ShopState) {
     let selected = state.selected_item();
-    let enter_label = if selected.is_some_and(|item| item.owned) {
-        "already unlocked"
+    let enter_label = if selected.is_some_and(|item| item.equipped) {
+        "clear"
+    } else if selected.is_some_and(|item| item.owned && item.slot.is_some()) {
+        "display"
+    } else if selected.is_some_and(|item| item.owned) {
+        "unlocked"
     } else {
         "buy"
     };
@@ -159,7 +241,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, state: &ShopState) {
         Span::styled("j/k", key),
         Span::styled(" select  ", text),
         Span::styled("[/]", key),
-        Span::styled(" category  ", text),
+        Span::styled(" subtab  ", text),
         Span::styled("Enter", key),
         Span::styled(format!(" {enter_label}"), text),
     ]);
@@ -175,20 +257,56 @@ fn item_row(selected: bool, item: &ShopCatalogItem) -> Line<'static> {
     } else {
         Style::default().fg(theme::TEXT_BRIGHT())
     };
-    let status = if item.owned { "owned" } else { "locked" };
-    let status_style = if item.owned {
+    let status = if item.equipped {
+        "displaying"
+    } else if item.owned {
+        "owned"
+    } else {
+        "locked"
+    };
+    let status_style = if item.equipped {
+        Style::default()
+            .fg(theme::SUCCESS())
+            .add_modifier(Modifier::BOLD)
+    } else if item.owned {
         Style::default().fg(theme::SUCCESS())
     } else {
         Style::default().fg(theme::TEXT_FAINT())
+    };
+    let display_name = if item.is_chat_badge() {
+        item.badge_emoji
+            .as_deref()
+            .unwrap_or(&item.name)
+            .to_string()
+    } else {
+        item.name.clone()
     };
     Line::from(vec![
         Span::styled(
             format!("  {marker} "),
             Style::default().fg(theme::AMBER_DIM()),
         ),
-        Span::styled(format!("{:<22}", item.name), name_style),
+        Span::styled(pad_display_width(&display_name, 22), name_style),
         Span::styled(status, status_style),
     ])
+}
+
+fn section_row(label: &'static str) -> Line<'static> {
+    Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            label,
+            Style::default()
+                .fg(theme::TEXT_DIM())
+                .add_modifier(Modifier::BOLD),
+        ),
+    ])
+}
+
+fn pad_display_width(value: &str, width: usize) -> String {
+    let display_width = UnicodeWidthStr::width(value);
+    let padding = width.saturating_sub(display_width);
+    format!("{value}{}", " ".repeat(padding))
 }
 
 fn balance_line(balance: i64) -> Line<'static> {
@@ -218,4 +336,24 @@ fn section_heading(title: &str) -> Line<'static> {
         Span::styled(title.to_string(), accent),
         Span::styled(" --", dim),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn visible_window_start_keeps_selected_item_visible() {
+        assert_eq!(visible_window_start(0, 20, 5), 0);
+        assert_eq!(visible_window_start(3, 20, 5), 1);
+        assert_eq!(visible_window_start(19, 20, 5), 15);
+    }
+
+    #[test]
+    fn pad_display_width_handles_variation_selector_emoji() {
+        let padded = pad_display_width("☀️", 6);
+        assert_eq!(UnicodeWidthStr::width(padded.as_str()), 6);
+        let padded = pad_display_width("🐱", 6);
+        assert_eq!(UnicodeWidthStr::width(padded.as_str()), 6);
+    }
 }
