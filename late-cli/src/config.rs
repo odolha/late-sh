@@ -1,6 +1,13 @@
 use anyhow::{Context, Result};
 use shlex::Shlex;
-use std::{env, path::PathBuf};
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::{
+    env, fs,
+    fs::OpenOptions,
+    io::IsTerminal,
+    path::{Path, PathBuf},
+};
 use tracing_subscriber::EnvFilter;
 
 pub(super) const DEFAULT_SSH_TARGET: &str = "late.sh";
@@ -123,20 +130,48 @@ impl Config {
     }
 }
 
-pub(super) fn init_logging(verbose: bool) -> Result<()> {
+pub(super) fn init_logging(verbose: bool) -> Result<Option<PathBuf>> {
     let env_filter = match EnvFilter::try_from_default_env() {
         Ok(filter) => filter,
         Err(_) if verbose => EnvFilter::new("warn,symphonia=error,late=debug"),
-        Err(_) => return Ok(()),
+        Err(_) => return Ok(None),
     };
 
+    if env_flag("LATE_LOG_STDERR") || !std::io::stderr().is_terminal() {
+        tracing_subscriber::fmt()
+            .with_env_filter(env_filter)
+            .with_writer(std::io::stderr)
+            .try_init()
+            .map_err(|err| anyhow::anyhow!("failed to initialize logging: {err}"))?;
+        return Ok(None);
+    }
+
+    let path = cli_log_path();
+    ensure_log_dir(&path)?;
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
+    }
+    let file = options
+        .open(&path)
+        .with_context(|| format!("failed to open CLI log at {}", path.display()))?;
+    #[cfg(unix)]
+    {
+        let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+    }
+    let writer = move || {
+        file.try_clone()
+            .expect("failed to clone late CLI log file handle")
+    };
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
-        .with_writer(std::io::stderr)
+        .with_writer(writer)
         .try_init()
         .map_err(|err| anyhow::anyhow!("failed to initialize logging: {err}"))?;
 
-    Ok(())
+    Ok(Some(path))
 }
 
 fn next_value(args: &mut impl Iterator<Item = String>, flag: &str) -> Result<String> {
@@ -160,11 +195,101 @@ fn print_help() {
            --audio-base-url <url>     Audio base URL, without or with /stream\n\
            --audio-output-device <n>  Audio output device name (default: system default)\n\
            --api-base-url <url>       API base URL used for /api/ws/pair\n\
-           -v, --verbose              Enable debug logging to stderr\n\
+           -v, --verbose              Enable debug logging (file-backed on interactive terminals)\n\
          \n\
          Runtime hotkeys:\n\
            No local audio hotkeys; use the paired TUI client controls.\n"
     );
+}
+
+fn cli_log_path() -> PathBuf {
+    if let Some(path) = nonempty_os_env("LATE_LOG_FILE") {
+        return PathBuf::from(path);
+    }
+
+    #[cfg(unix)]
+    {
+        if let Some(base) = nonempty_os_env("XDG_STATE_HOME") {
+            return PathBuf::from(base).join("late").join("late.log");
+        }
+        if let Some(home) = nonempty_os_env("HOME") {
+            return PathBuf::from(home)
+                .join(".local")
+                .join("state")
+                .join("late")
+                .join("late.log");
+        }
+        if let Some(base) = nonempty_os_env("XDG_RUNTIME_DIR") {
+            return PathBuf::from(base).join("late").join("late.log");
+        }
+        env::temp_dir()
+            .join(format!("late-{}", effective_user_id()))
+            .join("late.log")
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(base) = nonempty_os_env("LOCALAPPDATA") {
+            return PathBuf::from(base).join("late").join("late.log");
+        }
+        if let Some(profile) = nonempty_os_env("USERPROFILE") {
+            return PathBuf::from(profile)
+                .join("AppData")
+                .join("Local")
+                .join("late")
+                .join("late.log");
+        }
+        return env::temp_dir().join("late").join("late.log");
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    {
+        env::temp_dir().join("late").join("late.log")
+    }
+}
+
+fn ensure_log_dir(path: &Path) -> Result<()> {
+    let parent = path
+        .parent()
+        .context("CLI log path has no parent directory")?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create CLI log directory at {}", parent.display()))?;
+    #[cfg(unix)]
+    {
+        let metadata = fs::symlink_metadata(parent).with_context(|| {
+            format!(
+                "failed to inspect CLI log directory at {}",
+                parent.display()
+            )
+        })?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            anyhow::bail!(
+                "CLI log directory is not a real directory: {}",
+                parent.display()
+            );
+        }
+        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+    }
+    Ok(())
+}
+
+fn nonempty_os_env(key: &str) -> Option<std::ffi::OsString> {
+    env::var_os(key).filter(|value| !value.is_empty())
+}
+
+fn env_flag(key: &str) -> bool {
+    let Some(value) = env::var_os(key) else {
+        return false;
+    };
+    let value = value.to_string_lossy();
+    let normalized = value.trim().to_ascii_lowercase();
+    !matches!(normalized.as_str(), "" | "0" | "false" | "no" | "off")
+}
+
+#[cfg(unix)]
+fn effective_user_id() -> u32 {
+    // SAFETY: geteuid has no preconditions and does not modify memory.
+    unsafe { nix::libc::geteuid() }
 }
 
 fn parse_ssh_bin_spec(spec: &str) -> Result<Vec<String>> {

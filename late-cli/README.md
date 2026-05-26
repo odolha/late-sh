@@ -69,7 +69,7 @@ use your normal `~/.ssh/config`, agent, and default identity discovery.
 --audio-base-url <url>     Audio stream URL
 --audio-output-device <n>  Audio output device name (default: system default)
 --api-base-url <url>       API URL for WebSocket pairing
--v, --verbose              Debug logging to stderr
+-v, --verbose              Debug logging (file-backed on interactive terminals)
 ```
 
 ## Requirements
@@ -94,6 +94,18 @@ If your audio device does not support the stream's native `44.1 kHz` output rate
 By default, the CLI uses the system default output device. If CPAL resolves that to the wrong sink, pass `--audio-output-device "<device name>"` or set `LATE_AUDIO_OUTPUT_DEVICE`.
 
 On WSL, audio startup failures now include a targeted hint covering `DISPLAY`, `WAYLAND_DISPLAY`, and `PULSE_SERVER` so users get an actionable fix path instead of only raw ALSA errors.
+
+For debugging, `late --verbose` writes parent CLI logs to a file when stderr is
+an interactive terminal, so debug output does not corrupt the TUI. The startup
+notice prints the path. Set `LATE_LOG_STDERR=1` to force the old stderr behavior,
+or redirect stderr with `late -v 2>late-debug.log`.
+
+The embedded YouTube helper writes WebKit/GStreamer stderr to
+`$XDG_STATE_HOME/late/webview.log` or `~/.local/state/late/webview.log` by
+default. Override it with `LATE_WEBVIEW_LOG`; set `LATE_WEBVIEW_DEBUG_STDERR=1`
+to combine helper stderr with the parent debug stream. On Linux the CLI sets
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` for the helper unless you already provided a
+value.
 
 ## Privacy
 
