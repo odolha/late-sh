@@ -14,8 +14,8 @@ use super::{
     data::country_label,
     gem::{GemPosition, GemState, MoveDirection},
     state::{
-        AccountRow, BIO_MAX_LEN, LinkAccountStep, PickerKind, Row, SettingsModalState, Tab,
-        ThemeTreeRow,
+        AccountRow, BIO_MAX_LEN, LinkAccountEnterCodeFocus, LinkAccountStep, PickerKind, Row,
+        SettingsModalState, Tab, ThemeTreeRow,
     },
 };
 
@@ -1534,11 +1534,7 @@ fn draw_link_account_dialog(frame: &mut Frame, area: Rect, state: &SettingsModal
     }
 }
 
-fn draw_link_account_enter_code(
-    frame: &mut Frame,
-    layout: &[Rect],
-    state: &SettingsModalState,
-) {
+fn draw_link_account_enter_code(frame: &mut Frame, layout: &[Rect], state: &SettingsModalState) {
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::raw(" "),
@@ -1554,16 +1550,28 @@ fn draw_link_account_enter_code(
         .link_account_dialog()
         .own_code()
         .map(str::to_string)
-        .unwrap_or_else(|| "creating...".to_string());
+        .unwrap_or_else(|| "not generated".to_string());
     let expires = state
         .link_account_dialog()
         .expires_at()
         .map(|expires| format!("  expires {}", expires.format("%H:%M UTC")))
         .unwrap_or_default();
+    let enter_focus = state.link_account_dialog().enter_code_focus();
+    frame.render_widget(
+        Paragraph::new(link_account_generate_line(
+            enter_focus == LinkAccountEnterCodeFocus::GenerateCode,
+            state.link_account_dialog().pending(),
+            layout[2].width as usize,
+        )),
+        layout[2],
+    );
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::raw(" "),
-            Span::styled("This account code: ", Style::default().fg(theme::TEXT_DIM())),
+            Span::styled(
+                "This account code: ",
+                Style::default().fg(theme::TEXT_DIM()),
+            ),
             Span::styled(
                 own_code,
                 Style::default()
@@ -1572,7 +1580,7 @@ fn draw_link_account_enter_code(
             ),
             Span::styled(expires, Style::default().fg(theme::TEXT_FAINT())),
         ])),
-        layout[2],
+        layout[4],
     );
 
     frame.render_widget(
@@ -1583,15 +1591,16 @@ fn draw_link_account_enter_code(
                 Style::default().fg(theme::TEXT_DIM()),
             ),
         ])),
-        layout[4],
+        layout[6],
     );
     frame.render_widget(
         Paragraph::new(link_account_input_line(
             state.link_account_dialog().code_input(),
             "code",
             state.link_account_dialog().pending(),
+            enter_focus == LinkAccountEnterCodeFocus::PeerCode,
         )),
-        layout[5],
+        layout[7],
     );
 
     frame.render_widget(
@@ -1602,9 +1611,9 @@ fn draw_link_account_enter_code(
                 Style::default().fg(theme::TEXT_DIM()),
             ),
         ])),
-        layout[7],
+        layout[9],
     );
-    draw_link_account_status(frame, layout[9], state);
+    draw_link_account_status(frame, layout[10], state);
     draw_link_account_footer(frame, layout[16], state);
 }
 
@@ -1689,6 +1698,7 @@ fn draw_link_account_confirm(frame: &mut Frame, layout: &[Rect], state: &Setting
             dialog.confirm_input(),
             "main username",
             dialog.pending(),
+            true,
         )),
         layout[11],
     );
@@ -1718,10 +1728,7 @@ fn link_account_choice_line(
     } else {
         Style::default().fg(theme::TEXT_DIM())
     };
-    Line::from(Span::styled(
-        pad_to_width(&content, width, selected),
-        style,
-    ))
+    Line::from(Span::styled(pad_to_width(&content, width, selected), style))
 }
 
 fn created_label(created: Option<chrono::DateTime<chrono::Utc>>) -> String {
@@ -1730,26 +1737,84 @@ fn created_label(created: Option<chrono::DateTime<chrono::Utc>>) -> String {
         .unwrap_or_else(|| "created unknown".to_string())
 }
 
+fn link_account_generate_line(selected: bool, pending: bool, width: usize) -> Line<'static> {
+    let marker = if selected { "›" } else { " " };
+    let label = if pending {
+        "Generating Link Code..."
+    } else {
+        "Generate Link Code"
+    };
+    let prefix_style = if selected {
+        Style::default()
+            .fg(theme::AMBER_GLOW())
+            .bg(theme::BG_SELECTION())
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::TEXT_FAINT())
+    };
+    let label_style = if selected {
+        Style::default()
+            .fg(theme::TEXT_BRIGHT())
+            .bg(theme::BG_SELECTION())
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(theme::AMBER_DIM())
+    };
+    let trailing_style = if selected {
+        Style::default().bg(theme::BG_SELECTION())
+    } else {
+        Style::default()
+    };
+    let prefix = format!(" {marker} ");
+    let used = prefix.chars().count() + label.chars().count();
+    let trailing = " ".repeat(width.saturating_sub(used));
+    Line::from(vec![
+        Span::styled(prefix, prefix_style),
+        Span::styled(label.to_string(), label_style),
+        Span::styled(trailing, trailing_style),
+    ])
+}
+
 fn link_account_input_line(
     input: &ratatui_textarea::TextArea<'static>,
     placeholder: &str,
     pending: bool,
+    focused: bool,
 ) -> Line<'static> {
     let typed = input.lines().join("");
     let text = if typed.is_empty() {
         placeholder.to_string()
     } else if pending {
-        typed
-    } else {
+        typed.clone()
+    } else if focused {
         text_with_caret(&typed, input.cursor().1)
+    } else {
+        typed.clone()
     };
-    let style = if typed.is_empty() {
+    let marker = if focused { "›" } else { " " };
+    let prefix_style = if focused {
+        Style::default()
+            .fg(theme::AMBER_GLOW())
+            .bg(theme::BG_SELECTION())
+            .add_modifier(Modifier::BOLD)
+    } else {
         Style::default().fg(theme::TEXT_FAINT())
+    };
+    let style = if typed.is_empty() && focused {
+        Style::default()
+            .fg(theme::TEXT_FAINT())
+            .bg(theme::BG_SELECTION())
+    } else if typed.is_empty() {
+        Style::default().fg(theme::TEXT_FAINT())
+    } else if focused {
+        Style::default()
+            .fg(theme::AMBER())
+            .bg(theme::BG_SELECTION())
     } else {
         Style::default().fg(theme::AMBER())
     };
     Line::from(vec![
-        Span::styled(" › ", Style::default().fg(theme::AMBER_GLOW())),
+        Span::styled(format!(" {marker} "), prefix_style),
         Span::styled(text, style),
     ])
 }
@@ -1761,6 +1826,8 @@ fn draw_link_account_status(frame: &mut Frame, area: Rect, state: &SettingsModal
     let dialog = state.link_account_dialog();
     let color = if dialog.pending() {
         theme::AMBER()
+    } else if status == "Link code ready." {
+        theme::SUCCESS()
     } else if dialog.step() == LinkAccountStep::Pending {
         theme::SUCCESS()
     } else {
@@ -1779,8 +1846,10 @@ fn draw_link_account_footer(frame: &mut Frame, area: Rect, state: &SettingsModal
     let footer = match state.link_account_dialog().step() {
         LinkAccountStep::EnterCode => Line::from(vec![
             Span::raw(" "),
+            Span::styled("↑↓", Style::default().fg(theme::AMBER_DIM())),
+            Span::styled(" choose  ", Style::default().fg(theme::TEXT_DIM())),
             Span::styled("Enter", Style::default().fg(theme::AMBER_DIM())),
-            Span::styled(" check code  ", Style::default().fg(theme::TEXT_DIM())),
+            Span::styled(" generate/check  ", Style::default().fg(theme::TEXT_DIM())),
             Span::styled("Esc", Style::default().fg(theme::AMBER_DIM())),
             Span::styled(" cancel", Style::default().fg(theme::TEXT_DIM())),
         ]),

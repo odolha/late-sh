@@ -102,6 +102,12 @@ pub enum LinkAccountStep {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LinkAccountEnterCodeFocus {
+    GenerateCode,
+    PeerCode,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SystemField {
     Birthday,
     Ide,
@@ -245,6 +251,7 @@ pub struct LinkAccountDialogState {
     step: LinkAccountStep,
     own_code: Option<String>,
     expires_at: Option<DateTime<Utc>>,
+    enter_code_focus: LinkAccountEnterCodeFocus,
     code_input: TextArea<'static>,
     peer_user_id: Option<Uuid>,
     peer_username: Option<String>,
@@ -262,6 +269,7 @@ impl LinkAccountDialogState {
             step: LinkAccountStep::EnterCode,
             own_code: None,
             expires_at: None,
+            enter_code_focus: LinkAccountEnterCodeFocus::GenerateCode,
             code_input: new_short_textarea(false),
             peer_user_id: None,
             peer_username: None,
@@ -289,12 +297,12 @@ impl LinkAccountDialogState {
         self.expires_at.as_ref().cloned()
     }
 
-    pub fn code_input(&self) -> &TextArea<'static> {
-        &self.code_input
+    pub fn enter_code_focus(&self) -> LinkAccountEnterCodeFocus {
+        self.enter_code_focus
     }
 
-    pub fn peer_user_id(&self) -> Option<Uuid> {
-        self.peer_user_id
+    pub fn code_input(&self) -> &TextArea<'static> {
+        &self.code_input
     }
 
     pub fn peer_username(&self) -> Option<&str> {
@@ -573,8 +581,7 @@ impl SettingsModalState {
 
     pub fn move_account_row(&mut self, delta: isize) {
         let last = AccountRow::ALL.len().saturating_sub(1) as isize;
-        self.account_row_index =
-            (self.account_row_index as isize + delta).clamp(0, last) as usize;
+        self.account_row_index = (self.account_row_index as isize + delta).clamp(0, last) as usize;
     }
 
     pub fn link_account_dialog(&self) -> &LinkAccountDialogState {
@@ -587,23 +594,50 @@ impl SettingsModalState {
             step: LinkAccountStep::EnterCode,
             own_code: None,
             expires_at: None,
-            code_input: new_short_textarea(true),
+            enter_code_focus: LinkAccountEnterCodeFocus::GenerateCode,
+            code_input: new_short_textarea(false),
             peer_user_id: None,
             peer_username: None,
             peer_created: None,
             keep_current: true,
             confirm_input: new_short_textarea(false),
-            status: Some("Creating link code...".to_string()),
-            pending: true,
+            status: None,
+            pending: false,
         };
-        self.profile_service.create_account_link_code(self.user_id);
     }
 
     pub fn close_link_account_dialog(&mut self) {
         self.link_account = LinkAccountDialogState::new();
     }
 
-    pub fn submit_link_account_code(&mut self) {
+    pub fn generate_link_account_code(&mut self) {
+        if self.link_account.pending {
+            return;
+        }
+        self.link_account.pending = true;
+        self.link_account.status = Some("Creating link code...".to_string());
+        self.profile_service.create_account_link_code(self.user_id);
+    }
+
+    pub fn move_link_account_enter_code_focus(&mut self, focus: LinkAccountEnterCodeFocus) {
+        if self.link_account.step != LinkAccountStep::EnterCode {
+            return;
+        }
+        self.link_account.enter_code_focus = focus;
+        set_short_textarea_cursor_visible(
+            &mut self.link_account.code_input,
+            focus == LinkAccountEnterCodeFocus::PeerCode,
+        );
+    }
+
+    pub fn activate_link_account_enter_code(&mut self) {
+        match self.link_account.enter_code_focus {
+            LinkAccountEnterCodeFocus::GenerateCode => self.generate_link_account_code(),
+            LinkAccountEnterCodeFocus::PeerCode => self.submit_link_account_code(),
+        }
+    }
+
+    fn submit_link_account_code(&mut self) {
         if self.link_account.pending {
             return;
         }
@@ -668,6 +702,9 @@ impl SettingsModalState {
     pub fn link_account_push(&mut self, ch: char) {
         match self.link_account.step {
             LinkAccountStep::EnterCode => {
+                if self.link_account.enter_code_focus != LinkAccountEnterCodeFocus::PeerCode {
+                    self.move_link_account_enter_code_focus(LinkAccountEnterCodeFocus::PeerCode);
+                }
                 if link_code_char_count_for_input(&self.link_account.code_input) < LINK_CODE_MAX_LEN
                     && ch.is_ascii_alphanumeric()
                 {
@@ -759,6 +796,7 @@ impl SettingsModalState {
     pub fn clear_link_account_input(&mut self) {
         match self.link_account.step {
             LinkAccountStep::EnterCode => {
+                self.link_account.enter_code_focus = LinkAccountEnterCodeFocus::PeerCode;
                 self.link_account.code_input = new_short_textarea(true);
             }
             LinkAccountStep::Confirm => {
@@ -771,9 +809,13 @@ impl SettingsModalState {
 
     fn link_account_active_input_mut(&mut self) -> Option<&mut TextArea<'static>> {
         match self.link_account.step {
-            LinkAccountStep::EnterCode => Some(&mut self.link_account.code_input),
+            LinkAccountStep::EnterCode
+                if self.link_account.enter_code_focus == LinkAccountEnterCodeFocus::PeerCode =>
+            {
+                Some(&mut self.link_account.code_input)
+            }
             LinkAccountStep::Confirm => Some(&mut self.link_account.confirm_input),
-            LinkAccountStep::Pending => None,
+            LinkAccountStep::EnterCode | LinkAccountStep::Pending => None,
         }
     }
 
@@ -1661,7 +1703,10 @@ impl SettingsModalState {
                     self.link_account.expires_at = Some(expires_at);
                     self.link_account.pending = false;
                     if self.link_account.step == LinkAccountStep::EnterCode {
-                        self.link_account.status = None;
+                        self.link_account.status = Some("Link code ready.".to_string());
+                        self.move_link_account_enter_code_focus(
+                            LinkAccountEnterCodeFocus::PeerCode,
+                        );
                     }
                 }
                 Ok(ProfileEvent::AccountLinkPeerLoaded {
@@ -1685,11 +1730,7 @@ impl SettingsModalState {
                     kept_username,
                     abandoned_username: _,
                 }) if kept_user_id == self.user_id || abandoned_user_id == self.user_id => {
-                    self.link_account.pending = false;
-                    self.link_account.step = LinkAccountStep::Pending;
-                    self.link_account.status = Some(format!(
-                        "Linked. Both SSH keys now open {kept_username}."
-                    ));
+                    self.link_account = LinkAccountDialogState::new();
                     if kept_user_id == self.user_id {
                         self.draft.username = kept_username.clone();
                     }
@@ -1967,13 +2008,17 @@ fn new_short_textarea(editing: bool) -> TextArea<'static> {
     let mut ta = TextArea::default();
     ta.set_cursor_line_style(Style::default());
     ta.set_wrap_mode(WrapMode::None);
+    set_short_textarea_cursor_visible(&mut ta, editing);
+    ta
+}
+
+fn set_short_textarea_cursor_visible(ta: &mut TextArea<'static>, editing: bool) {
     let style = if editing {
         Style::default().add_modifier(Modifier::REVERSED)
     } else {
         Style::default()
     };
     ta.set_cursor_style(style);
-    ta
 }
 
 #[cfg(test)]

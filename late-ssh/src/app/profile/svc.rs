@@ -469,9 +469,14 @@ impl ProfileService {
         kept_user_id: Uuid,
     ) -> Result<()> {
         let mut client = self.db.get().await?;
-        let result =
-            account_link::complete(&mut *client, current_user_id, peer_user_id, code, kept_user_id)
-                .await?;
+        let result = account_link::complete(
+            &mut *client,
+            current_user_id,
+            peer_user_id,
+            code,
+            kept_user_id,
+        )
+        .await?;
 
         self.find_profile(result.kept_user_id);
         self.publish_event(ProfileEvent::AccountLinked {
