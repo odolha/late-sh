@@ -191,6 +191,10 @@ struct DrawContext<'a> {
     room_game_registry: &'a crate::app::rooms::registry::RoomGameRegistry,
     active_room_game: Option<&'a dyn crate::app::rooms::backend::ActiveRoomBackend>,
     rooms_chat_view: Option<chat::ui::EmbeddedRoomChatView<'a>>,
+    /// Detected terminal-image protocol for the current session.
+    /// `None` -> no native images supported; capable terminals get
+    /// pixel polish on top of the existing text rendering.
+    terminal_image_protocol: Option<crate::app::files::terminal_image::TerminalImageProtocol>,
     twenty_forty_eight_state: &'a crate::app::arcade::twenty_forty_eight::state::State,
     tetris_state: &'a crate::app::arcade::tetris::state::State,
     snake_state: &'a crate::app::arcade::snake::state::State,
@@ -266,10 +270,6 @@ struct DrawContext<'a> {
     icon_catalog: Option<&'a icon_picker::catalog::IconCatalogData>,
     mentions_unread_count: i64,
     home_selected: bool,
-    /// Detected terminal-image protocol for the current session.
-    /// `None` → no native images supported; capable terminals get
-    /// pixel polish on top of the existing text rendering.
-    terminal_image_protocol: Option<crate::app::files::terminal_image::TerminalImageProtocol>,
 }
 
 impl App {
@@ -698,6 +698,7 @@ impl App {
                         room_game_registry: &self.room_game_registry,
                         active_room_game: self.active_room_game.as_deref(),
                         rooms_chat_view,
+                        terminal_image_protocol: self.terminal_image_protocol,
                         twenty_forty_eight_state: &self.twenty_forty_eight_state,
                         tetris_state: &self.tetris_state,
                         snake_state: &self.snake_state,
@@ -778,7 +779,6 @@ impl App {
                         icon_catalog: self.icon_catalog.as_ref(),
                         mentions_unread_count: self.chat.notifications.unread_count(),
                         home_selected,
-                        terminal_image_protocol: self.terminal_image_protocol,
                     },
                     &mut terminal_image_frame,
                 );
@@ -1071,6 +1071,7 @@ impl App {
                     active_room_chat: ctx.rooms_chat_view,
                 },
                 terminal_images,
+                ctx.terminal_image_protocol,
             ),
         }
 
