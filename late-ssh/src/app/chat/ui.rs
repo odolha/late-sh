@@ -39,7 +39,7 @@ use super::ui_text::{reaction_label, wrap_chat_entry_to_lines};
 
 const REACTION_PICKER_KEYS: [i16; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 const CHAT_COMPOSER_GAP_HEIGHT: u16 = 1;
-const AUTHOR_BADGE_SEPARATOR: &str = " ";
+const AUTHOR_BADGE_SEPARATOR: &str = " · ";
 const FRIEND_BADGE: &str = "★";
 const AFK_BADGE: &str = "🌙";
 
@@ -4521,9 +4521,9 @@ mod tests {
             + UnicodeWidthStr::width("alice") as u16
             + 1
             + UnicodeWidthStr::width("mod") as u16
-            + 1
+            + UnicodeWidthStr::width(AUTHOR_BADGE_SEPARATOR) as u16
             + UnicodeWidthStr::width("bonsai") as u16
-            + 1;
+            + UnicodeWidthStr::width(AUTHOR_BADGE_SEPARATOR) as u16;
         assert_eq!(store.start_col, expected_store_offset);
         assert_eq!(
             store.end_col,
@@ -4559,8 +4559,8 @@ mod tests {
         assert_eq!(segs[0].target, HeaderTarget::Profile);
         assert_eq!(segs[1].target, HeaderTarget::Profile);
         assert_eq!(segs[2].target, HeaderTarget::StoreBadge);
-        // Bonsai and store are separated by exactly one space (the
-        // `AUTHOR_BADGE_SEPARATOR`) so their ranges must not abut.
+        // Bonsai and store are separated by `AUTHOR_BADGE_SEPARATOR`, so their
+        // ranges must not abut.
         assert!(segs[2].start_col > segs[1].end_col);
     }
 
@@ -4578,7 +4578,7 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(prefix, "bob 🐱 US");
+        assert_eq!(prefix, "bob 🐱 · US");
         assert_eq!(segs.len(), 3);
         assert_eq!(segs[0].target, HeaderTarget::Profile);
         assert_eq!(segs[1].target, HeaderTarget::StoreBadge);
@@ -4600,7 +4600,10 @@ mod tests {
             Some("brb"),
         );
 
-        assert_eq!(prefix, "alice mod developer artist bonsai badge flag brb");
+        assert_eq!(
+            prefix,
+            "alice mod · developer · artist · bonsai · badge · flag · brb"
+        );
     }
 
     #[test]
