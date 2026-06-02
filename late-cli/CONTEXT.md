@@ -3,7 +3,7 @@
 ## Metadata
 - Domain: `late-cli` - companion CLI for late.sh
 - Primary audience: LLM agents working on the CLI, human contributors
-- Last updated: 2026-06-02
+- Last updated: 2026-06-03 (added pointer to dedicated voice-room context; CLI owns native LiveKit voice media runtime)
 - Status: Active
 - Stability note: Sections marked `[STABLE]` should change rarely. Sections marked `[VOLATILE]` are expected to change often.
 
@@ -28,7 +28,7 @@ This file is the working context for `late-cli`. The root project context lives 
 
 ## 1. Summary [STABLE]
 
-`late-cli` builds the `late` companion binary. It launches an SSH TUI session, plays the Icecast MP3 stream locally, analyzes audible samples for the TUI visualizer, and pairs with the active SSH session over `/api/ws/pair`.
+`late-cli` builds the `late` companion binary. It launches an SSH TUI session, plays the Icecast MP3 stream locally, analyzes audible samples for the TUI visualizer, pairs with the active SSH session over `/api/ws/pair`, and provides the native LiveKit voice media runtime for late.sh voice rooms.
 
 Primary responsibilities:
 - Local SSH launcher for `late.sh`
@@ -36,12 +36,14 @@ Primary responsibilities:
 - MP3 stream decoding via `symphonia`
 - FFT visualizer frames sent to the SSH TUI over WebSocket
 - Paired mute/volume controls received from the TUI
+- LiveKit voice capture/playout for native desktop CLI users, controlled over the pair WebSocket
 - Cross-platform installer targets for Linux, macOS, Windows, and Android/Termux
 
 Highest-risk areas:
 - SSH token handshake compatibility between client and server
 - Paired-client WebSocket routing/state drift
 - Audio backend/device differences, especially sample-rate fallback and WSL
+- LiveKit/WebRTC native audio runtime differences for voice on desktop platforms
 - Terminal resize forwarding and pre-token input gating
 
 `late-cli` intentionally has no `late-core` dependency.
@@ -86,6 +88,7 @@ OpenSSH mode differs slightly: it authenticates and fetches the token first thro
 - `src/pty.rs` - terminal size/PTY helpers
 - `src/raw_mode.rs` - local raw-mode guard for modes where CLI owns terminal forwarding
 - `src/ws.rs` - paired-client WebSocket protocol, control handling, client state
+- `src/voice.rs` - LiveKit voice-room media runtime; see `../late-ssh/src/app/voice/CONTEXT.md` for full voice protocol and invariants
 - `src/audio/` - stream probing, decoding, playback queue, resampling, analyzer
 - `Cargo.toml` - crate metadata; `otel` feature currently exists but is empty and default features are empty
 - `README.md` - user-facing CLI docs

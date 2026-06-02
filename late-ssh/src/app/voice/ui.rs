@@ -27,10 +27,22 @@ impl VoiceRoomView<'_> {
     pub fn paired_cli_supports_voice(&self) -> bool {
         self.paired_cli_supports_voice
     }
+
+    pub fn participant_count(&self) -> usize {
+        self.snapshot.participants.len()
+    }
 }
 
 pub fn draw_voice_room(frame: &mut Frame, area: Rect, view: &VoiceRoomView<'_>) {
-    let title = format!(" Voice #{} ", view.snapshot.room_name);
+    let connected = view.participant_count();
+    let title = if connected == 1 {
+        format!(" Voice #{} · 1 connected ", view.snapshot.room_name)
+    } else {
+        format!(
+            " Voice #{} · {} connected ",
+            view.snapshot.room_name, connected
+        )
+    };
     let block = Block::default()
         .title(title)
         .borders(Borders::TOP)
@@ -88,13 +100,20 @@ pub fn draw_voice_controls(frame: &mut Frame, area: Rect, view: &VoiceRoomView<'
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border));
     let text = if !view.snapshot.enabled {
-        "Voice is not configured."
+        "Voice is not configured.".to_string()
     } else if !view.paired_cli_supports_voice() {
-        "Run the native late CLI to join voice."
-    } else if view.current_user_joined() {
-        "Enter leave · u mute mic · d deafen"
+        "Run the native late CLI to join voice.".to_string()
+    } else if let Some(participant) = view.snapshot.participant(view.current_user_id) {
+        let state = if participant.deafened {
+            "joined deafened"
+        } else if participant.muted {
+            "joined muted"
+        } else {
+            "joined live"
+        };
+        format!("{state} · Enter leave · u mic · d deafen")
     } else {
-        "Enter join muted · u mute mic · d deafen"
+        "not joined · Enter join muted".to_string()
     };
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
