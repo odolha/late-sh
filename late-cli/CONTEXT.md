@@ -3,7 +3,7 @@
 ## Metadata
 - Domain: `late-cli` - companion CLI for late.sh
 - Primary audience: LLM agents working on the CLI, human contributors
-- Last updated: 2026-06-03 (macOS builds now embed an Info.plist microphone usage string for native voice)
+- Last updated: 2026-06-04 (macOS native voice avoids LiveKit/WebRTC ObjC video factory crash path)
 - Status: Active
 - Stability note: Sections marked `[STABLE]` should change rarely. Sections marked `[VOLATILE]` are expected to change often.
 
@@ -269,7 +269,7 @@ Client to server, in response to `request_clipboard_image`:
 Client state labels:
 - `ssh_mode`: `native`, `openssh`, `old`
 - `platform`: `linux`, `macos`, `windows`, `android`, or `unknown`
-- `capabilities`: optional list; desktop CLI builds advertise `clipboard_image` when they can service chat `/paste-image`. Android/Termux builds leave it empty.
+- `capabilities`: optional list; Linux, macOS, and Windows desktop CLI builds advertise `clipboard_image`, `youtube`, and `voice`; Android/Termux builds leave it empty.
 
 Pairing behavior:
 - The server stores one paired-client sender/state entry per token.
@@ -349,6 +349,7 @@ Raw mode:
 - Native and old modes enable CLI raw mode.
 - OpenSSH mode leaves raw mode to system OpenSSH so auth prompts retain normal terminal behavior.
 - On macOS, native voice microphone access depends on the `late` Mach-O embedding `NSMicrophoneUsageDescription` from `macos/Info.plist`. Without it, macOS can abort the process on first microphone access; because abort bypasses `RawModeGuard::drop`, the terminal can remain in raw mode and the privacy exception prints as one long line.
+- macOS voice uses the repo-local `webrtc-sys` patch in `vendor/webrtc-sys`, which disables LiveKit/WebRTC's ObjC video encoder/decoder factory registration for macOS builds. The CLI voice path is audio-only; avoiding the ObjC video factory prevents Tahoe/Apple Silicon `RTCVideoEncoderVP9` `NSException` crashes during peer-connection setup while keeping native voice advertised.
 - On Windows native mode, the CLI must enable virtual-terminal/ANSI output before forwarding remote SSH bytes and virtual-terminal input before forwarding local stdin bytes. The server sends alt-screen, mouse, bracketed-paste, OSC, color, and cursor sequences as raw bytes; PowerShell/conhost sessions can print literal `ESC[` text unless `late.exe` flips the console output mode first. Arrow keys, Esc-prefixed keys, and similar special keys can fail to reach the remote TUI unless `late.exe` also enables VT input on the console input handle.
 - Native mode forwards terminal capability env hints (`TERM_PROGRAM`, `LC_TERMINAL`, `TERM_FEATURES`, Kitty/WezTerm/Ghostty/Konsole vars, and Windows Terminal `WT_SESSION`/`WT_PROFILE_ID`) after PTY setup and before shell startup. `late-ssh` uses these hints to choose Kitty/iTerm2/Sixel image protocols when `TERM` alone is generic, which is especially important for Windows Terminal running PowerShell.
 
