@@ -115,7 +115,7 @@ resource "kubernetes_manifest" "postgres_cluster" {
           cpu    = "200m"
         }
         limits = {
-          memory = "2Gi"
+          memory = "4Gi"
           cpu    = "1"
         }
       }
