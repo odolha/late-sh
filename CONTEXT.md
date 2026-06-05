@@ -1068,6 +1068,10 @@ When modifying any keybinding, update **all** of the following:
 
 ---
 
+## Dependency Notes
+
+- **Ratatui 0.30.1 update blocker:** `ratatui 0.30.1` is currently not a clean bump for `late-ssh`. It pulls `ratatui-widgets 0.3.1`, where `Block` contains `Shadow -> Arc<dyn CellEffect>` and upstream defines `CellEffect` as only `fmt::Debug`. Because `ratatui_textarea::TextArea<'static>` stores an optional `Block`, this makes `App` non-`Send`, which breaks `russh::server::Handler + Send` through `ClientHandler.app: Option<Arc<TokioMutex<App>>>`. A local vendored `ratatui-widgets` patch with `pub trait CellEffect: fmt::Debug + Send + Sync` made `cargo check -p late-ssh` and `cargo test -p late-ssh --lib` pass, but the actual one-line fix required vendoring ~1.5 MB / ~36k lines, so do not carry it just for the patch release. Before updating past `ratatui 0.30.0`, check whether upstream Ratatui has added `Send + Sync` to `CellEffect` or otherwise made `Block`/`TextArea` `Send` again.
+
 ---
 
 ## References
