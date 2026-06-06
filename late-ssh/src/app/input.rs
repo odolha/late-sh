@@ -1224,15 +1224,13 @@ fn handle_dedicated_screen_input(app: &mut App, ctx: InputContext, event: &Parse
         }
 
         match event {
-            ParsedInput::Byte(byte) => {
-                if crate::app::door::input::handle_key(app, *byte) {
-                    return true;
-                }
+            ParsedInput::Byte(byte) if crate::app::door::input::handle_key(app, *byte) => {
+                return true;
             }
-            ParsedInput::Char(ch) if ch.is_ascii() => {
-                if crate::app::door::input::handle_key(app, *ch as u8) {
-                    return true;
-                }
+            ParsedInput::Char(ch)
+                if ch.is_ascii() && crate::app::door::input::handle_key(app, *ch as u8) =>
+            {
+                return true;
             }
             ParsedInput::Arrow(key) if crate::app::door::input::handle_arrow(app, *key) => {
                 return true;
