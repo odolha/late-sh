@@ -110,6 +110,7 @@ pub enum ParsedInput {
     // the `keep_composer_focused` tweak enabled — Enter then owns send-
     // and-stay and the binding is explicitly cleared.
     AltS,
+    AltA,
     AltC,
     Paste(Vec<u8>),
     PageUp,
@@ -490,6 +491,7 @@ impl Perform for VtCollector {
         // modifier rather than leaking ESC + byte separately.
         if intermediates.is_empty() {
             match byte {
+                b'a' | b'A' => self.events.push(ParsedInput::AltA),
                 b's' | b'S' => self.events.push(ParsedInput::AltS),
                 b'c' | b'C' => self.events.push(ParsedInput::AltC),
                 _ => {}
@@ -737,7 +739,7 @@ fn handle_parsed_input(app: &mut App, event: ParsedInput) {
         return;
     }
 
-    if matches!(event, ParsedInput::Byte(0x11)) {
+    if matches!(event, ParsedInput::Byte(0x11) | ParsedInput::AltA) {
         toggle_aquarium_tray_globally(app);
         return;
     }
@@ -928,7 +930,7 @@ fn handle_parsed_input(app: &mut App, event: ParsedInput) {
                 chat::input::handle_post_submit_requests(app);
             }
         }
-        ParsedInput::AltC => {}
+        ParsedInput::AltA | ParsedInput::AltC => {}
         // Mouse events feed global hit tests first, then vertical wheel
         // fallback for screens that scroll outside richer local handlers.
         ParsedInput::Mouse(mouse) => {
@@ -1270,12 +1272,15 @@ fn handle_dedicated_screen_input(app: &mut App, ctx: InputContext, event: &Parse
         }
         if app.pinstar_state.is_none() {
             match event {
-                ParsedInput::Byte(b'[') | ParsedInput::Char('[') => {
-                    select_directory_tab(app, ctx.directory_tab.prev());
+                ParsedInput::Byte(byte)
+                    if handle_directory_tab_switch_byte(app, ctx.directory_tab, *byte) =>
+                {
                     return true;
                 }
-                ParsedInput::Byte(b']') | ParsedInput::Char(']') => {
-                    select_directory_tab(app, ctx.directory_tab.next());
+                ParsedInput::Char(ch)
+                    if ch.is_ascii()
+                        && handle_directory_tab_switch_byte(app, ctx.directory_tab, *ch as u8) =>
+                {
                     return true;
                 }
                 _ => {}
@@ -1596,12 +1601,7 @@ fn handle_directory_catalog_input(app: &mut App, ctx: InputContext, event: &Pars
             true
         }
         ParsedInput::Byte(byte) => {
-            if *byte == b'[' {
-                select_directory_tab(app, ctx.directory_tab.prev());
-                return true;
-            }
-            if *byte == b']' {
-                select_directory_tab(app, ctx.directory_tab.next());
+            if handle_directory_tab_switch_byte(app, ctx.directory_tab, *byte) {
                 return true;
             }
             match ctx.directory_tab {
@@ -1625,12 +1625,8 @@ fn handle_directory_catalog_input(app: &mut App, ctx: InputContext, event: &Pars
             }
         }
         ParsedInput::Char(ch) => {
-            if *ch == '[' {
-                select_directory_tab(app, ctx.directory_tab.prev());
-                return true;
-            }
-            if *ch == ']' {
-                select_directory_tab(app, ctx.directory_tab.next());
+            if ch.is_ascii() && handle_directory_tab_switch_byte(app, ctx.directory_tab, *ch as u8)
+            {
                 return true;
             }
             if route_directory_char_to_composer(app, ctx, *ch) {
@@ -1650,6 +1646,42 @@ fn handle_directory_catalog_input(app: &mut App, ctx: InputContext, event: &Pars
             }
         }
         _ => false,
+    }
+}
+
+fn handle_directory_tab_switch_byte(app: &mut App, tab: DirectoryTab, byte: u8) -> bool {
+    match byte {
+        b'[' => {
+            select_directory_tab(app, tab.prev());
+            true
+        }
+        b']' => {
+            select_directory_tab(app, tab.next());
+            true
+        }
+        b'h' | b'H' if directory_tab_accepts_letter_switch(app, tab) => {
+            select_directory_tab(app, tab.prev());
+            true
+        }
+        b'l' | b'L' if directory_tab_accepts_letter_switch(app, tab) => {
+            select_directory_tab(app, tab.next());
+            true
+        }
+        _ => false,
+    }
+}
+
+fn directory_tab_accepts_letter_switch(app: &App, tab: DirectoryTab) -> bool {
+    match tab {
+        DirectoryTab::Profiles => !app.chat.work.composing(),
+        DirectoryTab::Projects => !app.chat.showcase.composing(),
+        DirectoryTab::Pinstar => {
+            app.pinstar_state.is_none()
+                && matches!(
+                    app.pinstar_browser.mode,
+                    crate::app::pinstar::browser::BrowserMode::List
+                )
+        }
     }
 }
 
@@ -4132,6 +4164,13 @@ mod tests {
     fn vt_parser_emits_alt_c_for_explicit_clipboard_chord() {
         let mut parser = VtInputParser::default();
         assert_eq!(parser.feed(b"\x1bc"), vec![ParsedInput::AltC]);
+    }
+
+    #[test]
+    fn vt_parser_emits_alt_a_for_explicit_aquarium_chord() {
+        let mut parser = VtInputParser::default();
+        assert_eq!(parser.feed(b"\x1ba"), vec![ParsedInput::AltA]);
+        assert_eq!(parser.feed(b"\x1bA"), vec![ParsedInput::AltA]);
     }
 
     #[test]

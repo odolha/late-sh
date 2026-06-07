@@ -17,7 +17,7 @@ Included here:
 - Home chat rooms, DMs, public/private topic rooms, synthetic entries, and game-backed room chat.
 - Home/Dashboard chat center, room rail, and embedded Rooms chat surfaces.
 - Message composer, replies, edits, deletes, reactions, pinned messages, ignores, overlays, and autocomplete.
-- Synthetic chat entries: RSS, News, Mentions/Notifications, Voice, and Discover. Showcase/Projects and Work/Profiles still use chat-adjacent services/state, but their UI is hosted on Directory page 5.
+- Synthetic chat entries: RSS, News, Mentions/Notifications, Voice, and Discover. Showcase/Projects and Work/Profiles still use chat-adjacent services/state, but their UI is hosted on Directory page 6.
 - Chat service refresh/tail/event contracts, DB model constraints, keybindings, tests, and gotchas.
 
 Global SSH, audio, games, profile, rooms/blackjack, observability, and repo-wide test policy stay in the root context.
@@ -38,8 +38,8 @@ late-ssh/src/app/chat/
 |-- feeds/                       # Synthetic RSS entry: private per-user RSS/Atom inbox
 |-- news/                        # Synthetic News entry: articles + #lounge announcement
 |-- notifications/               # Synthetic Mentions entry: mention notifications
-|-- showcase/                    # Projects service/state/UI reused by Directory page 5
-`-- work/                        # Profiles service/state/UI reused by Directory page 5
+|-- showcase/                    # Projects service/state/UI reused by Directory page 6
+`-- work/                        # Profiles service/state/UI reused by Directory page 6
 ```
 
 Related tests:
@@ -171,7 +171,7 @@ Game rooms stay in `ChatState.rooms` for embedded Rooms chat, but `is_chat_list_
 Room navigation:
 - `h`/`l`, left/right arrows, `Ctrl+P`/`Ctrl+N` switch room selection.
 - `Space` activates room-jump mode, assigning keys from `ROOM_JUMP_KEYS`. Jumping to the already selected room/synthetic entry still re-runs the entry's read/list side effects so stale unread badges clear.
-- Global `Ctrl+/` opens the room jump modal. Rows include unread counts and synthetic entries for RSS, News, Voice, Mentions, and custom room browse. Showcase/Projects and Work/Profiles live on Directory page 5 instead. Results are ordered favorites first, then unread entries, then latest message/activity; typed `@` and `#` prefixes filter to DMs or rooms while keeping that ordering.
+- Global `Ctrl+/` opens the room jump modal. Rows include unread counts and synthetic entries for RSS, News, Voice, Mentions, and custom room browse. Showcase/Projects and Work/Profiles live on Directory page 6 instead. Results are ordered favorites first, then unread entries, then latest message/activity; typed `@` and `#` prefixes filter to DMs or rooms while keeping that ordering.
 - While composing on Home, `Ctrl+N`/`Ctrl+P` switch real rooms while preserving draft text and dropping reply/edit state.
 - Synthetic entries are selected with booleans (`news_selected`, `notifications_selected`, `discover_selected`, `showcase_selected`, `work_selected`), not `selected_room_id`.
 
@@ -294,7 +294,7 @@ Autocomplete:
 - Arrow keys move selection.
 - Tab/Enter confirms.
 - Esc dismisses popup without leaving compose mode.
-- Pressing `/` while not composing on Home starts command compose for the active room, except on News where `/` is a synthetic-entry filter toggle. Directory Profiles/Projects use `/` as the mine-only filter inside page 5.
+- Pressing `/` while not composing on Home starts command compose for the active room, except on News where `/` is a synthetic-entry filter toggle. Directory Profiles/Projects use `/` as the mine-only filter inside page 6.
 
 Image uploads and inline rendering:
 - File-upload storage is optional. It is enabled only when `LATE_FILES_S3_ENDPOINT`/`S3_ENDPOINT`, `LATE_FILES_S3_BUCKET`, `LATE_FILES_PUBLIC_BASE_URL`, and S3 credentials are present. Infra variable details live in `infra/README.md`.
@@ -391,7 +391,7 @@ Synthetic entries are selected from the room list but are not normal `ChatRoom`s
 - Status must be `open`, `casual`, or `not-looking`; aliases normalize in `work/state.rs`.
 - Links require `http://` or `https://`, cap at 6, and are stored for later web rendering.
 - Skills normalize lowercase, split on comma/whitespace, strip leading `#`, allow ASCII alnum plus `-_.`, cap each skill at 24 chars and total skills at 12.
-- Public profiles show bio and showcases when the author has data for them. The composer does not expose include toggles.
+- Public profiles show bio, late.fetch fields, and showcases when the author has data for them. The composer does not expose include toggles. `WorkFeedItem` carries the owner `Profile` projection so the Directory detail panel can preview the same public-page sections without per-row DB calls.
 - `i` creates or edits the caller's own profile; `e` edits selected owned/admin entry; `d` deletes owned/admin entry; Enter or `c` copies the selected public work profile link when not composing.
 - Snapshot is global and lists recent work profiles by latest update; unread count is per user through `work_feed_reads`.
 
@@ -530,7 +530,7 @@ modals and the icon picker). Username profile-opens are debounced via
 | Mentions | `j/k` navigate, Enter jump to referenced room/message |
 | Discover | `j/k` navigate, Enter join selected public room |
 
-Directory Projects and Profiles reshuffle their listing on page/tab entry. News keeps its chronological order — only mine-only filtering applies. The slash-command composer in `app/input.rs` skips itself when News is selected so `/` reaches the synthetic-entry handler; Directory page 5 routes `/` directly to Projects/Profiles filtering.
+Directory Projects and Profiles reshuffle their listing on page/tab entry. News keeps its chronological order — only mine-only filtering applies. The slash-command composer in `app/input.rs` skips itself when News is selected so `/` reaches the synthetic-entry handler; Directory page 6 routes `/` directly to Projects/Profiles filtering.
 
 When changing keybindings, update root `CONTEXT.md`'s keybinding checklist plus the relevant input handler, help modal, footer hints, and tests.
 

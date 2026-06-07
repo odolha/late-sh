@@ -64,7 +64,7 @@ Routing rules for future LLM agents:
 The system is a Rust workspace with four crates (`late-cli`, `late-core`, `late-ssh`, `late-web`) backed by PostgreSQL, Icecast audio streaming, Liquidsoap playlist management, and LiveKit voice media.
 
 - **Primary entry points:** SSH server (russh on port 2222), HTTP API (axum on port 4000), Web server (axum on port 3000), LiveKit RTC (`rtc.<domain>`)
-- **Main responsibilities:** Multi-screen TUI over SSH (Home/Dashboard, The Arcade, Rooms, Door Games, Artboard, Directory), public web frontend, genre voting, paired browser/CLI audio control plus visualizer, LiveKit-backed voice room control for native `late` CLI users, real-time chat and chat-adjacent surfaces inside Home, private per-user RSS/Atom inboxes that can be shared into News, link/YouTube sharing with AI summaries/ASCII thumbnails, Arcade games, persistent game-backed Rooms, Door Games including Lateania, a shared multi-user ASCII Artboard, a global Hub domain for leaderboard/quests/shop/events surfaces including repeatable Chat/Companion consumables, a Shop-unlocked ambient Aquarium tray toggled with `Ctrl+Q`, and one structured global Activity stream for user actions. The complete local context routing map is in `Context Directory (Read-First Routing)` above. Configurable Home layout surfaces: the global right sidebar (time, visualizer, hot rooms, bonsai, and unlockable pet companion) with on/off/custom per-screen visibility, the Home room-list rail, and lounge top boxes (always on for #lounge, optional on other Home rooms); `v` then `v` cycles persisted combinations of those panels. `c` opens the pet care modal after Pet Companion is unlocked; locked users use `Ctrl+G` to visit Hub Shop. Global `q` opens quit confirm; pressing `q` again exits and `Esc` dismisses it.
+- **Main responsibilities:** Multi-screen TUI over SSH (Home/Dashboard, The Arcade, Rooms, Door Games, Artboard, Directory), public web frontend, genre voting, paired browser/CLI audio control plus visualizer, LiveKit-backed voice room control for native `late` CLI users, real-time chat and chat-adjacent surfaces inside Home, private per-user RSS/Atom inboxes that can be shared into News, link/YouTube sharing with AI summaries/ASCII thumbnails, Arcade games, persistent game-backed Rooms, Door Games including Lateania, a shared multi-user ASCII Artboard, a global Hub domain for leaderboard/quests/shop/events surfaces including repeatable Chat/Companion consumables, a Shop-unlocked ambient Aquarium tray toggled with `Ctrl+Q` or `Alt+A`, and one structured global Activity stream for user actions. The complete local context routing map is in `Context Directory (Read-First Routing)` above. Configurable Home layout surfaces: the global right sidebar (time, visualizer, hot rooms, bonsai, and unlockable pet companion) with on/off/custom per-screen visibility, the Home room-list rail, and lounge top boxes (always on for #lounge, optional on other Home rooms); `v` then `v` cycles persisted combinations of those panels. `c` opens the pet care modal after Pet Companion is unlocked; locked users use `Ctrl+G` to visit Hub Shop. Global `q` opens quit confirm; pressing `q` again exits and `Esc` dismisses it.
 - **Highest-risk areas:** SSH render loop backpressure, connection limiting, chat sync consistency, paired-client WS routing/state drift
 
 ---
@@ -975,7 +975,7 @@ The human owner may use narrower crate-specific `cargo test` / `cargo nextest ru
 | **Rooms** | 3 | Active | Persistent game-room directory plus active room-game/chat view. Detailed behavior is documented in `late-ssh/src/app/rooms/CONTEXT.md`. |
 | **Door Games** | 4 | Active | Lobby for BBS-style persistent worlds. `Enter` launches the selected Door game; `d` resets the selected Door character after confirmation; active Door games capture ordinary keys, `Esc` returns to the Door lobby, and reserved global modals plus `?` still work. Detailed behavior lives in `late-ssh/src/app/door/CONTEXT.md`. |
 | **Artboard** | 5 | Active | Dedicated shared ASCII canvas screen. Opens in `view` mode for navigation and screen switching; `i` / `Enter` enters `active` edit mode; `Esc` returns to `view` mode. |
-| **Directory** | 6 | Active | Profiles, Projects, and Pinstar tabs. Profiles is the in-app work-profile browser/editor; Projects is the Showcase browser/editor; Pinstar embeds the existing collaborative diagram browser/editor. |
+| **Directory** | 6 | Active | Profiles, Projects, and Pinstar tabs, switched with `[` / `]` or idle `h` / `l`. Profiles is the in-app work-profile browser/editor and its detail panel previews the public web profile sections (work fields, Settings Bio, late.fetch, Showcases); Projects is the Showcase browser/editor; Pinstar embeds the existing collaborative diagram browser/editor. |
 
 ### Layout
 
@@ -1002,8 +1002,8 @@ One global overlay owns general app help plus the former Pair, terminal FAQ, and
 - Module: `late-ssh/src/app/help_modal/`.
 - State flag on `App`: `show_help` paired with `help_modal_state`.
 - Opening: global `?` in `app/input.rs`; `/binds` opens Chat, `/music` opens Music, Bonsai `?` opens Bonsai. `Ctrl+R` and `Ctrl+L` are no longer global help keybindings.
-- Outer frame: `app/render.rs::app_frame_help_hint_title()` advertises `Settings Ctrl+O`, `Hub Ctrl+G`, `Guide ?`, and `Aqua Ctrl+Q`.
-- Topics include Pair, Overview, Chat, Social, Music, News, Games, Copy, Links, Images, Selection, Notifications, CLI YouTube, Economy, Bonsai, Settings, Architecture.
+- Outer frame: `app/render.rs::app_frame_help_hint_title()` advertises `Settings Ctrl+O`, `Hub Ctrl+G`, `Guide ?`, and `Aqua Ctrl+Q`; the `Alt+A` Aquarium fallback is intentionally documented only in the guide.
+- Topics include Pair, Overview, Chat, Social, Directory, Music, News, Arcade, Tables, Doors, Copy, Links, Images, Selection, Notifications, CLI YouTube, Economy, Bonsai, Settings, Architecture.
 - Footer keys: `Tab/S+Tab` switch topics, `j/k`/arrows scroll, `Esc/q/?` close.
 
 Content invariants worth preserving when editing `data.rs`:
@@ -1018,7 +1018,7 @@ Content invariants worth preserving when editing `data.rs`:
 |-----|---------|--------|
 | `q` / `Q` | Global | Open quit confirm; pressing `q` again exits |
 | `?` | Global (not composing) | Open help modal (multi-slide guide). Also works inside the settings modal, which renders help on top while keeping the draft intact. |
-| `Tab` / `Shift+Tab` | Help modal | Switch topics (Pair / Overview / Chat / Social / Music / News / Games / Copy / Links / Images / Selection / Notifications / CLI YouTube / Economy / Bonsai / Settings / Architecture) |
+| `Tab` / `Shift+Tab` | Help modal | Switch topics (Pair / Overview / Chat / Social / Directory / Music / News / Arcade / Tables / Doors / Copy / Links / Images / Selection / Notifications / CLI YouTube / Economy / Bonsai / Settings / Architecture) |
 | `j` / `k` / `↑` / `↓` | Help modal | Scroll current slide (uncapped — past the last line is blank space) |
 | `Esc` / `q` / `?` | Help modal | Close (returns to the underlying screen, including the settings modal if it was open) |
 | `Tab` | Global | Cycle screens |
@@ -1054,7 +1054,7 @@ Content invariants worth preserving when editing `data.rs`:
 | Chat keys | Home / Rooms embedded chat | See `late-ssh/src/app/chat/CONTEXT.md` for room navigation, composer commands, message actions, synthetic entries, favorites, and icon picker behavior. |
 | `Ctrl+O` | Reserved global, except active Artboard editing | Open the settings modal from anywhere, including active Arcade games |
 | `Ctrl+G` | Reserved global, except active Artboard editing | Open Hub on the Shop tab |
-| `Ctrl+Q` | Reserved global | Toggle the Shop-unlocked Aquarium bottom tray |
+| `Ctrl+Q` / `Alt+A` | Reserved global | Toggle the Shop-unlocked Aquarium bottom tray |
 | `Tab` / `Shift+Tab` | Settings modal | Switch tabs: Settings, Bio, Themes, RSS, Account, and hidden Special when available |
 | `↑` / `↓` / `j` / `k` | Settings modal | Move within the active tab. Settings rows include Username, IDE, Terminal, OS, Langs, Theme, Background, Right sidebar, Room list, Activity boxes, Country, Timezone, DMs, @mentions, Game events, Bell, Cooldown, Format |
 | `←` / `→` | Settings modal | Cycle the current row's setting (theme, toggles, cooldown, notification format) |

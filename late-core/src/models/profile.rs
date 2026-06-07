@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use tokio_postgres::Client;
 use uuid::Uuid;
 
@@ -134,6 +134,25 @@ impl Profile {
             .await?
             .ok_or_else(|| anyhow::anyhow!("user not found"))?;
         Ok(Self::from_user(&user))
+    }
+
+    pub async fn list_by_user_ids(
+        client: &Client,
+        user_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Self>> {
+        if user_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let rows = client
+            .query("SELECT * FROM users WHERE id = ANY($1)", &[&user_ids])
+            .await?;
+        let mut profiles = HashMap::with_capacity(rows.len());
+        for row in rows {
+            let user = User::from(row);
+            profiles.insert(user.id, Self::from_user(&user));
+        }
+        Ok(profiles)
     }
 
     pub async fn load_with_chip_balance(

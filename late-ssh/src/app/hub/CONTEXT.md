@@ -8,7 +8,7 @@
 
 ## Scope
 
-`late-ssh/src/app/hub` owns the global Hub modal opened with reserved global `Ctrl+G` (except active Artboard editing) and the cross-product domains surfaced inside it: Shop, Leaderboard, Quests, Events, and the admin-only reward-template/shop-item editor. Former Guide content now lives in the global `?` guide's Economy topic under `late-ssh/src/app/help_modal/hub_guide.rs`. Hub also owns the Shop-unlocked Aquarium tray toggled globally with `Ctrl+Q`.
+`late-ssh/src/app/hub` owns the global Hub modal opened with reserved global `Ctrl+G` (except active Artboard editing) and the cross-product domains surfaced inside it: Shop, Leaderboard, Quests, Events, and the admin-only reward-template/shop-item editor. Former Guide content now lives in the global `?` guide's Economy topic under `late-ssh/src/app/help_modal/hub_guide.rs`. Hub also owns the Shop-unlocked Aquarium tray toggled globally with `Ctrl+Q` or `Alt+A`.
 
 Hub is a cross-product domain surface. It may render Arcade, Rooms, economy, marketplace, and event information, but it must not own those runtimes. Arcade game state stays under `late-ssh/src/app/arcade`; Rooms/table runtime stays under `late-ssh/src/app/rooms`; generic chip earn/spend primitives stay in `late-core/src/models/chips.rs`. Hub-owned marketplace state and entitlement projections live under `hub/shop`.
 
@@ -56,7 +56,7 @@ If another tab is added, update `HubTab::ALL`, `HubTab::PUBLIC` if visibility di
 
 ## Aquarium
 
-Aquarium is a Shop unlock, not an admin/mod preview. The Aquarium feature costs 10,000 chips, lives in the Companions Shop category, and unlocks Aquarium ownership/use. The Aquarium Shop category is fish-only and browseable before unlock so users can preview fish, but fish purchases and active-count changes are blocked until the Aquarium feature is owned. `Ctrl+Q` toggles the owned user's full-width bottom tray across screens; locked users are sent to Hub Shop with a banner.
+Aquarium is a Shop unlock, not an admin/mod preview. The Aquarium feature costs 10,000 chips, lives in the Companions Shop category, and unlocks Aquarium ownership/use. The Aquarium Shop category is fish-only and browseable before unlock so users can preview fish, but fish purchases and active-count changes are blocked until the Aquarium feature is owned. `Ctrl+Q` or `Alt+A` toggles the owned user's full-width bottom tray across screens; locked users are sent to Hub Shop with a banner. Visible frame/shop hints intentionally keep the shorter `Ctrl+Q` text; the `Alt+A` fallback is user-documented in the global `?` guide.
 
 The runtime is ambient-only for now:
 - Fish ownership and active counts persist through `marketplace_items` / `user_purchases`.
