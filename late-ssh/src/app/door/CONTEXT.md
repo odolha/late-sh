@@ -2,13 +2,15 @@
 
 ## Metadata
 - Scope: `late-ssh/src/app/door`
-- Last updated: 2026-06-08
+- Last updated: 2026-06-09
 - Purpose: local working context for the Lateania top-level screen and legacy door-game runtime.
 - Parent context: `../../../../CONTEXT.md`
 
 ## Scope
 
 `late-ssh/src/app/door` owns the top-level Lateania screen. The source domain still uses the legacy `door` namespace and `Screen::Lateania` enum variant, but the user-facing page is Lateania because this screen has one first-class persistent world rather than a generic door-game list.
+
+For active game runtime, world/content, combat, classes, abilities, items, wildlife, Frontier, persistence, and game UI panels, read `lateania/CONTEXT.md` after this file.
 
 Keep `mod.rs` declaration-only. Do not add `pub use` re-export layers.
 
@@ -32,8 +34,8 @@ Keep `mod.rs` declaration-only. Do not add `pub use` re-export layers.
   - `?` to open the global help modal.
 - Lateania class selection owns `1-5` after launch. Those keys must not switch top-level screens while Lateania is active.
 - Lateania after class selection uses `w/a/s/d` and arrows for cardinal movement, `y/u/n/m` for diagonals, `<`/`,` for up, `>`/`.` for down, `space`/`x`/`Enter` for attacks, `1-9` for abilities unless a list panel is open, and `z` to flee.
-- Lateania side panels: `c` character, `v` abilities, `t` inventory, `b` shop when a merchant is present, `o` examine/interact, `j` quest journal, `k` titles. In list panels, `w/s` or up/down move the cursor, `1-9` jump/activate a row, `Enter` activates the selected row, and `x` sells the selected inventory item at a shop.
-- Lateania world actions: `r` recalls the player to Embergate's Town Square when out of combat, and `f` toggles auto-following another adventurer in the same room.
+- Lateania side panels: `c` character, `v` abilities, `t` inventory, `b` shop when a merchant is present, `o` examine/interact, `j` quest journal, `k` titles, and `f` follow. In list panels, `w/s` or up/down move the cursor, `1-9` jump/activate a row, and `Enter` activates the selected row. `x` sells the selected inventory item at a shop; in the Follow panel, `x` stops following the current target.
+- Lateania world actions: `r` recalls the player to Embergate's Town Square when out of combat, and `f` opens/closes the Follow panel for choosing an adventurer in the same room.
 
 ## Lateania
 
@@ -42,6 +44,7 @@ Lateania lives under `lateania/`:
 - `input.rs` maps Lateania controls after launch.
 - `ui.rs` renders the active game.
 - `svc.rs` owns the shared persistent world service.
+- `CONTEXT.md` owns game-specific runtime/content context; read it before editing this module.
 
 Lateania is not an Arcade game and should not use `App::is_playing_game`; the screen tracks active state by whether `App::lateania_state` is present.
 
