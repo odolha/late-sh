@@ -223,7 +223,6 @@ struct DrawContext<'a> {
     visualizer: &'a Visualizer,
     now_playing: Option<&'a NowPlaying>,
     paired_client: Option<&'a ClientAudioState>,
-    vote_view: crate::app::vote::ui::VoteCardView<'a>,
     sidebar_clock: &'a str,
     bonsai: &'a crate::app::bonsai::state::BonsaiState,
     bonsai_v2: &'a crate::app::bonsai_v2::state::BonsaiV2State,
@@ -273,7 +272,11 @@ struct DrawContext<'a> {
     booth_submit_enabled: bool,
     youtube_source_count: usize,
     icecast_source_count: usize,
+    radio_source_count: usize,
     paired_browser_source: late_core::models::user::AudioSource,
+    selected_icecast_stream: late_core::models::user::IcecastStream,
+    selected_radio_station: late_core::models::user::RadioStation,
+    radio_now_playing: Option<&'a str>,
     afk: Option<&'a str>,
     chat_state: &'a chat::state::ChatState,
     user_id: uuid::Uuid,
@@ -374,15 +377,22 @@ impl App {
             room_selected,
         );
         let screen = self.screen;
-        let now_playing: Option<NowPlaying> = self
-            .now_playing_rx
-            .as_mut()
-            .and_then(|rx| rx.borrow_and_update().clone());
+        // The icecast rows render the USER'S SELECTED stream's track, not a
+        // global single mount.
+        let selected_icecast_stream = self.selected_icecast_stream;
+        let now_playing: Option<NowPlaying> = self.now_playing_rx.as_mut().and_then(|rx| {
+            rx.borrow_and_update()
+                .get(selected_icecast_stream.as_str())
+                .cloned()
+        });
+        let selected_radio_station = self.selected_radio_station;
+        let radio_now_playing: Option<String> = self.radio_meta_rx.as_mut().and_then(|rx| {
+            rx.borrow_and_update()
+                .get(selected_radio_station.as_str())
+                .map(|meta| format!("{} - {}", meta.artist, meta.title))
+        });
         let paired_client = self.paired_client_state();
         let paired_cli_supports_voice = self.paired_cli_supports_voice();
-        let vote_snapshot = self.vote.snapshot();
-        let vote_my_vote = self.vote.my_vote();
-        let vote_ends_in = vote_snapshot.remaining_until_switch();
         let banner = self.active_banner().cloned();
         let sidebar_clock = sidebar_clock_text(self.profile_state.profile().timezone.as_deref());
         let visualizer = &self.visualizer;
@@ -799,12 +809,6 @@ impl App {
                         visualizer,
                         now_playing: now_playing.as_ref(),
                         paired_client: paired_client.as_ref(),
-                        vote_view: crate::app::vote::ui::VoteCardView {
-                            vote_counts: &vote_snapshot.counts,
-                            current_genre: vote_snapshot.current_genre,
-                            my_vote: vote_my_vote,
-                            ends_in: vote_ends_in,
-                        },
                         sidebar_clock: &sidebar_clock,
                         bonsai: &self.bonsai_state,
                         bonsai_v2: &self.bonsai_v2_state,
@@ -858,7 +862,11 @@ impl App {
                         booth_submit_enabled: self.audio.booth_submit_enabled(),
                         youtube_source_count: self.audio.youtube_source_count(),
                         icecast_source_count: self.audio.icecast_source_count(),
+                        radio_source_count: self.audio.radio_source_count(),
                         paired_browser_source: self.paired_browser_source,
+                        selected_icecast_stream,
+                        selected_radio_station,
+                        radio_now_playing: radio_now_playing.as_deref(),
                         afk: self.afk.as_deref(),
                         chat_state: &self.chat,
                         user_id: self.user_id,
@@ -1193,12 +1201,6 @@ impl App {
                     visualizer: ctx.visualizer,
                     now_playing: ctx.now_playing,
                     paired_client: ctx.paired_client,
-                    vote: crate::app::vote::ui::VoteCardView {
-                        vote_counts: ctx.vote_view.vote_counts,
-                        current_genre: ctx.vote_view.current_genre,
-                        my_vote: ctx.vote_view.my_vote,
-                        ends_in: ctx.vote_view.ends_in,
-                    },
                     bonsai: ctx.bonsai,
                     bonsai_v2: ctx.bonsai_v2,
                     use_bonsai_v2: ctx.shop_state.dynamic_bonsai_enabled(),
@@ -1209,7 +1211,11 @@ impl App {
                     queue_snapshot: &ctx.booth_snapshot,
                     youtube_source_count: ctx.youtube_source_count,
                     icecast_source_count: ctx.icecast_source_count,
+                    radio_source_count: ctx.radio_source_count,
                     paired_browser_source: ctx.paired_browser_source,
+                    selected_icecast_stream: ctx.selected_icecast_stream,
+                    selected_radio_station: ctx.selected_radio_station,
+                    radio_now_playing: ctx.radio_now_playing,
                     afk: ctx.afk,
                 },
             );
