@@ -89,6 +89,9 @@ pub struct DashboardChatView<'a> {
     /// Cell that, when present, receives the composer block rect so mouse
     /// hit-testing in `app::input` can detect double-clicks into the bar.
     pub composer_rect_slot: Option<&'a std::cell::Cell<Option<Rect>>>,
+    /// Cell that, when present, receives the top visible wrapped row for the
+    /// same composer render. Click-to-cursor uses this when long drafts scroll.
+    pub composer_viewport_top_slot: Option<&'a std::cell::Cell<Option<usize>>>,
     /// Cell that, when present, receives this frame's chat-scroll hit
     /// layout so `app::input` can map clicks in the message area to a
     /// message id, header segment, or inline-image row.
@@ -420,6 +423,45 @@ fn horizontal_inset(rect: Rect, pad: u16) -> Rect {
         y: rect.y,
         width: rect.width.saturating_sub(pad * 2),
         height: rect.height,
+    }
+}
+
+/// Replay of ratatui-textarea's `next_scroll_top` minimal-scroll rule: the
+/// viewport only moves when the cursor would leave it, otherwise it keeps the
+/// previous top. `prev_top` must come from the previous render of the same
+/// composer (the slot persists across frames, see `ChatState`); feeding it a
+/// fresh `None` every frame would bottom-anchor the result at the cursor and
+/// drift from the widget's real viewport.
+fn next_composer_viewport_top(
+    prev_top: Option<usize>,
+    cursor_row: usize,
+    visible_rows: u16,
+) -> usize {
+    let prev_top = prev_top.unwrap_or(0);
+    let visible_rows = usize::from(visible_rows).max(1);
+    if cursor_row < prev_top {
+        cursor_row
+    } else if prev_top.saturating_add(visible_rows) <= cursor_row {
+        cursor_row + 1 - visible_rows
+    } else {
+        prev_top
+    }
+}
+
+fn record_composer_mouse_target(
+    composer: &TextArea<'static>,
+    composer_area: Rect,
+    rect_slot: Option<&std::cell::Cell<Option<Rect>>>,
+    viewport_top_slot: Option<&std::cell::Cell<Option<usize>>>,
+) {
+    if let Some(slot) = rect_slot {
+        slot.set(Some(composer_area));
+    }
+    if let Some(slot) = viewport_top_slot {
+        let visible_rows = composer_area.height.saturating_sub(2);
+        let top =
+            next_composer_viewport_top(slot.get(), composer.screen_cursor().row, visible_rows);
+        slot.set(Some(top));
     }
 }
 
@@ -973,9 +1015,12 @@ pub fn draw_dashboard_chat_card(
             keep_composer_focused: view.keep_composer_focused,
         },
     );
-    if let Some(slot) = view.composer_rect_slot {
-        slot.set(Some(composer_area));
-    }
+    record_composer_mouse_target(
+        view.composer,
+        composer_area,
+        view.composer_rect_slot,
+        view.composer_viewport_top_slot,
+    );
 }
 
 // ── Chat rows cache & scroll ────────────────────────────────
@@ -2127,6 +2172,9 @@ pub struct ChatRenderInput<'a> {
     /// Cell that, when present, receives the composer block rect so mouse
     /// hit-testing in `app::input` can detect double-clicks into the bar.
     pub composer_rect_slot: Option<&'a std::cell::Cell<Option<Rect>>>,
+    /// Cell that, when present, receives the top visible wrapped row for the
+    /// same composer render. Click-to-cursor uses this when long drafts scroll.
+    pub composer_viewport_top_slot: Option<&'a std::cell::Cell<Option<usize>>>,
     /// Cell that, when present, receives this frame's chat-scroll hit
     /// layout — only set in the real-room message branch (synthetic
     /// entries like Discover/News/Showcase don't produce one).
@@ -2210,6 +2258,9 @@ pub struct EmbeddedRoomChatView<'a> {
     /// Cell that, when present, receives the composer block rect so mouse
     /// hit-testing in `app::input` can detect double-clicks into the bar.
     pub composer_rect_slot: Option<&'a std::cell::Cell<Option<Rect>>>,
+    /// Cell that, when present, receives the top visible wrapped row for the
+    /// same composer render. Click-to-cursor uses this when long drafts scroll.
+    pub composer_viewport_top_slot: Option<&'a std::cell::Cell<Option<usize>>>,
     /// Cell that, when present, receives this frame's chat-scroll hit
     /// layout (with `content` set to the painted text area, not the
     /// bordered frame).
@@ -2325,9 +2376,12 @@ pub fn draw_embedded_room_chat(
             keep_composer_focused: view.keep_composer_focused,
         },
     );
-    if let Some(slot) = view.composer_rect_slot {
-        slot.set(Some(composer_area));
-    }
+    record_composer_mouse_target(
+        view.composer,
+        composer_area,
+        view.composer_rect_slot,
+        view.composer_viewport_top_slot,
+    );
 }
 
 struct RoomListRows {
@@ -3783,9 +3837,12 @@ fn draw_selected_content(
                 keep_composer_focused: view.keep_composer_focused,
             },
         );
-        if let Some(slot) = view.composer_rect_slot {
-            slot.set(Some(composer_area));
-        }
+        record_composer_mouse_target(
+            view.composer,
+            composer_area,
+            view.composer_rect_slot,
+            view.composer_viewport_top_slot,
+        );
     }
 }
 
@@ -4151,6 +4208,7 @@ mod tests {
             work_composing: false,
             keep_composer_focused: false,
             composer_rect_slot: None,
+            composer_viewport_top_slot: None,
             chat_hit_slot: None,
         }
     }
@@ -4170,6 +4228,31 @@ mod tests {
         // ⏎ is 3 bytes but 1 display column.
         let tiers = ["⏎⏎⏎⏎", ""];
         assert_eq!(pick_title_that_fits(6, &tiers), "⏎⏎⏎⏎");
+    }
+
+    #[test]
+    fn composer_viewport_top_scrolls_to_keep_cursor_visible() {
+        assert_eq!(next_composer_viewport_top(Some(0), 0, 4), 0);
+        assert_eq!(next_composer_viewport_top(Some(0), 3, 4), 0);
+        assert_eq!(next_composer_viewport_top(Some(0), 4, 4), 1);
+        assert_eq!(next_composer_viewport_top(Some(6), 4, 4), 4);
+    }
+
+    #[test]
+    fn composer_viewport_top_treats_zero_height_as_one_row() {
+        assert_eq!(next_composer_viewport_top(Some(0), 2, 0), 2);
+    }
+
+    #[test]
+    fn composer_viewport_top_keeps_prev_top_when_cursor_moves_up_within_view() {
+        // Regression: a 10-row draft in a 5-row viewport scrolls to top 5
+        // while typing. Pressing Up to row 6 must keep top 5, like the
+        // widget's own viewport, not re-anchor to 6 - 5 + 1 = 2. This relies
+        // on the slot persisting across frames so prev_top is real.
+        assert_eq!(next_composer_viewport_top(Some(5), 9, 5), 5);
+        assert_eq!(next_composer_viewport_top(Some(5), 6, 5), 5);
+        // Only a fresh slot (first ever render) bottom-anchors at the cursor.
+        assert_eq!(next_composer_viewport_top(None, 6, 5), 2);
     }
 
     #[test]
