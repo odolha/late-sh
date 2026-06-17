@@ -56,6 +56,12 @@ LATE_LIVEKIT_API_SECRET ?= secret
 # Shared MVP voice room name.
 LATE_VOICE_ROOM ?= late-voice
 
+# --- IRC ---
+# Enable the embedded IRC server in local dev.
+LATE_IRC_ENABLED ?= 1
+# Plaintext IRC listen port.
+LATE_IRC_PORT ?= 6667
+
 # --- Door games (Rebels in the Sky) ---
 LATE_REBELS_ENABLED ?= 1                                    # Enable the Rebels in the Sky door game (1=on, 0=off)
 LATE_REBELS_HOST ?= frittura.org                            # Rebels SSH server hostname to proxy to
@@ -130,6 +136,16 @@ LATE_FILES_S3_SECRET_ACCESS_KEY ?=  								                        # S3/R2 secr
 	@echo "LATE_LIVEKIT_API_KEY=$(LATE_LIVEKIT_API_KEY)" >> .env
 	@echo "LATE_LIVEKIT_API_SECRET=$(LATE_LIVEKIT_API_SECRET)" >> .env
 	@echo "LATE_VOICE_ROOM=$(LATE_VOICE_ROOM)" >> .env
+	@echo "LATE_IRC_ENABLED=$(LATE_IRC_ENABLED)" >> .env
+	@echo "LATE_IRC_PORT=$(LATE_IRC_PORT)" >> .env
+	@echo "" >> .env
+	@echo "# Optional IRC TLS/tuning overrides:" >> .env
+	@echo "# LATE_IRC_TLS_CERT=/path/to/fullchain.pem" >> .env
+	@echo "# LATE_IRC_TLS_KEY=/path/to/privkey.pem" >> .env
+	@echo "# LATE_IRC_MAX_CONNS_GLOBAL=200" >> .env
+	@echo "# LATE_IRC_MAX_CONNS_PER_USER=3" >> .env
+	@echo "# LATE_IRC_MAX_AUTH_FAILURES_PER_IP=20" >> .env
+	@echo "# LATE_IRC_AUTH_FAILURE_WINDOW_SECS=300" >> .env
 	@echo "LATE_REBELS_ENABLED=$(LATE_REBELS_ENABLED)" >> .env
 	@echo "LATE_REBELS_HOST=$(LATE_REBELS_HOST)" >> .env
 	@echo "LATE_REBELS_PORT=$(LATE_REBELS_PORT)" >> .env
@@ -163,6 +179,8 @@ INSTANCE2_OVERRIDES = \
   LATE_WEB_PORT=3001 \
   LATE_PG_HOST_PORT=5434 \
   LATE_ICECAST_HOST_PORT=8001 \
+  LATE_LIQUIDSOAP_HOST_PORT=1235 \
+  LATE_IRC_PORT=6668 \
   LATE_LIVEKIT_HOST_PORT=7883 \
   LATE_LIVEKIT_RTC_TCP_PORT=7884 \
   LATE_LIVEKIT_RTC_UDP_PORT=7885
