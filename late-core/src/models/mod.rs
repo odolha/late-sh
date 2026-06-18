@@ -18,6 +18,7 @@ pub mod chips;
 pub mod game_payout;
 pub mod game_room;
 pub mod irc_token;
+pub mod le_word;
 pub mod leaderboard;
 pub mod marketplace;
 pub mod media_history_item;
