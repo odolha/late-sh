@@ -16,9 +16,9 @@ const LOBBY_GAME_ORDER: [usize; 20] = [
     GAME_SELECTION_2048,
     GAME_SELECTION_TETRIS,
     GAME_SELECTION_SNAKE,
+    GAME_SELECTION_RACER,
     GAME_SELECTION_LE_WORD,
     GAME_SELECTION_RUBIKS_CUBE,
-    GAME_SELECTION_RACER,
     GAME_SELECTION_SUDOKU,
     GAME_SELECTION_NONOGRAMS,
     GAME_SELECTION_MINESWEEPER,
@@ -108,6 +108,12 @@ pub fn handle_key(app: &mut App, byte: u8) -> bool {
                 return true;
             }
             return super::snake::input::handle_key(&mut app.snake_state, byte);
+        } else if app.game_selection == GAME_SELECTION_RACER {
+            if byte == 0x1B || byte == b'q' || byte == b'Q' {
+                app.is_playing_game = false;
+                return true;
+            }
+            return super::racer::input::handle_key(&mut app.racer_state, byte);
         } else if app.game_selection == GAME_SELECTION_RUBIKS_CUBE {
             if byte == 0x1B || byte == b'q' || byte == b'Q' {
                 app.is_playing_game = false;
@@ -126,12 +132,6 @@ pub fn handle_key(app: &mut App, byte: u8) -> bool {
                 return true;
             }
             return super::le_word::input::handle_key(&mut app.le_word_state, byte);
-        } else if app.game_selection == GAME_SELECTION_RACER {
-            if byte == 0x1B || byte == b'q' || byte == b'Q' {
-                app.is_playing_game = false;
-                return true;
-            }
-            return super::racer::input::handle_key(&mut app.racer_state, byte);
         } else if is_nes_selection(app.game_selection) {
             if byte == 0x1B || byte == b'q' || byte == b'Q' {
                 app.nes_cabinet_state.deactivate();
@@ -181,9 +181,9 @@ pub fn handle_key(app: &mut App, byte: u8) -> bool {
             if app.game_selection == GAME_SELECTION_2048
                 || app.game_selection == GAME_SELECTION_TETRIS
                 || app.game_selection == GAME_SELECTION_SNAKE
+                || app.game_selection == GAME_SELECTION_RACER
                 || app.game_selection == GAME_SELECTION_RUBIKS_CUBE
                 || app.game_selection == GAME_SELECTION_LE_WORD
-                || app.game_selection == GAME_SELECTION_RACER
                 || is_nes_selection(app.game_selection)
                 || app.game_selection == GAME_SELECTION_SUDOKU
                 || (app.game_selection == GAME_SELECTION_NONOGRAMS
@@ -224,13 +224,13 @@ pub fn handle_arrow(app: &mut App, key: u8) -> bool {
             return super::tetris::input::handle_arrow(&mut app.tetris_state, key);
         } else if app.game_selection == GAME_SELECTION_SNAKE {
             return super::snake::input::handle_arrow(&mut app.snake_state, key);
+        } else if app.game_selection == GAME_SELECTION_RACER {
+            return super::racer::input::handle_arrow(&mut app.racer_state, key);
         } else if app.game_selection == GAME_SELECTION_RUBIKS_CUBE {
             app.rubiks_cube_state.ensure_current_daily();
             return super::rubiks_cube::input::handle_arrow(&mut app.rubiks_cube_state, key);
         } else if app.game_selection == GAME_SELECTION_LE_WORD {
             return super::le_word::input::handle_arrow(&mut app.le_word_state, key);
-        } else if app.game_selection == GAME_SELECTION_RACER {
-            return super::racer::input::handle_arrow(&mut app.racer_state, key);
         } else if is_nes_selection(app.game_selection) {
             return super::nes_cabinet::input::handle_arrow(&mut app.nes_cabinet_state, key);
         } else if app.game_selection == GAME_SELECTION_SUDOKU {
@@ -345,6 +345,10 @@ mod tests {
         );
         assert_eq!(
             next_lobby_selection(GAME_SELECTION_SNAKE),
+            GAME_SELECTION_RACER
+        );
+        assert_eq!(
+            next_lobby_selection(GAME_SELECTION_RACER),
             GAME_SELECTION_LE_WORD
         );
         assert_eq!(
@@ -353,10 +357,6 @@ mod tests {
         );
         assert_eq!(
             next_lobby_selection(GAME_SELECTION_RUBIKS_CUBE),
-            GAME_SELECTION_RACER
-        );
-        assert_eq!(
-            next_lobby_selection(GAME_SELECTION_RACER),
             GAME_SELECTION_SUDOKU
         );
         assert_eq!(
