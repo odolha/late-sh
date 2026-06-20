@@ -186,17 +186,33 @@ fn draw_verge(frame: &mut Frame, road_area: Rect, left_x: u16, right_end: u16, s
         let ri = r as i32;
         let track_row = track_base - (ri - Config::PLAYER_TOP_ROW as i32);
 
+        // Fade factor for top/bottom edges (matches road fade).
+        let bottom_fade_start = road_area.height.saturating_sub(FADE_ROWS);
+        let fade: Option<f32> = if r < FADE_ROWS {
+            Some(FADE_FACTORS[(FADE_ROWS - 1 - r) as usize])
+        } else if r >= bottom_fade_start {
+            Some(FADE_FACTORS[(r - bottom_fade_start) as usize])
+        } else {
+            None
+        };
+        let bg = fade.map_or(VERGE_BG, |f| darken(VERGE_BG, f));
+
         // Fill entire verge band with background.
         for x in left_x..road_area.x {
             if let Some(c) = buf.cell_mut((x, screen_y)) {
-                c.set_symbol(" ").set_bg(VERGE_BG);
+                c.set_symbol(" ").set_bg(bg);
             }
         }
         let road_right = road_area.x + road_area.width;
         for x in road_right..right_end {
             if let Some(c) = buf.cell_mut((x, screen_y)) {
-                c.set_symbol(" ").set_bg(VERGE_BG);
+                c.set_symbol(" ").set_bg(bg);
             }
+        }
+
+        // Skip trees in fade zones — they can't be faded gracefully.
+        if fade.is_some() {
+            continue;
         }
 
         // Left tree lanes.

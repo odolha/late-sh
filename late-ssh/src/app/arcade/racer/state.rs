@@ -20,8 +20,10 @@ impl Config {
     pub const TRACK_LENGTH_M: f32 = 10_000.0;
     /// Meters represented by one terminal row.
     pub const METERS_PER_ROW: f32 = 3.0;
+    /// Rows of road visible behind (below) the player car.
+    pub const PLAYER_BOTTOM_MARGIN: u16 = 4;
     /// Screen row of the top (front) of the player car.
-    pub const PLAYER_TOP_ROW: u16 = Self::VISIBLE_ROWS - Self::CAR_HEIGHT_ROWS; // = 37
+    pub const PLAYER_TOP_ROW: u16 = Self::VISIBLE_ROWS - Self::CAR_HEIGHT_ROWS - Self::PLAYER_BOTTOM_MARGIN;
     /// Player starting speed in km/h.
     pub const PLAYER_START_SPEED_KMH: f32 = 50.0;
     /// Maximum player speed in km/h.
