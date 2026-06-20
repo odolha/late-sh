@@ -102,7 +102,7 @@ async fn account_delete_confirmation_rejects_wrong_username_in_dialog() {
     for _ in 0..4 {
         app.handle_input(b"\t");
     }
-    app.handle_input(b"j");
+    app.handle_input(b"jj");
     wait_for_render_contains(&mut app, "Delete Account").await;
 
     app.handle_input(b"\rwrong-name\r");
@@ -137,12 +137,15 @@ async fn screen_number_keys_switch_between_pages_including_pinstar() {
     wait_for_render_contains(&mut app, " Tables ").await;
 
     app.handle_input(b"4");
-    wait_for_render_contains(&mut app, " Lateania ").await;
-
-    app.handle_input(b"5");
     wait_for_render_contains(&mut app, "Mode       view").await;
 
+    app.handle_input(b"5");
+    wait_for_render_contains(&mut app, " Lateania ").await;
+
     app.handle_input(b"6");
+    wait_for_render_contains(&mut app, " Rebels ").await;
+
+    app.handle_input(b"7");
     wait_for_render_contains(&mut app, " Directory ").await;
 
     app.handle_input(b"1");
@@ -166,10 +169,13 @@ async fn shift_tab_cycles_screens_backwards() {
     wait_for_render_contains(&mut app, "Directory").await;
 
     app.handle_input(b"\x1b[Z");
-    wait_for_render_contains(&mut app, "Mode       view").await;
+    wait_for_render_contains(&mut app, " Rebels ").await;
 
     app.handle_input(b"\x1b[Z");
     wait_for_render_contains(&mut app, " Lateania ").await;
+
+    app.handle_input(b"\x1b[Z");
+    wait_for_render_contains(&mut app, "Mode       view").await;
 
     app.handle_input(b"\x1b[Z");
     wait_for_render_contains(&mut app, " Tables ").await;
@@ -201,10 +207,13 @@ async fn tab_cycles_screens_forward_through_all_including_pinstar() {
     wait_for_render_contains(&mut app, " Tables ").await;
 
     app.handle_input(b"\t");
+    wait_for_render_contains(&mut app, "Mode       view").await;
+
+    app.handle_input(b"\t");
     wait_for_render_contains(&mut app, " Lateania ").await;
 
     app.handle_input(b"\t");
-    wait_for_render_contains(&mut app, "Mode       view").await;
+    wait_for_render_contains(&mut app, " Rebels ").await;
 
     app.handle_input(b"\t");
     wait_for_render_contains(&mut app, " Directory ").await;
@@ -379,12 +388,32 @@ async fn question_mark_opens_guide_on_dashboard() {
 }
 
 #[tokio::test]
+async fn question_mark_opens_lateania_guide_on_lateania_screen() {
+    let test_db = new_test_db().await;
+    let user = create_test_user(&test_db.db, "lateania-guide-it").await;
+    let mut app = make_app(test_db.db.clone(), user.id, "lateania-guide-flow-it");
+    wait_for_render_contains(&mut app, " Home ").await;
+
+    app.handle_input(b"5");
+    wait_for_render_contains(&mut app, " Lateania ").await;
+
+    app.handle_input(b"?");
+    wait_for_render_contains(&mut app, "Lateania is the persistent BBS-style world.").await;
+
+    let frame = render_plain(&mut app);
+    assert!(
+        !frame.contains("Install `late` / Pair Browser"),
+        "expected Lateania guide tab instead of Pair tab; frame={frame:?}"
+    );
+}
+
+#[tokio::test]
 async fn artboard_view_mode_allows_cursor_movement_and_screen_hotkeys() {
     let test_db = new_test_db().await;
     let user = create_test_user(&test_db.db, "artboard-view-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-view-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
     wait_for_render_contains(&mut app, "Cursor     0,0").await;
 
@@ -401,7 +430,7 @@ async fn artboard_view_mode_click_enters_active_mode_at_clicked_canvas_cell() {
     let user = create_test_user(&test_db.db, "artboard-click-enter-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-click-enter-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
     wait_for_render_contains(&mut app, "Cursor     0,0").await;
 
@@ -416,7 +445,7 @@ async fn artboard_ban_locks_user_in_view_mode() {
     let user = create_test_user(&test_db.db, "artboard-banned-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-banned-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
     app.set_artboard_banned_for_tests(true);
 
@@ -447,7 +476,7 @@ async fn active_artboard_blocks_screen_number_hotkeys_until_escape() {
     let user = create_test_user(&test_db.db, "artboard-active-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-active-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
 
     app.handle_input(b"i");
@@ -478,7 +507,7 @@ async fn active_artboard_ctrl_c_copies_without_quitting() {
     let user = create_test_user(&test_db.db, "artboard-ctrl-c-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-ctrl-c-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
 
     app.handle_input(b"i");
@@ -503,7 +532,7 @@ async fn artboard_help_modal_tab_switches_help_tabs_instead_of_pages() {
     let user = create_test_user(&test_db.db, "artboard-help-tab-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-help-tab-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
 
     app.handle_input(b"\x10");
@@ -525,7 +554,7 @@ async fn artboard_view_mode_question_mark_opens_local_help() {
     let user = create_test_user(&test_db.db, "artboard-view-help-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-view-help-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
 
     app.handle_input(b"?");
@@ -544,7 +573,7 @@ async fn active_artboard_question_mark_types_into_canvas_instead_of_opening_help
     let user = create_test_user(&test_db.db, "artboard-questionmark-it").await;
     let mut app = make_app(test_db.db.clone(), user.id, "artboard-questionmark-flow-it");
 
-    app.handle_input(b"5");
+    app.handle_input(b"4");
     wait_for_render_contains(&mut app, "Mode       view").await;
     wait_for_render_contains(&mut app, "Cursor     0,0").await;
 
@@ -732,7 +761,7 @@ async fn chat_reaction_leader_uses_digits_without_switching_screens() {
             ChatMessageReaction::get_by_user_and_message(&client, message.id, viewer.id)
                 .await
                 .expect("load reaction")
-                .is_some_and(|reaction| reaction.kind == 1)
+                .is_some_and(|reaction| reaction.icon == "👍")
         },
         "f leader reaction to persist",
     )
@@ -751,38 +780,41 @@ async fn chat_reaction_leader_uses_digits_without_switching_screens() {
 #[tokio::test]
 async fn chat_room_list_is_mouse_clickable() {
     let test_db = new_test_db().await;
-    let user = create_test_user(&test_db.db, "chat-room-mouse-it").await;
-    let author = create_test_user(&test_db.db, "chat-room-mouse-author-it").await;
-    let client = test_db.db.get().await.expect("db client");
-    let lounge = ChatRoom::ensure_lounge(&client)
-        .await
-        .expect("ensure lounge room");
-    let rust = ChatRoom::get_or_create_public_room(&client, "rust")
-        .await
-        .expect("create rust room");
-    for room in [lounge.id, rust.id] {
-        ChatRoomMember::join(&client, room, user.id)
+    let user = {
+        let user = create_test_user(&test_db.db, "chat-room-mouse-it").await;
+        let author = create_test_user(&test_db.db, "chat-room-mouse-author-it").await;
+        let client = test_db.db.get().await.expect("db client");
+        let lounge = ChatRoom::ensure_lounge(&client)
             .await
-            .expect("join viewer");
-        ChatRoomMember::join(&client, room, author.id)
+            .expect("ensure lounge room");
+        let rust = ChatRoom::get_or_create_public_room(&client, "rust")
             .await
-            .expect("join author");
-    }
-    ChatMessage::create(
-        &client,
-        ChatMessageParams {
-            room_id: rust.id,
-            user_id: author.id,
-            body: "rust room backlog".to_string(),
-        },
-    )
-    .await
-    .expect("create rust message");
+            .expect("create rust room");
+        for room in [lounge.id, rust.id] {
+            ChatRoomMember::join(&client, room, user.id)
+                .await
+                .expect("join viewer");
+            ChatRoomMember::join(&client, room, author.id)
+                .await
+                .expect("join author");
+        }
+        ChatMessage::create(
+            &client,
+            ChatMessageParams {
+                room_id: rust.id,
+                user_id: author.id,
+                body: "rust room backlog".to_string(),
+            },
+        )
+        .await
+        .expect("create rust message");
+        user
+    };
 
     let mut app = make_app(test_db.db.clone(), user.id, "chat-room-mouse-flow-it");
     wait_for_render_contains(&mut app, "rust").await;
 
-    app.handle_input(b"\x1b[<0;5;10M");
+    app.handle_input(b"\x1b[<0;5;9M");
 
     wait_for_render_contains(&mut app, "rust room backlog").await;
 }
@@ -820,7 +852,7 @@ async fn chat_reaction_leader_persists_extended_reaction_digits() {
     app.handle_input(b"j");
     app.handle_input(b"f");
     wait_for_render_contains(&mut app, "1 👍").await;
-    app.handle_input(b"0");
+    app.handle_input(b"5");
 
     wait_for_render_contains(&mut app, " Home ").await;
     wait_until(
@@ -828,7 +860,7 @@ async fn chat_reaction_leader_persists_extended_reaction_digits() {
             ChatMessageReaction::get_by_user_and_message(&client, message.id, viewer.id)
                 .await
                 .expect("load reaction")
-                .is_some_and(|reaction| reaction.kind == 0)
+                .is_some_and(|reaction| reaction.icon == "🔥")
         },
         "extended f leader reaction to persist",
     )
@@ -872,11 +904,11 @@ async fn chat_reaction_leader_second_f_shows_reaction_owners_modal() {
     for user in [
         &thumbs_1, &thumbs_2, &thumbs_3, &thumbs_4, &thumbs_5, &thumbs_6,
     ] {
-        ChatMessageReaction::toggle(&client, message.id, user.id, 1)
+        ChatMessageReaction::toggle(&client, message.id, user.id, "👍")
             .await
             .expect("thumb reaction");
     }
-    ChatMessageReaction::toggle(&client, message.id, thinking.id, 8)
+    ChatMessageReaction::toggle(&client, message.id, thinking.id, "🤔")
         .await
         .expect("thinking reaction");
 
@@ -1190,10 +1222,10 @@ async fn sheet_command_opens_character_sheet_modal_in_dnd_room() {
     // Wait for the dnd room to appear in the sidebar.
     wait_for_render_contains(&mut app, "dnd").await;
 
-    // Navigate to the dnd room. The sidebar order is lounge, mentions, voice,
-    // news (core section), then dnd (channels section). Press l four times to
-    // reach dnd from lounge.
-    app.handle_input(b"llll");
+    // Navigate to the dnd room. The sidebar order is lounge, mentions, news,
+    // then dnd (channels section). Press l three times to reach dnd from
+    // lounge.
+    app.handle_input(b"lll");
     wait_for_render_contains(&mut app, "Home · dnd").await;
 
     app.handle_input(b"i");

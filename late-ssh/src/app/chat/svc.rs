@@ -25,6 +25,7 @@ use late_core::{
         moderation_audit_log::ModerationAuditLog,
         room_ban::RoomBan,
         user::User,
+        voice_channel::{TARGET_CHAT_ROOM, VoiceChannel},
     },
 };
 use serde_json::json;
@@ -33,6 +34,7 @@ use tracing::{Instrument, info_span};
 
 use crate::app::bonsai::state::stage_for;
 use crate::authz::{Caps, Permissions, Tier};
+use crate::ircd::registry::IrcRegistry;
 use crate::metrics;
 use crate::moderation::event::ModerationEvent;
 use crate::moderation::service::{
@@ -64,6 +66,7 @@ pub struct ChatService {
     active_users: Option<ActiveUsers>,
     username_directory: Option<UsernameDirectory>,
     session_registry: Option<SessionRegistry>,
+    irc_registry: Option<IrcRegistry>,
     moderation_infra: ModerationInfra,
     username_refresh_started: Arc<AtomicBool>,
     refresh_sessions: Arc<Mutex<HashMap<Uuid, ChatRefreshSession>>>,
@@ -236,6 +239,7 @@ impl Drop for ChatRefreshSessionGuard {
 pub struct ChatSnapshot {
     pub user_id: Option<Uuid>,
     pub chat_rooms: Vec<(ChatRoom, Vec<ChatMessage>)>,
+    pub voice_channels_by_room_id: HashMap<Uuid, VoiceChannel>,
     pub message_reactions: HashMap<Uuid, Vec<ChatMessageReactionSummary>>,
     pub lounge_room_id: Option<Uuid>,
     pub usernames: HashMap<Uuid, String>,
@@ -505,6 +509,7 @@ impl ChatService {
             active_users: None,
             username_directory: None,
             session_registry: None,
+            irc_registry: None,
             moderation_infra: ModerationInfra::default(),
             username_refresh_started: Arc::new(AtomicBool::new(false)),
             refresh_sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -527,6 +532,11 @@ impl ChatService {
 
     pub fn with_session_registry(mut self, session_registry: SessionRegistry) -> Self {
         self.session_registry = Some(session_registry);
+        self
+    }
+
+    pub fn with_irc_registry(mut self, irc_registry: IrcRegistry) -> Self {
+        self.irc_registry = Some(irc_registry);
         self
     }
 
@@ -594,6 +604,7 @@ impl ChatService {
             self.active_users.clone(),
             self.username_directory.clone(),
             self.session_registry.clone(),
+            self.irc_registry.clone(),
         )
     }
 
@@ -627,6 +638,17 @@ impl ChatService {
             }
             .instrument(span),
         );
+    }
+
+    pub(crate) async fn run_mod_command(
+        &self,
+        user_id: Uuid,
+        permissions: Permissions,
+        command: &str,
+    ) -> Result<Vec<String>> {
+        self.moderation_service()
+            .run_command(user_id, permissions, command)
+            .await
     }
 
     fn moderation_service(&self) -> ModerationService {
@@ -690,6 +712,8 @@ impl ChatService {
         let client = self.db.get().await?;
         let rooms = ChatRoom::list_for_user(&client, user_id).await?;
         let room_ids: Vec<Uuid> = rooms.iter().map(|room| room.id).collect();
+        let voice_channels_by_room_id =
+            VoiceChannel::enabled_for_chat_rooms(&client, &room_ids).await?;
         let room_last_message_at =
             ChatMessage::last_message_at_for_rooms(&client, &room_ids).await?;
         let active_polls = chat_poll::list_active_polls_for_rooms(&client, user_id, &room_ids)
@@ -727,6 +751,7 @@ impl ChatService {
         Ok(ChatSnapshot {
             user_id: Some(user_id),
             chat_rooms: rooms,
+            voice_channels_by_room_id,
             message_reactions: HashMap::new(),
             lounge_room_id,
             usernames: author_metadata.usernames,
@@ -1738,12 +1763,13 @@ impl ChatService {
         Ok(())
     }
 
-    pub fn toggle_message_reaction_task(&self, user_id: Uuid, message_id: Uuid, kind: i16) {
+    pub fn toggle_message_reaction_task(&self, user_id: Uuid, message_id: Uuid, icon: String) {
         let service = self.clone();
+        let span_icon = icon.clone();
         tokio::spawn(
             async move {
                 if let Err(e) = service
-                    .toggle_message_reaction(user_id, message_id, kind)
+                    .toggle_message_reaction(user_id, message_id, &icon)
                     .await
                 {
                     late_core::error_span!(
@@ -1757,7 +1783,7 @@ impl ChatService {
                 "chat.toggle_message_reaction_task",
                 user_id = %user_id,
                 message_id = %message_id,
-                kind = kind
+                icon = %span_icon
             )),
         );
     }
@@ -1802,12 +1828,12 @@ impl ChatService {
         );
     }
 
-    #[tracing::instrument(skip(self), fields(user_id = %user_id, message_id = %message_id, kind = kind))]
+    #[tracing::instrument(skip(self), fields(user_id = %user_id, message_id = %message_id, icon = %icon))]
     async fn toggle_message_reaction(
         &self,
         user_id: Uuid,
         message_id: Uuid,
-        kind: i16,
+        icon: &str,
     ) -> Result<()> {
         let client = self.db.get().await?;
         let message = ChatMessage::get(&client, message_id)
@@ -1818,7 +1844,7 @@ impl ChatService {
             anyhow::bail!("user is not a member of room");
         }
 
-        ChatMessageReaction::toggle(&client, message_id, user_id, kind).await?;
+        ChatMessageReaction::toggle(&client, message_id, user_id, icon).await?;
         let reactions = ChatMessageReaction::list_summaries_for_messages(&client, &[message_id])
             .await?
             .remove(&message_id)
@@ -1867,6 +1893,7 @@ impl ChatService {
         let room = ChatRoom::get_or_create_dm(&client, user_id, target.id).await?;
         ChatRoomMember::join(&client, room.id, user_id).await?;
         ChatRoomMember::join(&client, room.id, target.id).await?;
+        VoiceChannel::upsert_for_target(&client, TARGET_CHAT_ROOM, room.id, "dm", true).await?;
         Ok(room.id)
     }
 
@@ -2517,6 +2544,9 @@ impl ChatService {
         let client = self.db.get().await?;
         let room = ChatRoom::create_private_room(&client, slug).await?;
         ChatRoomMember::join(&client, room.id, user_id).await?;
+        let display_name = room.slug.as_deref().unwrap_or("private");
+        VoiceChannel::upsert_for_target(&client, TARGET_CHAT_ROOM, room.id, display_name, true)
+            .await?;
         Ok(room.id)
     }
 

@@ -26,43 +26,10 @@ use super::{
     },
     dashboard, help_modal, icon_picker, mod_modal, profile_modal, quit_confirm, room_search_modal,
     settings_modal, sheet_modal,
-    state::{App, NotificationMode},
+    state::App,
 };
+use crate::app::door::game::DoorGame;
 use crate::app::files::terminal_image::TerminalImageFrame;
-
-fn sanitize_notification_field(input: &str) -> String {
-    input
-        .chars()
-        .map(|ch| match ch {
-            '\x1b' | '\x07' | '\n' | '\r' => ' ',
-            ';' => '|',
-            _ => ch,
-        })
-        .collect()
-}
-
-fn desktop_notification_bytes(
-    title: &str,
-    body: &str,
-    mode: NotificationMode,
-    bell: bool,
-) -> Vec<u8> {
-    // OSC 777 carries (title, body) separately — kitty, Ghostty, rxvt-unicode,
-    // foot, wezterm, konsole. OSC 9 is iTerm2's single-string variant.
-    // `Both` is the profile/default setting for users who want broad
-    // compatibility. Terminal image protocol detection is separate and does
-    // not narrow notification formats.
-    let title = sanitize_notification_field(title);
-    let body = sanitize_notification_field(body);
-    let osc777 = format!("\x1b]777;notify;{title};{body}\x1b\\");
-    let osc9 = format!("\x1b]9;{title}: {body}\x1b\\");
-    let bell = if bell { "\x07" } else { "" };
-    match mode {
-        NotificationMode::Both => format!("{osc777}{osc9}{bell}").into_bytes(),
-        NotificationMode::Osc777 => format!("{osc777}{bell}").into_bytes(),
-        NotificationMode::Osc9 => format!("{osc9}{bell}").into_bytes(),
-    }
-}
 
 fn sidebar_enabled(show_settings: bool, draft_enabled: bool, profile_enabled: bool) -> bool {
     if show_settings {
@@ -78,9 +45,10 @@ pub(crate) fn screen_number(screen: Screen) -> u8 {
         Screen::Dashboard => 1,
         Screen::Arcade => 2,
         Screen::Rooms => 3,
-        Screen::Lateania => 4,
-        Screen::Artboard => 5,
-        Screen::Pinstar => 6,
+        Screen::Artboard => 4,
+        Screen::Lateania => 5,
+        Screen::Rebels => 6,
+        Screen::Pinstar => 7,
     }
 }
 
@@ -188,7 +156,6 @@ struct DrawContext<'a> {
     chat_view: chat::ui::ChatRenderInput<'a>,
     game_selection: usize,
     is_playing_game: bool,
-    door_game_selection: usize,
     door_delete_confirm: bool,
     rooms_create_flow: Option<&'a crate::app::rooms::backend::CreateRoomFlow>,
     rooms_snapshot: &'a crate::app::rooms::svc::RoomsSnapshot,
@@ -202,6 +169,7 @@ struct DrawContext<'a> {
     active_room_game: Option<&'a dyn crate::app::rooms::backend::ActiveRoomBackend>,
     rooms_chat_view: Option<chat::ui::EmbeddedRoomChatView<'a>>,
     lateania_state: Option<&'a crate::app::door::lateania::state::State>,
+    rebels_state: Option<&'a mut crate::app::door::rebels::state::State>,
     /// Detected terminal-image protocol for the current session.
     /// `None` -> no native images supported; capable terminals get
     /// pixel polish on top of the existing text rendering.
@@ -209,6 +177,8 @@ struct DrawContext<'a> {
     twenty_forty_eight_state: &'a crate::app::arcade::twenty_forty_eight::state::State,
     tetris_state: &'a crate::app::arcade::tetris::state::State,
     snake_state: &'a crate::app::arcade::snake::state::State,
+    rubiks_cube_state: &'a crate::app::arcade::rubiks_cube::state::State,
+    le_word_state: &'a crate::app::arcade::le_word::state::State,
     racer_state: &'a crate::app::arcade::racer::state::State,
     sudoku_state: &'a crate::app::arcade::sudoku::state::State,
     nonogram_state: &'a crate::app::arcade::nonogram::state::State,
@@ -266,7 +236,6 @@ struct DrawContext<'a> {
     pair_url: &'a str,
     room_search_modal_open: bool,
     room_search_modal_state: &'a room_search_modal::state::RoomSearchModalState,
-    voice_participant_count: usize,
     booth_modal_open: bool,
     booth_modal_state: &'a crate::app::audio::booth::state::BoothModalState,
     booth_snapshot: crate::app::audio::svc::QueueSnapshot,
@@ -297,6 +266,12 @@ impl App {
         // them this frame can't leave a stale target behind.
         self.last_dashboard_activity_rect.set(None);
         self.chat.last_composer_rect.set(None);
+        // `last_composer_viewport_top` is intentionally NOT reset here: it
+        // replays ratatui-textarea's minimal-scroll rule, which needs the
+        // previous frame's top to know when the viewport stays put. Clearing
+        // it every frame would bottom-anchor the reconstruction at the cursor
+        // and desync it from the widget's real (persistent) viewport whenever
+        // the cursor moves up inside the visible window.
         self.chat.last_chat_hit_layout.set(None);
 
         // Init theme and layout sync — preview settings-modal draft live while open.
@@ -360,7 +335,6 @@ impl App {
         let synthetic_selected = self.chat.feeds_selected
             || self.chat.news_selected
             || self.chat.notifications_selected
-            || self.chat.voice_selected
             || self.chat.discover_selected
             || self.chat.showcase_selected
             || self.chat.work_selected;
@@ -413,6 +387,7 @@ impl App {
         let chat_badges = self.chat.chat_badges();
         let profile_award_badges = self.chat.profile_award_badges();
         let message_reactions = self.chat.message_reactions();
+        let voice_snapshot = self.voice.snapshot();
         let online_count = self
             .active_users
             .as_ref()
@@ -457,6 +432,9 @@ impl App {
             .unwrap_or_default();
         let dashboard_active_poll =
             shell_active_room.and_then(|room_id| self.chat.active_poll_for_room(room_id));
+        let dashboard_voice_channel_id = shell_active_room
+            .and_then(|room_id| self.chat.voice_channels_by_room_id.get(&room_id))
+            .map(|channel| channel.id);
         let dashboard_view = dashboard::ui::DashboardRenderInput {
             activity: &self.activity,
             online_count,
@@ -477,6 +455,9 @@ impl App {
                 afk_user_ids: self.afk_user_ids.as_ref(),
                 message_reactions,
                 current_user_id: self.user_id,
+                voice_channel_id: dashboard_voice_channel_id,
+                voice_snapshot,
+                voice_paired_cli_supports_voice: paired_cli_supports_voice,
                 show_flag_fallback: self.profile_state.profile().show_flag_fallback,
                 selected_message_id: self.chat.selected_message_id,
                 selected_image_message: dashboard_selected_image_message,
@@ -499,6 +480,7 @@ impl App {
                 inline_images: &self.chat.inline_image_cache,
                 keep_composer_focused: self.profile_state.profile().keep_composer_focused,
                 composer_rect_slot: Some(&self.chat.last_composer_rect),
+                composer_viewport_top_slot: Some(&self.chat.last_composer_viewport_top),
                 chat_hit_slot: Some(&self.chat.last_chat_hit_layout),
             },
             activity_scroll: self.dashboard_activity_scroll,
@@ -571,7 +553,6 @@ impl App {
             && !self.chat.news_selected
             && !self.chat.discover_selected
             && !self.chat.notifications_selected
-            && !self.chat.voice_selected
             && !self.chat.showcase_selected
             && !self.chat.work_selected
         {
@@ -580,15 +561,6 @@ impl App {
                 .and_then(|room_id| self.chat.active_poll_for_room(room_id))
         } else {
             None
-        };
-        let voice_browser_listen_url = format!("{}/voice", web_base_url.trim_end_matches('/'));
-        let voice_snapshot = self.voice.snapshot();
-        let voice_participant_count = voice_snapshot.participants.len();
-        let voice_view = crate::app::voice::ui::VoiceRoomView {
-            snapshot: voice_snapshot,
-            current_user_id: self.user_id,
-            paired_cli_supports_voice,
-            browser_listen_url: &voice_browser_listen_url,
         };
         let chat_view = chat::ui::ChatRenderInput {
             feeds_selected: self.chat.feeds_selected,
@@ -645,9 +617,9 @@ impl App {
             notifications_selected: self.chat.notifications_selected,
             notifications_unread_count: self.chat.notifications.unread_count(),
             notifications_view,
-            voice_selected: self.chat.voice_selected,
-            voice_participant_count,
-            voice_view,
+            voice_channels_by_room_id: &self.chat.voice_channels_by_room_id,
+            voice_snapshot,
+            voice_paired_cli_supports_voice: paired_cli_supports_voice,
             showcase_selected: self.chat.showcase_selected,
             showcase_unread_count,
             showcase_view,
@@ -660,6 +632,7 @@ impl App {
             work_composing,
             keep_composer_focused: self.profile_state.profile().keep_composer_focused,
             composer_rect_slot: Some(&self.chat.last_composer_rect),
+            composer_viewport_top_slot: Some(&self.chat.last_composer_viewport_top),
             chat_hit_slot: Some(&self.chat.last_chat_hit_layout),
         };
         self.settings_modal_state
@@ -680,6 +653,9 @@ impl App {
                     message_reactions,
                     inline_images: &self.chat.inline_image_cache,
                     current_user_id: self.user_id,
+                    voice_channel_id: room.voice_channel_id,
+                    voice_snapshot,
+                    voice_paired_cli_supports_voice: paired_cli_supports_voice,
                     show_flag_fallback: self.profile_state.profile().show_flag_fallback,
                     selected_message_id: self.chat.selected_message_id,
                     selected_image_message: self
@@ -699,6 +675,7 @@ impl App {
                     profile_award_badges,
                     keep_composer_focused: self.profile_state.profile().keep_composer_focused,
                     composer_rect_slot: Some(&self.chat.last_composer_rect),
+                    composer_viewport_top_slot: Some(&self.chat.last_composer_viewport_top),
                     chat_hit_slot: Some(&self.chat.last_chat_hit_layout),
                 });
         let mut terminal_image_frame = TerminalImageFrame::default();
@@ -761,6 +738,9 @@ impl App {
 
         let terminal = &mut self.terminal;
         let mut pinstar_state_taken = self.pinstar_state.take();
+        // Taken out (like pinstar_state) so the draw dispatch can hold &mut and
+        // call set_viewport with the exact content_area before blitting.
+        let mut rebels_state_taken = self.rebels_state.take();
 
         let pinstar_browser = if screen == Screen::Pinstar {
             Some(&self.pinstar_browser)
@@ -778,7 +758,6 @@ impl App {
                         chat_view,
                         game_selection: self.game_selection,
                         is_playing_game: self.is_playing_game,
-                        door_game_selection: self.door_game_selection,
                         door_delete_confirm: self.door_delete_confirm,
                         rooms_create_flow: self.rooms_create_flow.as_ref(),
                         rooms_snapshot: &self.rooms_snapshot,
@@ -792,10 +771,13 @@ impl App {
                         active_room_game: self.active_room_game.as_deref(),
                         rooms_chat_view,
                         lateania_state: self.lateania_state.as_ref(),
+                        rebels_state: rebels_state_taken.as_mut(),
                         terminal_image_protocol: self.terminal_image_protocol,
                         twenty_forty_eight_state: &self.twenty_forty_eight_state,
                         tetris_state: &self.tetris_state,
                         snake_state: &self.snake_state,
+                        rubiks_cube_state: &self.rubiks_cube_state,
+                        le_word_state: &self.le_word_state,
                         racer_state: &self.racer_state,
                         sudoku_state: &self.sudoku_state,
                         nonogram_state: &self.nonogram_state,
@@ -857,7 +839,6 @@ impl App {
                         pair_url: &self.connect_url,
                         room_search_modal_open: self.room_search_modal_state.is_open(),
                         room_search_modal_state: &self.room_search_modal_state,
-                        voice_participant_count,
                         booth_modal_open: self.booth_modal_state.is_open(),
                         booth_modal_state: &self.booth_modal_state,
                         booth_snapshot: self.audio.queue_snapshot(),
@@ -890,7 +871,13 @@ impl App {
             .context("failed to draw frame");
 
         self.pinstar_state = pinstar_state_taken;
+        self.rebels_state = rebels_state_taken;
         draw_result?;
+
+        // Feed the modal's image capacity (recorded during draw) back into
+        // chat state so the next frame's Sixel fetch encodes to fit.
+        self.chat
+            .set_image_modal_capacity(terminal_image_frame.modal_capacity());
 
         let image_commands = self.terminal_image_render_state.build_commands(
             self.terminal_image_protocol,
@@ -908,48 +895,10 @@ impl App {
                 .push(format!("\x1b]52;c;{}\x07", encoded).into_bytes());
         }
 
-        // Emit OSC 777/OSC 9 desktop notifications for pending chat events.
-        // Kind strings ("dms", "mentions", …) must match users.settings.notify_kinds.
-        // Friend joins are already opt-in through /friend, so they are always eligible.
-        if !self.chat.pending_notifications.is_empty() {
-            let profile = self.profile_state.profile();
-            let enabled_kinds = profile.notify_kinds.clone();
-            let cooldown_secs = profile.notify_cooldown_mins as u64 * 60;
-            let cooldown_ok = self
-                .last_notify_at
-                .map(|t| t.elapsed() >= std::time::Duration::from_secs(cooldown_secs))
-                .unwrap_or(true);
-
-            if cooldown_ok
-                && let Some(notif) = self
-                    .chat
-                    .pending_notifications
-                    .iter()
-                    .find(|n| n.kind == "friends" || enabled_kinds.iter().any(|k| k == n.kind))
-            {
-                tracing::info!(
-                    kind = notif.kind,
-                    title = notif.title,
-                    body = notif.body,
-                    "emitting desktop notification"
-                );
-                let payload = desktop_notification_bytes(
-                    &notif.title,
-                    &notif.body,
-                    NotificationMode::from_format(profile.notify_format.as_deref()),
-                    profile.notify_bell,
-                );
-                self.pending_terminal_commands.push(payload);
-                self.last_notify_at = Some(std::time::Instant::now());
-            } else {
-                tracing::debug!(
-                    ?cooldown_ok,
-                    pending_count = self.chat.pending_notifications.len(),
-                    "dropping pending desktop notifications"
-                );
-            }
-            // Always drain — notifications during cooldown are dropped, not queued.
-            self.chat.pending_notifications.clear();
+        // Emit OSC 777/OSC 9 desktop notifications queued by producers this
+        // tick; the outbox applies notify_kinds, cooldown, format, and bell.
+        if let Some(payload) = self.notify_outbox.drain(self.profile_state.profile()) {
+            self.pending_terminal_commands.push(payload);
         }
 
         Ok(self.shared.take())
@@ -1037,8 +986,9 @@ impl App {
             return;
         }
 
+        let title = app_frame_title(screen, &ctx);
         let mut block = Block::default()
-            .title(app_frame_title(screen, &ctx))
+            .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::BORDER_ACTIVE()));
         if let Some(hud) = mentions_hud_title(ctx.mentions_unread_count) {
@@ -1121,18 +1071,25 @@ impl App {
                 }
             }
             Screen::Lateania => {
-                crate::app::door::ui::draw_door_hub(
+                crate::app::door::lateania::screen::GAME.draw(
                     frame,
                     content_area,
-                    &crate::app::door::ui::DoorHubView {
-                        game_selection: ctx.door_game_selection,
+                    &crate::app::door::lateania::screen::LateaniaScreenView {
                         delete_confirm: ctx.door_delete_confirm,
-                        lateania_state: ctx.lateania_state,
+                        state: ctx.lateania_state,
                         usernames: ctx.rooms_usernames,
                         terminal_image_protocol: ctx.terminal_image_protocol,
                     },
                     terminal_images,
                 );
+            }
+            Screen::Rebels => {
+                if let Some(state) = ctx.rebels_state {
+                    // Size the proxy PTY to the exact widget area before blitting
+                    // so the vt100 grid matches what we draw.
+                    state.set_viewport(content_area);
+                    crate::app::door::rebels::render::draw_page(frame, content_area, state);
+                }
             }
             Screen::Pinstar => {
                 crate::app::directory::ui::draw_directory_page(
@@ -1164,6 +1121,8 @@ impl App {
                     twenty_forty_eight_state: ctx.twenty_forty_eight_state,
                     tetris_state: ctx.tetris_state,
                     snake_state: ctx.snake_state,
+                    rubiks_cube_state: ctx.rubiks_cube_state,
+                    le_word_state: ctx.le_word_state,
                     racer_state: ctx.racer_state,
                     sudoku_state: ctx.sudoku_state,
                     nonogram_state: ctx.nonogram_state,
@@ -1364,7 +1323,6 @@ impl App {
                 ctx.room_search_modal_state,
                 ctx.chat_state,
                 ctx.user_id,
-                ctx.voice_participant_count,
             );
         }
 
@@ -1420,9 +1378,10 @@ fn app_frame_title(screen: Screen, ctx: &DrawContext<'_>) -> Line<'static> {
         (Screen::Dashboard, "1"),
         (Screen::Arcade, "2"),
         (Screen::Rooms, "3"),
-        (Screen::Lateania, "4"),
-        (Screen::Artboard, "5"),
-        (Screen::Pinstar, "6"),
+        (Screen::Artboard, "4"),
+        (Screen::Lateania, "5"),
+        (Screen::Rebels, "6"),
+        (Screen::Pinstar, "7"),
     ];
     for (idx, (tab_screen, key)) in tabs.iter().enumerate() {
         if idx > 0 {
@@ -1442,6 +1401,7 @@ fn app_frame_title(screen: Screen, ctx: &DrawContext<'_>) -> Line<'static> {
     let page_title = match screen {
         Screen::Dashboard => "Home",
         Screen::Lateania => "Lateania",
+        Screen::Rebels => "Rebels",
         Screen::Arcade => "The Arcade",
         Screen::Artboard => "Artboard",
         Screen::Rooms => "Tables",
@@ -1455,6 +1415,20 @@ fn app_frame_title(screen: Screen, ctx: &DrawContext<'_>) -> Line<'static> {
         format!("{page_title} "),
         Style::default().fg(theme::TEXT_MUTED()),
     ));
+
+    if screen == Screen::Lateania {
+        spans.push(Span::styled(
+            "by hardlygospel.github.io ",
+            Style::default().fg(theme::TEXT_DIM()),
+        ));
+    }
+
+    if screen == Screen::Rebels {
+        spans.push(Span::styled(
+            "by github.com/ricott1 ",
+            Style::default().fg(theme::TEXT_DIM()),
+        ));
+    }
 
     if screen == Screen::Rooms {
         append_rooms_title_extras(&mut spans, ctx);
@@ -1746,10 +1720,10 @@ fn mentions_hud_title(unread: i64) -> Option<Line<'static>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        HelpHintStyle, NotificationMode, app_frame_bottom_titles, app_frame_help_hint_title,
-        app_frame_sponsor_title, dashboard_home_selected, desktop_notification_bytes, line_width,
-        mentions_hud_title, resolve_right_sidebar_enabled, room_list_sidebar_enabled,
-        room_top_boxes_enabled, screen_number, sidebar_enabled, sponsor_line,
+        HelpHintStyle, app_frame_bottom_titles, app_frame_help_hint_title, app_frame_sponsor_title,
+        dashboard_home_selected, line_width, mentions_hud_title, resolve_right_sidebar_enabled,
+        room_list_sidebar_enabled, room_top_boxes_enabled, screen_number, sidebar_enabled,
+        sponsor_line,
     };
     use crate::app::common::primitives::Screen;
     use late_core::models::user::RightSidebarMode;
@@ -1757,60 +1731,6 @@ mod tests {
 
     fn line_text(line: &ratatui::text::Line<'_>) -> String {
         line.iter().map(|s| s.content.as_ref()).collect()
-    }
-
-    #[test]
-    fn desktop_notification_bytes_both_mode_with_bell_emits_osc_777_and_osc_9() {
-        let got = String::from_utf8(desktop_notification_bytes(
-            "DM title",
-            "hello",
-            NotificationMode::Both,
-            true,
-        ))
-        .expect("valid utf8");
-        assert_eq!(
-            got,
-            "\x1b]777;notify;DM title;hello\x1b\\\x1b]9;DM title: hello\x1b\\\x07"
-        );
-    }
-
-    #[test]
-    fn desktop_notification_bytes_osc777_mode_emits_only_osc_777() {
-        let got = String::from_utf8(desktop_notification_bytes(
-            "DM title",
-            "hello",
-            NotificationMode::Osc777,
-            false,
-        ))
-        .expect("valid utf8");
-        assert_eq!(got, "\x1b]777;notify;DM title;hello\x1b\\");
-    }
-
-    #[test]
-    fn desktop_notification_bytes_osc9_mode_emits_only_osc_9() {
-        let got = String::from_utf8(desktop_notification_bytes(
-            "DM title",
-            "hello",
-            NotificationMode::Osc9,
-            false,
-        ))
-        .expect("valid utf8");
-        assert_eq!(got, "\x1b]9;DM title: hello\x1b\\");
-    }
-
-    #[test]
-    fn desktop_notification_bytes_sanitize_control_bytes_and_separators() {
-        let got = String::from_utf8(desktop_notification_bytes(
-            "hey;\x07",
-            "a\nb\x1bc",
-            NotificationMode::Both,
-            false,
-        ))
-        .expect("valid utf8");
-        assert_eq!(
-            got,
-            "\x1b]777;notify;hey| ;a b c\x1b\\\x1b]9;hey| : a b c\x1b\\"
-        );
     }
 
     #[test]
@@ -1864,7 +1784,10 @@ mod tests {
         assert_eq!(screen_number(Screen::Dashboard), 1);
         assert_eq!(screen_number(Screen::Arcade), 2);
         assert_eq!(screen_number(Screen::Rooms), 3);
-        assert_eq!(screen_number(Screen::Lateania), 4);
+        assert_eq!(screen_number(Screen::Artboard), 4);
+        assert_eq!(screen_number(Screen::Lateania), 5);
+        assert_eq!(screen_number(Screen::Rebels), 6);
+        assert_eq!(screen_number(Screen::Pinstar), 7);
 
         assert!(resolve_right_sidebar_enabled(
             RightSidebarMode::Custom,

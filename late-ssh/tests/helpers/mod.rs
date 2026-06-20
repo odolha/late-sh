@@ -9,9 +9,11 @@ use late_core::{
 use late_ssh::app::activity::event::ActivityEvent;
 use late_ssh::app::activity::publisher::ActivityPublisher;
 use late_ssh::app::ai::svc::AiService;
+use late_ssh::app::arcade::le_word::svc::LeWordService;
 use late_ssh::app::arcade::minesweeper::svc::MinesweeperService;
 use late_ssh::app::arcade::nonogram::state::Library as NonogramLibrary;
 use late_ssh::app::arcade::nonogram::svc::NonogramService;
+use late_ssh::app::arcade::rubiks_cube::svc::RubiksCubeService;
 use late_ssh::app::arcade::snake::svc::SnakeService;
 use late_ssh::app::arcade::solitaire::svc::SolitaireService;
 use late_ssh::app::arcade::sudoku::svc::SudokuService;
@@ -53,6 +55,55 @@ use uuid::Uuid;
 
 pub async fn new_test_db() -> TestDb {
     test_db().await
+}
+
+fn test_sudoku_games(user_id: Uuid) -> Vec<late_core::models::sudoku::Game> {
+    let today = chrono::Utc::now().date_naive();
+    // App flow tests do not exercise Sudoku; preloading daily boards keeps
+    // app construction from spawning expensive date-dependent generators.
+    [
+        (
+            "easy",
+            "530070000600195000098000060800060003400803001700020006060000280000419005000080079",
+        ),
+        (
+            "medium",
+            "000260701680070090190004500820100040004602900050003028009300074040050036703018000",
+        ),
+        (
+            "hard",
+            "000000907000420180000705026100904000050000040000507009920108000034059000507000000",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(idx, (difficulty_key, puzzle))| {
+        let mut grid = [[0u8; 9]; 9];
+        let mut fixed_mask = [[false; 9]; 9];
+        for (cell, byte) in puzzle.as_bytes().iter().copied().enumerate().take(81) {
+            let value = byte.saturating_sub(b'0').min(9);
+            let row = cell / 9;
+            let col = cell % 9;
+            grid[row][col] = value;
+            fixed_mask[row][col] = value != 0;
+        }
+
+        late_core::models::sudoku::Game {
+            id: Uuid::now_v7(),
+            created: chrono::Utc::now(),
+            updated: chrono::Utc::now(),
+            user_id,
+            mode: "daily".to_string(),
+            difficulty_key: difficulty_key.to_string(),
+            puzzle_date: Some(today),
+            puzzle_seed: idx as i64,
+            grid: serde_json::to_value(grid).expect("sudoku grid json"),
+            fixed_mask: serde_json::to_value(fixed_mask).expect("sudoku fixed mask json"),
+            is_game_over: false,
+            score: 0,
+        }
+    })
+    .collect()
 }
 
 fn test_dartboard_server() -> dartboard_local::ServerHandle {
@@ -141,6 +192,11 @@ pub fn test_config(db_config: late_core::db::DbConfig) -> Config {
         },
         youtube_api_key: None,
         voice: VoiceConfig::disabled(),
+        irc: late_ssh::config::IrcConfig::default(),
+        rebels_enabled: true,
+        rebels_host: "frittura.org".to_string(),
+        rebels_port: 3788,
+        rebels_secret: String::new(),
     }
 }
 
@@ -171,21 +227,21 @@ pub fn test_app_state(db: Db, config: Config) -> State {
         config.ws_pair_max_attempts_per_ip,
         config.ws_pair_rate_limit_window_secs,
     );
-    let voice_listen_limiter = IpRateLimiter::new(
-        config.ws_pair_max_attempts_per_ip,
-        config.ws_pair_rate_limit_window_secs,
-    );
     let (_, now_playing_rx) =
         watch::channel::<std::collections::HashMap<String, NowPlaying>>(Default::default());
     let (_, radio_meta_rx) = watch::channel::<
         std::collections::HashMap<String, late_ssh::app::audio::radio_meta::svc::ArtistTitle>,
     >(Default::default());
+    let irc_registry = late_ssh::ircd::registry::IrcRegistry::new();
     let profile_service = ProfileService::new(db.clone(), active_users.clone())
         .with_username_directory(username_directory.clone())
-        .with_session_registry(session_registry.clone());
+        .with_session_registry(session_registry.clone())
+        .with_irc_registry(irc_registry.clone());
     let twenty_forty_eight_service = TwentyFortyEightService::new(db.clone());
     let tetris_service = LaterisService::new(db.clone());
     let snake_service = SnakeService::new(db.clone());
+    let le_word_service = LeWordService::new(db.clone(), activity_tx.clone());
+    let rubiks_cube_service = RubiksCubeService::new(db.clone(), activity_tx.clone());
     let chip_service = ChipService::new(db.clone());
     let rooms_service = RoomsService::new(db.clone());
     let blackjack_player_directory = BlackjackPlayerDirectory::new(db.clone());
@@ -242,6 +298,8 @@ pub fn test_app_state(db: Db, config: Config) -> State {
         twenty_forty_eight_service,
         tetris_service,
         snake_service,
+        le_word_service,
+        rubiks_cube_service,
         sudoku_service,
         nonogram_service,
         solitaire_service,
@@ -252,6 +310,7 @@ pub fn test_app_state(db: Db, config: Config) -> State {
         chip_service: chip_service.clone(),
         lateania_service: late_ssh::app::door::lateania::svc::LateaniaService::new(
             activity_publisher.clone(),
+            chip_service.clone(),
             db.clone(),
         ),
         rooms_service: rooms_service.clone(),
@@ -295,10 +354,10 @@ pub fn test_app_state(db: Db, config: Config) -> State {
         room_join_feed,
         room_join_history: Arc::new(Mutex::new(VecDeque::new())),
         session_registry,
+        irc_registry,
         paired_client_registry: PairedClientRegistry::new("https://audio.late.sh"),
         ssh_attempt_limiter,
         ws_pair_limiter,
-        voice_listen_limiter,
         pinstar_registry: PinstarServerRegistry::new(Some(db.clone())),
         is_draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     }
@@ -338,6 +397,7 @@ fn make_app_with_chat_service_and_permissions(
     let shop_service = ShopService::new(db.clone());
     let shop_snapshot_rx = shop_service.subscribe_snapshot(user_id);
     let ultimate_service = late_ssh::app::UltimateService::new(db.clone());
+    let chip_service = ChipService::new(db.clone());
     let mut app = App::new(SessionConfig {
         cols: 100,
         rows: 32,
@@ -369,8 +429,12 @@ fn make_app_with_chat_service_and_permissions(
         initial_snake_game: None,
         initial_tetris_high_score: None,
         initial_snake_high_score: None,
+        le_word_service: LeWordService::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
+        rubiks_cube_service: RubiksCubeService::new(db.clone(), activity_tx.clone()),
+        initial_le_word_daily_word: None,
+        initial_le_word_game: None,
         sudoku_service: SudokuService::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
-        initial_sudoku_games: Vec::new(),
+        initial_sudoku_games: test_sudoku_games(user_id),
         nonogram_service: NonogramService::new(
             db.clone(),
             broadcast::channel::<ActivityEvent>(64).0,
@@ -388,6 +452,7 @@ fn make_app_with_chat_service_and_permissions(
         initial_minesweeper_games: Vec::new(),
         lateania_service: late_ssh::app::door::lateania::svc::LateaniaService::new(
             ActivityPublisher::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
+            chip_service,
             db.clone(),
         ),
         rooms_service: RoomsService::new(db.clone()),
@@ -414,6 +479,10 @@ fn make_app_with_chat_service_and_permissions(
         initial_chip_balance: 0,
         leaderboard_rx: None,
         web_url: "http://localhost:3000".to_string(),
+        rebels_enabled: true,
+        rebels_host: "frittura.org".to_string(),
+        rebels_port: 3788,
+        rebels_secret: String::new(),
         session_token: session_token.to_string(),
         session_registry: None,
         paired_client_registry: None,
@@ -467,6 +536,7 @@ pub fn make_app_with_paired_client(
     let shop_service = ShopService::new(db.clone());
     let shop_snapshot_rx = shop_service.subscribe_snapshot(user_id);
     let ultimate_service = late_ssh::app::UltimateService::new(db.clone());
+    let chip_service = ChipService::new(db.clone());
 
     let mut app = App::new(SessionConfig {
         cols: 100,
@@ -499,8 +569,12 @@ pub fn make_app_with_paired_client(
         initial_snake_game: None,
         initial_tetris_high_score: None,
         initial_snake_high_score: None,
+        le_word_service: LeWordService::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
+        rubiks_cube_service: RubiksCubeService::new(db.clone(), activity_tx.clone()),
+        initial_le_word_daily_word: None,
+        initial_le_word_game: None,
         sudoku_service: SudokuService::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
-        initial_sudoku_games: Vec::new(),
+        initial_sudoku_games: test_sudoku_games(user_id),
         nonogram_service: NonogramService::new(
             db.clone(),
             broadcast::channel::<ActivityEvent>(64).0,
@@ -518,6 +592,7 @@ pub fn make_app_with_paired_client(
         initial_minesweeper_games: Vec::new(),
         lateania_service: late_ssh::app::door::lateania::svc::LateaniaService::new(
             ActivityPublisher::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
+            chip_service,
             db.clone(),
         ),
         rooms_service: RoomsService::new(db.clone()),
@@ -544,6 +619,10 @@ pub fn make_app_with_paired_client(
         initial_chip_balance: 0,
         leaderboard_rx: None,
         web_url: "http://localhost:3000".to_string(),
+        rebels_enabled: true,
+        rebels_host: "frittura.org".to_string(),
+        rebels_port: 3788,
+        rebels_secret: String::new(),
         session_token: session_token.to_string(),
         session_registry: None,
         paired_client_registry: Some(registry),

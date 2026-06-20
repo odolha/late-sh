@@ -1,13 +1,17 @@
 use super::{
-    audio::booth as audio_booth, chat, dashboard, help_modal, hub, icon_picker, mod_modal,
-    profile_modal, quit_confirm, room_search_modal, settings_modal, sheet_modal, state::App,
+    audio::booth as audio_booth,
+    chat, dashboard, help_modal, hub, icon_picker, mod_modal, profile_modal, quit_confirm,
+    room_search_modal, settings_modal, sheet_modal,
+    state::{App, IconPickerTarget},
 };
 use crate::app::chat::state::RoomSection;
 use crate::app::chat::ui::{ChatRowHit, ChatRowKind, HeaderTarget};
 use crate::app::common::primitives::Screen;
 use crate::app::common::readline::ctrl_byte_to_input;
 use crate::app::directory::state::DirectoryTab;
+use crate::app::door::game::DoorGame;
 use crate::app::files::terminal_image::TerminalImageProtocol;
+use crate::app::help_modal::data::HelpTopic;
 use crate::usernames::UsernameLookup;
 use ratatui::{
     layout::{Constraint, Layout, Rect},
@@ -20,6 +24,8 @@ use vte::{Params, Parser, Perform};
 const PENDING_ESCAPE_FLUSH_DELAY: Duration = Duration::from_millis(40);
 const CTRL_G: u8 = 0x07;
 const CTRL_O: u8 = 0x0F;
+const CTRL_T: u8 = 0x14;
+const CTRL_V: u8 = 0x16;
 
 #[derive(Clone, Copy)]
 struct InputContext {
@@ -121,6 +127,8 @@ pub enum ParsedInput {
     FocusLost,
     TerminalVersion(String),
     TerminalCapabilities(String),
+    /// DA1 (Primary Device Attributes) reply params: `CSI ? Ps ; ... c`.
+    DeviceAttributes(Vec<u16>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -408,6 +416,12 @@ impl Perform for VtCollector {
             'Z' if intermediates.is_empty() => {
                 self.events.push(ParsedInput::BackTab);
             }
+            // DA1 reply (CSI ? Ps;... c) from the startup probe. The `?`
+            // private marker lands in `intermediates`, which also keeps DA2
+            // (`CSI > ... c`) replies from matching here.
+            'c' if intermediates == [b'?'] => {
+                self.events.push(ParsedInput::DeviceAttributes(params));
+            }
             'I' if intermediates.is_empty() => {
                 self.events.push(ParsedInput::FocusGained);
             }
@@ -529,18 +543,29 @@ pub fn handle(app: &mut App, data: &[u8]) {
     if app.show_splash {
         // Do not process user input while splash screen is showing, but still
         // consume terminal capability replies sent by the startup probe.
+        // Apply EVERY reply in the chunk: terminals commonly answer several
+        // probes back-to-back (XTVERSION + DA1), and over a low-latency link
+        // those replies arrive in one data chunk. Short-circuiting on the
+        // first reply would drop the rest (and with them sixel detection).
         let events = app.vt_input.feed(data);
-        let saw_terminal_reply = events.iter().any(|event| match event {
-            ParsedInput::TerminalVersion(version) => {
-                app.apply_xtversion_reply(version);
-                true
+        let mut saw_terminal_reply = false;
+        for event in &events {
+            match event {
+                ParsedInput::TerminalVersion(version) => {
+                    app.apply_xtversion_reply(version);
+                    saw_terminal_reply = true;
+                }
+                ParsedInput::TerminalCapabilities(capabilities) => {
+                    app.apply_terminal_capabilities(capabilities);
+                    saw_terminal_reply = true;
+                }
+                ParsedInput::DeviceAttributes(attrs) => {
+                    app.apply_primary_device_attributes(attrs);
+                    saw_terminal_reply = true;
+                }
+                _ => {}
             }
-            ParsedInput::TerminalCapabilities(capabilities) => {
-                app.apply_terminal_capabilities(capabilities);
-                true
-            }
-            _ => false,
-        });
+        }
         // Escape skips the rest of the intro animation. XTVERSION DCS replies
         // also begin with ESC, so avoid treating those as user cancellation.
         if !saw_terminal_reply && data.contains(&0x1B) {
@@ -720,12 +745,20 @@ fn overlay_input_action(event: &ParsedInput) -> Option<OverlayInputAction> {
 }
 
 fn handle_parsed_input(app: &mut App, event: ParsedInput) {
+    handle_parsed_input_inner(app, event);
+}
+
+fn handle_parsed_input_inner(app: &mut App, event: ParsedInput) {
     if let ParsedInput::TerminalVersion(version) = &event {
         app.apply_xtversion_reply(version);
         return;
     }
     if let ParsedInput::TerminalCapabilities(capabilities) = &event {
         app.apply_terminal_capabilities(capabilities);
+        return;
+    }
+    if let ParsedInput::DeviceAttributes(attrs) = &event {
+        app.apply_primary_device_attributes(attrs);
         return;
     }
 
@@ -844,6 +877,10 @@ fn handle_parsed_input(app: &mut App, event: ParsedInput) {
 
     let ctx = InputContext::from_app(app);
 
+    if handle_voice_global_chord(app, ctx, &event) {
+        return;
+    }
+
     if handle_dedicated_screen_input(app, ctx, &event) {
         return;
     }
@@ -949,7 +986,8 @@ fn handle_parsed_input(app: &mut App, event: ParsedInput) {
         ParsedInput::FocusGained
         | ParsedInput::FocusLost
         | ParsedInput::TerminalVersion(_)
-        | ParsedInput::TerminalCapabilities(_) => {}
+        | ParsedInput::TerminalCapabilities(_)
+        | ParsedInput::DeviceAttributes(_) => {}
         ParsedInput::Paste(pasted) => handle_bracketed_paste(app, &pasted),
         ParsedInput::AltEnter => {
             if is_chat_composer_context(ctx) {
@@ -1248,6 +1286,21 @@ fn handle_parsed_input(app: &mut App, event: ParsedInput) {
 }
 
 fn handle_dedicated_screen_input(app: &mut App, ctx: InputContext, event: &ParsedInput) -> bool {
+    if ctx.screen == Screen::Rebels {
+        // Running-mode bytes never reach here (intercepted in handle_input), so
+        // this only handles the Launcher. Enter launches the game; every other
+        // key (Tab/1-7 nav, `q` to quit, `?` for help, ...) falls through to
+        // the normal global handling, so the splash behaves like a plain page.
+        if let ParsedInput::Byte(b'\r' | b'\n') = event {
+            app.enter_rebels();
+            if let Some(state) = app.rebels_state.as_mut() {
+                state.connect();
+            }
+            return true;
+        }
+        return false;
+    }
+
     if ctx.screen == Screen::Lateania {
         if app.lateania_state.is_some() && door_games_allows_global_help(event) {
             return false;
@@ -1255,13 +1308,13 @@ fn handle_dedicated_screen_input(app: &mut App, ctx: InputContext, event: &Parse
         if app.lateania_state.is_some() {
             match event {
                 ParsedInput::Byte(byte) => {
-                    crate::app::door::input::handle_key(app, *byte);
+                    crate::app::door::lateania::screen::GAME.handle_key(app, *byte);
                 }
                 ParsedInput::Char(ch) if ch.is_ascii() => {
-                    crate::app::door::input::handle_key(app, *ch as u8);
+                    crate::app::door::lateania::screen::GAME.handle_key(app, *ch as u8);
                 }
                 ParsedInput::Arrow(key) => {
-                    crate::app::door::input::handle_arrow(app, *key);
+                    crate::app::door::lateania::screen::GAME.handle_arrow(app, *key);
                 }
                 _ => {}
             }
@@ -1269,15 +1322,20 @@ fn handle_dedicated_screen_input(app: &mut App, ctx: InputContext, event: &Parse
         }
 
         match event {
-            ParsedInput::Byte(byte) if crate::app::door::input::handle_key(app, *byte) => {
-                return true;
-            }
-            ParsedInput::Char(ch)
-                if ch.is_ascii() && crate::app::door::input::handle_key(app, *ch as u8) =>
+            ParsedInput::Byte(byte)
+                if crate::app::door::lateania::screen::GAME.handle_key(app, *byte) =>
             {
                 return true;
             }
-            ParsedInput::Arrow(key) if crate::app::door::input::handle_arrow(app, *key) => {
+            ParsedInput::Char(ch)
+                if ch.is_ascii()
+                    && crate::app::door::lateania::screen::GAME.handle_key(app, *ch as u8) =>
+            {
+                return true;
+            }
+            ParsedInput::Arrow(key)
+                if crate::app::door::lateania::screen::GAME.handle_arrow(app, *key) =>
+            {
                 return true;
             }
             _ => {}
@@ -1295,6 +1353,9 @@ fn handle_dedicated_screen_input(app: &mut App, ctx: InputContext, event: &Parse
             }
             ParsedInput::Arrow(key) => {
                 crate::app::arcade::input::handle_arrow(app, *key);
+            }
+            ParsedInput::Mouse(_) => {
+                let _ = crate::app::arcade::input::handle_event(app, event);
             }
             _ => {}
         }
@@ -1844,6 +1905,7 @@ fn input_dismisses_key_modal(event: &ParsedInput) -> bool {
             | ParsedInput::FocusLost
             | ParsedInput::TerminalVersion(_)
             | ParsedInput::TerminalCapabilities(_)
+            | ParsedInput::DeviceAttributes(_)
     )
 }
 
@@ -1898,7 +1960,7 @@ fn dispatch_escape(app: &mut App) {
         return;
     }
     if app.icon_picker_open {
-        app.icon_picker_open = false;
+        close_icon_picker(app);
         return;
     }
     if app.room_search_modal_state.is_open() {
@@ -1967,7 +2029,8 @@ fn dispatch_escape(app: &mut App) {
         dispatch_screen_key(app, ctx.screen, 0x1B);
         return;
     }
-    if ctx.screen == Screen::Lateania && crate::app::door::input::leave_active_game(app) {
+    if ctx.screen == Screen::Lateania && crate::app::door::lateania::screen::GAME.leave_active(app)
+    {
         return;
     }
     if ctx.screen == Screen::Pinstar {
@@ -2201,13 +2264,14 @@ fn topbar_screen_hit_test(x: u16, y: u16) -> Option<Screen> {
 
     match x {
         // Top title text starts immediately after the left border. The digit
-        // cells in " late.sh | 1 2 3 4 5 6 | ..." land on these columns.
+        // cells in " late.sh | 1 2 3 4 5 6 7 | ..." land on these columns.
         12 => Some(Screen::Dashboard),
         14 => Some(Screen::Arcade),
         16 => Some(Screen::Rooms),
-        18 => Some(Screen::Lateania),
-        20 => Some(Screen::Artboard),
-        22 => Some(Screen::Pinstar),
+        18 => Some(Screen::Artboard),
+        20 => Some(Screen::Lateania),
+        22 => Some(Screen::Rebels),
+        24 => Some(Screen::Pinstar),
         _ => None,
     }
 }
@@ -2249,8 +2313,6 @@ fn chat_room_list_view<'a>(
         news_unread_count: app.chat.news.unread_count(),
         notifications_selected: app.chat.notifications_selected,
         notifications_unread_count: app.chat.notifications.unread_count(),
-        voice_selected: app.chat.voice_selected,
-        voice_participant_count: app.voice.snapshot().participants.len(),
         discover_selected: app.chat.discover_selected,
         showcase_selected: app.chat.showcase_selected,
         showcase_unread_count: app.chat.showcase.unread_count(),
@@ -2396,11 +2458,12 @@ fn handle_mouse_click(app: &mut App, screen: Screen, mouse: MouseEvent) -> bool 
     }
 }
 
-/// Double-click inside the chat composer bar enters compose mode, mirroring
-/// `i`/Enter. Only fires on Dashboard / Rooms — the only screens where the
-/// chat composer is drawn. A single click is intentionally a no-op so that
-/// the existing message-row click flow (selection, link-open) keeps working
-/// for clicks that just miss the composer.
+/// Click inside the chat composer bar. A double-click enters compose mode,
+/// mirroring `i`/Enter. Once composing, a single click positions the text
+/// cursor at the clicked cell, so you can click between letters to place the
+/// caret. Only fires on Dashboard / Rooms — the only screens where the chat
+/// composer is drawn — and only for clicks inside the composer rect, so the
+/// message-row click flow (selection, link-open) is untouched.
 fn handle_chat_composer_click(app: &mut App, screen: Screen, x: u16, y: u16) -> bool {
     if !matches!(screen, Screen::Dashboard | Screen::Rooms) {
         return false;
@@ -2424,9 +2487,17 @@ fn handle_chat_composer_click(app: &mut App, screen: Screen, x: u16, y: u16) -> 
         app.chat.last_composer_click = None;
         if let Some(room_id) = chat_click_room_id(app, screen) {
             app.chat.start_composing_in_room(room_id);
+            // Land the caret where the focusing double-click pointed.
+            app.chat.composer_click_to_cursor(rect, x, y);
         }
     } else {
         app.chat.last_composer_click = Some((x, y, now));
+        // While composing, a single click repositions the caret between
+        // letters. When not composing the bar shows only a placeholder, so
+        // there is nothing to point at — leave it to the double-click above.
+        if app.chat.is_composing() {
+            app.chat.composer_click_to_cursor(rect, x, y);
+        }
     }
     true
 }
@@ -2726,7 +2797,9 @@ fn handle_arrow_for_screen(app: &mut App, screen: Screen, key: u8) -> bool {
 
     match screen {
         Screen::Dashboard => dashboard::input::handle_arrow(app, key),
-        Screen::Lateania => crate::app::door::input::handle_arrow(app, key),
+        Screen::Lateania => crate::app::door::lateania::screen::GAME.handle_arrow(app, key),
+        // TODO(M5): forward arrows while Running; Launcher ignores them.
+        Screen::Rebels => false,
         Screen::Arcade => crate::app::arcade::input::handle_arrow(app, key),
         Screen::Rooms => crate::app::rooms::input::handle_arrow(app, key),
         Screen::Artboard => crate::app::artboard::page::handle_arrow(app, key),
@@ -2837,7 +2910,7 @@ fn open_room_search_modal_globally(app: &mut App) {
     app.show_cat_modal = false;
     app.show_settings = false;
     app.show_quit_confirm = false;
-    app.icon_picker_open = false;
+    close_icon_picker(app);
     app.chat.close_overlay();
     app.chat.close_news_modal();
     app.chat.cancel_room_jump();
@@ -2858,7 +2931,7 @@ fn open_settings_modal_globally(app: &mut App) {
     app.pet_state.cancel_play();
     app.show_cat_modal = false;
     app.show_quit_confirm = false;
-    app.icon_picker_open = false;
+    close_icon_picker(app);
     app.chat.close_overlay();
     app.chat.close_news_modal();
     app.chat.cancel_room_jump();
@@ -2881,7 +2954,7 @@ fn open_hub_modal_globally(app: &mut App) {
     app.show_cat_modal = false;
     app.show_settings = false;
     app.show_quit_confirm = false;
-    app.icon_picker_open = false;
+    close_icon_picker(app);
     app.chat.close_overlay();
     app.chat.close_news_modal();
     app.chat.cancel_room_jump();
@@ -2934,7 +3007,7 @@ fn open_bonsai_v2_modal_globally(app: &mut App) {
     app.show_cat_modal = false;
     app.show_settings = false;
     app.show_quit_confirm = false;
-    app.icon_picker_open = false;
+    close_icon_picker(app);
     app.chat.close_overlay();
     app.chat.close_news_modal();
     app.chat.cancel_room_jump();
@@ -3022,6 +3095,23 @@ fn handle_reserved_global_chord(app: &mut App, event: &ParsedInput) -> bool {
     }
 }
 
+fn handle_voice_global_chord(app: &mut App, ctx: InputContext, event: &ParsedInput) -> bool {
+    if matches!(ctx.screen, Screen::Artboard | Screen::Pinstar) {
+        return false;
+    }
+
+    let ParsedInput::Byte(byte) = event else {
+        return false;
+    };
+    let banner = match *byte {
+        CTRL_V => app.voice_toggle_join(),
+        CTRL_T => app.voice_toggle_muted(),
+        _ => return false,
+    };
+    app.banner = Some(banner);
+    true
+}
+
 fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
     let artboard_blocks_page_switch = artboard_blocks_global_page_switch(app, ctx.screen);
 
@@ -3039,8 +3129,12 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
     if guide_shortcut && !chat_message_shortcut {
         app.help_modal_state
             .set_keep_composer_focused(app.profile_state.profile().keep_composer_focused);
-        app.help_modal_state
-            .open(crate::app::help_modal::data::HelpTopic::Pair);
+        let topic = if ctx.screen == Screen::Lateania {
+            HelpTopic::Lateania
+        } else {
+            HelpTopic::Pair
+        };
+        app.help_modal_state.open(topic);
         app.show_help = true;
         return true;
     }
@@ -3258,15 +3352,20 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
         }
         b'4' if !artboard_blocks_page_switch => {
             reset_composers_for_page_change(app);
-            app.set_screen(Screen::Lateania);
+            app.set_screen(Screen::Artboard);
             true
         }
         b'5' if !artboard_blocks_page_switch => {
             reset_composers_for_page_change(app);
-            app.set_screen(Screen::Artboard);
+            app.set_screen(Screen::Lateania);
             true
         }
         b'6' if !artboard_blocks_page_switch => {
+            reset_composers_for_page_change(app);
+            app.set_screen(Screen::Rebels);
+            true
+        }
+        b'7' if !artboard_blocks_page_switch => {
             reset_composers_for_page_change(app);
             app.set_screen(Screen::Pinstar);
             true
@@ -3318,7 +3417,12 @@ fn dispatch_screen_key(app: &mut App, screen: Screen, byte: u8) {
             dashboard::input::handle_key(app, byte);
         }
         Screen::Lateania => {
-            crate::app::door::input::handle_key(app, byte);
+            crate::app::door::lateania::screen::GAME.handle_key(app, byte);
+        }
+        Screen::Rebels => {
+            // Launcher key dispatch (connect on Enter) is handled via
+            // handle_dedicated_screen_input; Running-mode bytes are forwarded
+            // raw in App::handle_input before reaching this path.
         }
         Screen::Arcade => {
             crate::app::arcade::input::handle_key(app, byte);
@@ -3820,7 +3924,30 @@ pub(crate) fn try_open_icon_picker(app: &mut App) {
         app.icon_catalog = Some(icon_picker::catalog::IconCatalogData::load());
     }
     app.icon_picker_state = icon_picker::IconPickerState::default();
+    app.icon_picker_target = IconPickerTarget::Composer;
     app.icon_picker_open = true;
+}
+
+pub(crate) fn close_icon_picker(app: &mut App) {
+    app.icon_picker_open = false;
+    app.icon_picker_target = IconPickerTarget::Composer;
+}
+
+pub(crate) fn try_open_reaction_picker(app: &mut App, room_id: Uuid) -> bool {
+    let Some(message_id) = app.chat.selected_message_id_in_room(room_id) else {
+        return false;
+    };
+    app.chat.cancel_reaction_leader();
+    if app.icon_catalog.is_none() {
+        app.icon_catalog = Some(icon_picker::catalog::IconCatalogData::load());
+    }
+    app.icon_picker_state = icon_picker::IconPickerState::default();
+    app.icon_picker_target = IconPickerTarget::Reaction {
+        room_id,
+        message_id,
+    };
+    app.icon_picker_open = true;
+    true
 }
 
 fn handle_icon_picker_input(app: &mut App, event: ParsedInput) {
@@ -3929,35 +4056,66 @@ fn handle_icon_picker_click(app: &mut App, x: u16, y: u16) {
 }
 
 fn apply_icon_selection(app: &mut App, keep_open: bool) {
-    let icon_str = {
-        let Some(catalog) = app.icon_catalog.as_ref() else {
-            app.icon_picker_open = false;
-            return;
-        };
-        let Some(icon) = icon_picker::picker::selected_chat_icon(&app.icon_picker_state, catalog)
-        else {
+    match app.icon_picker_target {
+        IconPickerTarget::Composer => {
+            let Some(icon_str) = selected_composer_icon(app, keep_open) else {
+                return;
+            };
             if !keep_open {
-                app.icon_picker_open = false;
+                close_icon_picker(app);
             }
-            return;
-        };
-        if icon.is_empty() {
-            return;
+
+            let ctx = InputContext::from_app(app);
+            if matches!(ctx.screen, Screen::Dashboard | Screen::Rooms) && ctx.chat_composing {
+                for ch in icon_str.chars() {
+                    app.chat.composer_push(ch);
+                }
+                app.chat.update_autocomplete();
+            }
         }
-        icon
+        IconPickerTarget::Reaction {
+            room_id,
+            message_id,
+        } => {
+            let Some(icon) = selected_raw_icon(app, keep_open) else {
+                return;
+            };
+            close_icon_picker(app);
+            if app.chat.selected_message_id_in_room(room_id) == Some(message_id) {
+                let _ = app.chat.react_to_selected_message_in_room(room_id, icon);
+            }
+        }
+    }
+}
+
+fn selected_composer_icon(app: &mut App, keep_open: bool) -> Option<String> {
+    let Some(catalog) = app.icon_catalog.as_ref() else {
+        close_icon_picker(app);
+        return None;
     };
-
-    if !keep_open {
-        app.icon_picker_open = false;
-    }
-
-    let ctx = InputContext::from_app(app);
-    if matches!(ctx.screen, Screen::Dashboard | Screen::Rooms) && ctx.chat_composing {
-        for ch in icon_str.chars() {
-            app.chat.composer_push(ch);
+    let icon = icon_picker::picker::selected_chat_icon(&app.icon_picker_state, catalog)?;
+    if icon.is_empty() {
+        if !keep_open {
+            close_icon_picker(app);
         }
-        app.chat.update_autocomplete();
+        return None;
     }
+    Some(icon)
+}
+
+fn selected_raw_icon(app: &mut App, keep_open: bool) -> Option<String> {
+    let Some(catalog) = app.icon_catalog.as_ref() else {
+        close_icon_picker(app);
+        return None;
+    };
+    let icon = icon_picker::picker::selected_icon(&app.icon_picker_state, catalog)?;
+    if icon.is_empty() {
+        if !keep_open {
+            close_icon_picker(app);
+        }
+        return None;
+    }
+    Some(icon)
 }
 
 #[cfg(test)]
@@ -4126,10 +4284,10 @@ mod tests {
         assert_eq!(topbar_screen_hit_test(12, 0), Some(Screen::Dashboard));
         assert_eq!(topbar_screen_hit_test(14, 0), Some(Screen::Arcade));
         assert_eq!(topbar_screen_hit_test(16, 0), Some(Screen::Rooms));
-        assert_eq!(topbar_screen_hit_test(18, 0), Some(Screen::Lateania));
-        assert_eq!(topbar_screen_hit_test(20, 0), Some(Screen::Artboard));
-        assert_eq!(topbar_screen_hit_test(22, 0), Some(Screen::Pinstar));
-        assert_eq!(topbar_screen_hit_test(24, 0), None);
+        assert_eq!(topbar_screen_hit_test(18, 0), Some(Screen::Artboard));
+        assert_eq!(topbar_screen_hit_test(20, 0), Some(Screen::Lateania));
+        assert_eq!(topbar_screen_hit_test(22, 0), Some(Screen::Rebels));
+        assert_eq!(topbar_screen_hit_test(24, 0), Some(Screen::Pinstar));
         assert_eq!(topbar_screen_hit_test(13, 0), None);
         assert_eq!(topbar_screen_hit_test(12, 1), None);
     }
@@ -4150,6 +4308,38 @@ mod tests {
     fn vt_parser_reads_backtab_sequence() {
         let mut parser = VtInputParser::default();
         assert_eq!(parser.feed(b"\x1b[Z"), vec![ParsedInput::BackTab]);
+    }
+
+    #[test]
+    fn vt_parser_reads_da1_reply() {
+        let mut parser = VtInputParser::default();
+        assert_eq!(
+            parser.feed(b"\x1b[?62;4;22c"),
+            vec![ParsedInput::DeviceAttributes(vec![62, 4, 22])]
+        );
+    }
+
+    #[test]
+    fn vt_parser_ignores_da2_reply() {
+        let mut parser = VtInputParser::default();
+        // Secondary Device Attributes uses the `>` marker; only DA1 (`?`)
+        // should surface as DeviceAttributes.
+        assert_eq!(parser.feed(b"\x1b[>1;10;0c"), vec![]);
+    }
+
+    #[test]
+    fn vt_parser_reads_multiple_probe_replies_in_one_chunk() {
+        let mut parser = VtInputParser::default();
+        // Terminals answer the startup probes back-to-back, so XTVERSION and
+        // DA1 replies routinely share one data chunk over a low-latency link.
+        // Both events must surface; the splash handler applies every one.
+        assert_eq!(
+            parser.feed(b"\x1bP>|XTerm(370)\x1b\\\x1b[?62;4;22c"),
+            vec![
+                ParsedInput::TerminalVersion("XTerm(370)".to_string()),
+                ParsedInput::DeviceAttributes(vec![62, 4, 22]),
+            ]
+        );
     }
 
     #[test]

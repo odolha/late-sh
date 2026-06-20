@@ -141,6 +141,28 @@ variable "DB_POOL_SIZE" {
 }
 
 # =============================================================================
+# Door Games
+# =============================================================================
+
+variable "REBELS_ENABLED" {
+  description = "Enable the Rebels in the Sky SSH door game."
+  type        = string
+  default     = ""
+}
+
+variable "REBELS_HOST" {
+  description = "Rebels in the Sky SSH server hostname."
+  type        = string
+  default     = ""
+}
+
+variable "REBELS_PORT" {
+  description = "Rebels in the Sky SSH server port."
+  type        = string
+  default     = ""
+}
+
+# =============================================================================
 # AI (Gemini)
 # =============================================================================
 
@@ -177,73 +199,124 @@ variable "YOUTUBE_API_KEY" {
 variable "VOICE_ENABLED" {
   description = "Enable late voice rooms in late-ssh."
   type        = string
-  default     = "1"
+  default     = ""
 }
 
 variable "VOICE_ROOM" {
   description = "Default LiveKit room used by the late voice room MVP."
   type        = string
-  default     = "late-voice"
+  default     = ""
 }
 
 variable "LIVEKIT_SUBDOMAIN" {
   description = "Subdomain used for the public LiveKit endpoint under DOMAIN."
   type        = string
-  default     = "rtc"
+  default     = ""
 }
 
 variable "LIVEKIT_IMAGE" {
   description = "LiveKit server image."
   type        = string
-  default     = "livekit/livekit-server:v1.9.12"
+  default     = ""
 }
 
 variable "LIVEKIT_LOG_LEVEL" {
   description = "LiveKit server log level."
   type        = string
-  default     = "info"
+  default     = ""
 }
 
 variable "LIVEKIT_API_KEY" {
   description = "LiveKit API key used by late-ssh for token minting."
   type        = string
-  default     = "late-voice"
+  default     = ""
 }
 
 variable "LIVEKIT_RTC_TCP_PORT" {
   description = "LiveKit ICE/TCP fallback port exposed directly on the node."
-  type        = number
-  default     = 7881
+  type        = string
+  default     = ""
 }
 
 variable "LIVEKIT_RTC_UDP_PORT" {
   description = "LiveKit ICE/UDP mux port exposed directly on the node."
-  type        = number
-  default     = 7882
+  type        = string
+  default     = ""
 }
 
 variable "LIVEKIT_RTC_USE_EXTERNAL_IP" {
   description = "Let LiveKit discover and advertise the node public IP for RTC candidates."
-  type        = bool
-  default     = true
+  type        = string
+  default     = ""
 }
 
 variable "LIVEKIT_TURN_ENABLED" {
   description = "Enable LiveKit's embedded TURN/STUN service."
-  type        = bool
-  default     = true
+  type        = string
+  default     = ""
 }
 
 variable "LIVEKIT_TURN_UDP_PORT" {
   description = "LiveKit embedded TURN/STUN UDP port exposed directly on the node."
-  type        = number
-  default     = 3478
+  type        = string
+  default     = ""
 }
 
 variable "LIVEKIT_TURN_TLS_PORT" {
   description = "LiveKit embedded TURN/TLS port exposed directly on the node."
-  type        = number
-  default     = 5349
+  type        = string
+  default     = ""
+}
+
+# =============================================================================
+# IRC
+# =============================================================================
+
+variable "IRC_ENABLED" {
+  description = "Enable the embedded IRC listener in late-ssh. Production should use TLS."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = contains(["", "0", "1", "true", "false", "yes", "no", "on", "off"], lower(trimspace(var.IRC_ENABLED)))
+    error_message = "IRC_ENABLED must be a boolean-like string: 1/0, true/false, yes/no, or on/off."
+  }
+}
+
+variable "IRC_HOST" {
+  description = "Public IRC hostname used for the TLS certificate."
+  type        = string
+  default     = ""
+}
+
+variable "IRC_PORT" {
+  description = "Public and container IRC TLS port."
+  type        = string
+  default     = ""
+}
+
+variable "IRC_MAX_CONNS_GLOBAL" {
+  description = "Max total concurrent IRC connections."
+  type        = string
+  default     = ""
+}
+
+variable "IRC_MAX_CONNS_PER_USER" {
+  description = "Max concurrent IRC connections per late.sh user."
+  type        = string
+  default     = ""
+}
+
+variable "IRC_MAX_AUTH_FAILURES_PER_IP" {
+  description = "Max failed IRC auth attempts per IP in the auth failure window."
+  type        = string
+  default     = ""
+}
+
+variable "IRC_AUTH_FAILURE_WINDOW_SECS" {
+  description = "IRC auth failure rate-limit window in seconds."
+  type        = string
+  default     = ""
 }
 
 # S3-Compatible Storage (for DB backups)

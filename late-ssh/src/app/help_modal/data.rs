@@ -8,12 +8,13 @@ pub enum HelpTopic {
     Overview,
     Architecture,
     Chat,
+    Irc,
     Social,
     Directory,
     News,
     Arcade,
     Tables,
-    Doors,
+    Lateania,
     TerminalCopy,
     TerminalLinks,
     TerminalImages,
@@ -26,16 +27,17 @@ pub enum HelpTopic {
 }
 
 impl HelpTopic {
-    pub const ALL: [HelpTopic; 19] = [
+    pub const ALL: [HelpTopic; 20] = [
         HelpTopic::Pair,
         HelpTopic::Overview,
         HelpTopic::Chat,
+        HelpTopic::Irc,
         HelpTopic::Social,
         HelpTopic::Directory,
         HelpTopic::News,
         HelpTopic::Arcade,
         HelpTopic::Tables,
-        HelpTopic::Doors,
+        HelpTopic::Lateania,
         HelpTopic::TerminalCopy,
         HelpTopic::TerminalLinks,
         HelpTopic::TerminalImages,
@@ -54,12 +56,13 @@ impl HelpTopic {
             HelpTopic::Overview => "Overview",
             HelpTopic::Architecture => "Architecture",
             HelpTopic::Chat => "Chat",
+            HelpTopic::Irc => "IRC",
             HelpTopic::Social => "Social",
             HelpTopic::Directory => "Directory",
             HelpTopic::News => "News",
             HelpTopic::Arcade => "Arcade",
             HelpTopic::Tables => "Tables",
-            HelpTopic::Doors => "Lateania",
+            HelpTopic::Lateania => "Lateania",
             HelpTopic::TerminalCopy => "Copy",
             HelpTopic::TerminalLinks => "Links",
             HelpTopic::TerminalImages => "Images",
@@ -77,22 +80,23 @@ impl HelpTopic {
             HelpTopic::Pair => 0,
             HelpTopic::Overview => 1,
             HelpTopic::Chat => 2,
-            HelpTopic::Social => 3,
-            HelpTopic::Directory => 4,
-            HelpTopic::News => 5,
-            HelpTopic::Arcade => 6,
-            HelpTopic::Tables => 7,
-            HelpTopic::Doors => 8,
-            HelpTopic::TerminalCopy => 9,
-            HelpTopic::TerminalLinks => 10,
-            HelpTopic::TerminalImages => 11,
-            HelpTopic::TerminalSelection => 12,
-            HelpTopic::TerminalNotifications => 13,
-            HelpTopic::TerminalCliYoutube => 14,
-            HelpTopic::Economy => 15,
-            HelpTopic::Bonsai => 16,
-            HelpTopic::Settings => 17,
-            HelpTopic::Architecture => 18,
+            HelpTopic::Irc => 3,
+            HelpTopic::Social => 4,
+            HelpTopic::Directory => 5,
+            HelpTopic::News => 6,
+            HelpTopic::Arcade => 7,
+            HelpTopic::Tables => 8,
+            HelpTopic::Lateania => 9,
+            HelpTopic::TerminalCopy => 10,
+            HelpTopic::TerminalLinks => 11,
+            HelpTopic::TerminalImages => 12,
+            HelpTopic::TerminalSelection => 13,
+            HelpTopic::TerminalNotifications => 14,
+            HelpTopic::TerminalCliYoutube => 15,
+            HelpTopic::Economy => 16,
+            HelpTopic::Bonsai => 17,
+            HelpTopic::Settings => 18,
+            HelpTopic::Architecture => 19,
         }
     }
 }
@@ -103,12 +107,13 @@ pub fn lines_for(topic: HelpTopic, keep_composer_focused: bool, pair_url: &str) 
         HelpTopic::Overview => overview_lines(),
         HelpTopic::Architecture => architecture_lines(),
         HelpTopic::Chat => chat_help_lines(keep_composer_focused),
+        HelpTopic::Irc => irc_help_lines(),
         HelpTopic::Social => social_help_lines(),
         HelpTopic::Directory => directory_help_lines(),
         HelpTopic::News => news_help_lines(),
         HelpTopic::Arcade => arcade_help_lines(),
         HelpTopic::Tables => tables_help_lines(),
-        HelpTopic::Doors => doors_help_lines(),
+        HelpTopic::Lateania => lateania_help_lines(),
         HelpTopic::TerminalCopy => {
             terminal_faq_topic_lines(crate::app::help_modal::terminal_faq::TerminalHelpTopic::Copy)
         }
@@ -138,8 +143,8 @@ pub fn bot_app_context() -> String {
         "APP CONTEXT:\n\
         CRITICAL FACTS:\n\
         - Chat username badges render in this order: bracketed last-month leaderboard awards, special role badges, bonsai stage, equipped badge, equipped flag, then the /brb moon.\n\
-        - There is no separate top-level Chat screen. Home/Dashboard owns the chat room rail and chat center; top-level screens are Home, The Arcade, Tables, Lateania, Artboard, and Directory.\n\
-        - Directory page 6 owns Profiles, Projects, and Pinstar tabs. Artboard and Pinstar have detailed page-local editing keybinds.\n",
+        - There is no separate top-level Chat screen. Home/Dashboard owns the chat room rail and chat center; top-level screens are Home, The Arcade, Tables, Artboard, Lateania, Rebels, and Directory.\n\
+        - Directory page 7 owns Profiles, Projects, and Pinstar tabs. Artboard and Pinstar have detailed page-local editing keybinds.\n",
     );
     for topic in HelpTopic::ALL {
         out.push_str(&format!("## {}\n", topic.title()));
@@ -328,8 +333,9 @@ pub fn chat_help_lines(keep_composer_focused: bool) -> Vec<String> {
         "  PageUp / PageDown  half page up / down",
         "  g / G              clear selection (back to live view)",
         "  p                  open selected user's profile",
-        "  f then 1-8",
-        "                     react to selected message on any layout",
+        "  f then 1-9        quick-react to selected message",
+        "  f then 0          choose any icon-picker reaction",
+        "  f then f          list reaction owners",
         "  Enter              jump to loaded original for selected reply",
         "  Enter              open selected image or News item when present",
         "  r                  reply to selected message",
@@ -399,7 +405,7 @@ pub fn chat_help_lines(keep_composer_focused: bool) -> Vec<String> {
         "",
         "Synthetic entries",
         "  Home room rail also contains RSS, News, Voice, Mentions, and Discover.",
-        "  Directory page 6 contains Profiles, Projects, and Pinstar.",
+        "  Directory page 7 contains Profiles, Projects, and Pinstar.",
     ]
     .into_iter()
     .map(str::to_string)
@@ -415,6 +421,70 @@ pub fn chat_help_lines(keep_composer_focused: bool) -> Vec<String> {
     lines
 }
 
+fn irc_help_lines() -> Vec<String> {
+    [
+        "IRC access",
+        "",
+        "late.sh includes an optional IRC surface for the same chat account.",
+        "It is not a separate account or a separate chat system: IRC reads and writes the same rooms, DMs, usernames, and bans.",
+        "",
+        "How to connect",
+        "  Create token      Settings > Account > IRC access token",
+        "  Server password   paste that token into your IRC client's server password / PASS field",
+        "  Nick              any configured nick is accepted, then locked to your late.sh username",
+        "  Dev server        localhost:6667 with TLS off when running make start",
+        "  Production        irc.late.sh port 6697 with TLS/SSL enabled",
+        "  Verify TLS        keep certificate verification on when using irc.late.sh",
+        "",
+        "WeeChat quick setup",
+        "  /server add late irc.late.sh/6697",
+        "  /set irc.server.late.tls on",
+        "  /set irc.server.late.tls_verify on",
+        "  /set irc.server.late.password \"late-irc-...\"",
+        "  /connect late",
+        "",
+        "Connection troubleshooting",
+        "  IRC is raw TCP, so irc.late.sh must be DNS-only, not proxied.",
+        "  If hostname connects hang, check that DNS resolves to late.sh node IPs.",
+        "  Avoid pasting tokens in public logs or chat; reset the token if it leaks.",
+        "",
+        "Good Arch clients",
+        "  WeeChat           terminal-native; pacman -S weechat",
+        "  Halloy            GUI client; pacman -S halloy",
+        "",
+        "Useful IRC commands",
+        "  /list             list public channels and private channels you can access",
+        "  /join #lounge     join a channel; #lounge is joined automatically",
+        "  /msg #room text   send to a late.sh room",
+        "  /msg nick text    send a late.sh DM",
+        "  /names #room      show online channel users",
+        "  /whois nick       show basic user info",
+        "  /part #room       detach the IRC view; late.sh membership stays unchanged",
+        "",
+        "Room mapping",
+        "  #lounge, language rooms, and topic rooms with slugs are IRC channels.",
+        "  Private topic rooms only appear to members.",
+        "  DMs stay direct messages, not channels.",
+        "  Game-room chat is not exposed as IRC channels.",
+        "",
+        "Token behavior",
+        "  New users start with no IRC token and cannot connect over IRC.",
+        "  Resetting a token shows the new value once and disconnects old IRC clients.",
+        "  Revoking the token disables IRC access for the account.",
+        "  Deleting or linking accounts disconnects live IRC clients for the affected account.",
+        "",
+        "Client expectations",
+        "  Most clients call the token a server password.",
+        "  Nick changes from IRC are refused; change your username in late.sh settings.",
+        "  Long late.sh messages may appear as multiple IRC PRIVMSG lines.",
+        "  Edited messages arrive with an [edit] prefix.",
+        "  Presence is bridged: TUI and IRC users both count as online.",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
 fn music_pair_lines() -> Vec<String> {
     MUSIC_PAIR_TEXT.lines().map(str::to_string).collect()
 }
@@ -423,7 +493,7 @@ fn social_help_lines() -> Vec<String> {
     [
         "Social surfaces",
         "",
-        "These are Home-adjacent feeds and notification surfaces. Directory page 6 has its own guide tab for Profiles, Projects, and Pinstar.",
+        "These are Home-adjacent feeds and notification surfaces. Directory page 7 has its own guide tab for Profiles, Projects, and Pinstar.",
         "",
         "RSS",
         "  Private per-user RSS/Atom inbox.",
@@ -466,8 +536,8 @@ fn directory_help_lines() -> Vec<String> {
     [
         "Directory",
         "",
-        "Directory page 6 owns public profiles, project showcases, and Pinstar diagrams.",
-        "  6                 open Directory",
+        "Directory page 7 owns public profiles, project showcases, and Pinstar diagrams.",
+        "  7                 open Directory",
         "  h / l or [ / ]   switch Directory tabs",
         "                    h/l switch only when a Profiles/Projects form is not editing",
         "  j / k or ↑ / ↓   navigate the active list",
@@ -619,16 +689,24 @@ fn tables_help_lines() -> Vec<String> {
     .collect()
 }
 
-fn doors_help_lines() -> Vec<String> {
+fn lateania_help_lines() -> Vec<String> {
     [
         "Lateania",
         "",
-        "Lateania is the persistent BBS-style world on screen 4.",
-        "  4                 open Lateania",
+        "Lateania is the persistent BBS-style world.",
+        "  5                 open Lateania",
         "  Enter             step through the gate",
         "  d                 reset your Lateania character after confirmation",
         "  Esc               leave the active world for the Lateania landing page",
         "  ?                 open global guide from the lobby or active game",
+        "",
+        "Rebels in the Sky",
+        "  Pirate basketball across the galaxy, proxied live from frittura.org.",
+        "  6                 open Rebels",
+        "  Enter             connect to the rebels server",
+        "  Esc then confirm  quit the game and return to the launcher",
+        "  Ctrl-C            quit the game from inside it",
+        "  Disconnecting (or the server closing) also returns to the launcher.",
         "",
         "Lateania",
         "  1-5               choose class before your first adventure",
@@ -671,9 +749,10 @@ fn overview_lines() -> Vec<String> {
         "  1 Home            chat, tables, music, and live activity",
         "  2 The Arcade      daily puzzles, endless games, leaderboard",
         "  3 Tables          persistent table games",
-        "  4 Lateania        persistent terminal world",
-        "  5 Artboard        shared persistent ASCII canvas",
-        "  6 Directory       Profiles, Projects, and Pinstar",
+        "  4 Artboard        shared persistent ASCII canvas",
+        "  5 Lateania        persistent terminal world",
+        "  6 Rebels          pirate basketball across the galaxy",
+        "  7 Directory       Profiles, Projects, and Pinstar",
         "",
         "Directory has its own guide tab; Artboard and active Pinstar diagrams keep page-local editing help.",
         "There is also a dedicated Architecture slide if you need system-level context.",
@@ -766,7 +845,7 @@ fn architecture_lines() -> Vec<String> {
         "  paired browser or CLI clients handle actual audio output and visualizer data",
         "",
         "User-facing areas",
-        "  Home/Dashboard with chat rail, The Arcade, Tables, Lateania, Artboard, Directory, and the persistent bonsai sidebar",
+        "  Home/Dashboard with chat rail, The Arcade, Tables, Artboard, Lateania, Rebels, Directory, and the persistent bonsai sidebar",
         "  Home chat includes synthetic entries: RSS, News, Voice, Mentions, Discover; Directory owns Profiles, Projects, and Pinstar",
         "  Tables are persistent DB rows with paired chat_rooms(kind='game')",
         "  Table game runtime state is process-local and can reset on SSH server restart",
@@ -843,6 +922,8 @@ fn settings_help_lines() -> Vec<String> {
         "  Themes            expanded theme browser".to_string(),
         "  RSS               private RSS/Atom subscriptions".to_string(),
         "  Account           link SSH keys across accounts, or delete your account".to_string(),
+        "  IRC access token  create, reset, or revoke the token used by IRC clients"
+            .to_string(),
         "  Special           show-settings-on-connect toggle; unlocks after profile setup"
             .to_string(),
         "".to_string(),
@@ -858,6 +939,7 @@ fn settings_help_lines() -> Vec<String> {
         "  background color, room list, and the Activity boxes toggle".to_string(),
         "  right sidebar mode (on/off/custom) for Home, Arcade, and Tables".to_string(),
         "  private RSS/Atom subscriptions".to_string(),
+        "  IRC access token for external IRC clients".to_string(),
         "".to_string(),
         "How to open it".to_string(),
         "  on login, the settings modal opens automatically".to_string(),
@@ -1224,6 +1306,21 @@ mod tests {
     }
 
     #[test]
+    fn bot_context_includes_irc_access_flow() {
+        let context = bot_app_context();
+        assert!(HelpTopic::ALL.iter().any(|topic| topic.title() == "IRC"));
+        assert!(context.contains("## IRC\n"));
+        assert!(context.contains("Settings > Account > IRC access token"));
+        assert!(context.contains("server password / PASS field"));
+        assert!(context.contains("localhost:6667 with TLS off when running make start"));
+        assert!(context.contains("irc.late.sh port 6697 with TLS/SSL enabled"));
+        assert!(context.contains("/server add late irc.late.sh/6697"));
+        assert!(context.contains("IRC is raw TCP, so irc.late.sh must be DNS-only"));
+        assert!(context.contains("Game-room chat is not exposed as IRC channels."));
+        assert!(context.contains("Resetting a token shows the new value once"));
+    }
+
+    #[test]
     fn chat_guide_lists_user_facing_slash_commands() {
         let lines = chat_help_lines(false).join("\n");
         for expected in [
@@ -1294,12 +1391,12 @@ mod tests {
     fn global_guide_points_to_hub_for_game_details() {
         let arcade = arcade_help_lines().join("\n");
         let tables = tables_help_lines().join("\n");
-        let doors = doors_help_lines().join("\n");
+        let lateania = lateania_help_lines().join("\n");
         assert!(arcade.contains("Economy"));
         assert!(tables.contains("Economy tab"));
-        assert!(doors.contains("Lateania"));
+        assert!(lateania.contains("Lateania"));
         assert!(!arcade.contains("Lateris"));
         assert!(!tables.contains("Sudoku"));
-        assert!(!doors.contains("Clock presets"));
+        assert!(!lateania.contains("Clock presets"));
     }
 }

@@ -19,7 +19,7 @@ use crate::app::{
             create_modal::ChessCreateModal,
             settings::ChessTableSettings,
             state::{ChessGameResult, ChessPhase, State},
-            svc::{CHESS_WIN_CHIP_PAYOUT, ChessService, ChessServiceContext},
+            svc::{self as chess_svc, CHESS_WIN_CHIP_PAYOUT, ChessService, ChessServiceContext},
         },
         svc::{GameKind, RoomListItem, RoomsService},
     },
@@ -119,6 +119,15 @@ impl RoomGameManager for ChessTableManager {
             .is_some_and(|svc| svc.current_snapshot().seats.contains(&Some(user_id)))
     }
 
+    fn is_awaiting_user_action(&self, room: &RoomListItem, user_id: Uuid) -> bool {
+        if let Some(svc) = self.tables.lock_recover().get(&room.id) {
+            let snapshot = svc.current_snapshot();
+            return snapshot.phase == ChessPhase::Active
+                && snapshot.seats[snapshot.turn.seat_index()] == Some(user_id);
+        }
+        chess_svc::runtime_state_awaiting_user_action(&room.runtime_state, user_id)
+    }
+
     fn subscribe_room_events(&self) -> broadcast::Receiver<RoomGameEvent> {
         self.event_tx.subscribe()
     }
@@ -144,6 +153,10 @@ impl ActiveRoomBackend for State {
 
     fn tick(&mut self) {
         State::tick(self);
+    }
+
+    fn awaiting_my_action(&self) -> bool {
+        self.awaiting_action()
     }
 
     fn touch_activity(&self) {

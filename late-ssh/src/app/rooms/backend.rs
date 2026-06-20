@@ -74,6 +74,11 @@ pub enum CreateRoomFlow {
 pub trait ActiveRoomBackend: Send {
     fn room_id(&self) -> Uuid;
     fn tick(&mut self);
+    /// True while the game is blocked on this user's action (their poker or
+    /// blackjack hand, their chess move). Drives desktop notifications.
+    fn awaiting_my_action(&self) -> bool {
+        false
+    }
     fn touch_activity(&self);
     fn handle_key(&mut self, byte: u8) -> InputAction;
     fn handle_arrow(&mut self, _key: u8) -> bool {
@@ -109,6 +114,9 @@ pub trait RoomGameManager: Send + Sync {
     fn directory_meta(&self, room: &RoomListItem) -> DirectoryMeta;
     fn directory_hints(&self, room_id: Uuid) -> Option<DirectoryHints>;
     fn is_user_seated(&self, _room_id: Uuid, _user_id: Uuid) -> bool {
+        false
+    }
+    fn is_awaiting_user_action(&self, _room: &RoomListItem, _user_id: Uuid) -> bool {
         false
     }
     fn subscribe_room_events(&self) -> broadcast::Receiver<RoomGameEvent>;

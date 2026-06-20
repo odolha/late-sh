@@ -12,6 +12,8 @@ pub const REWARD_CLAIM_POLICY_UTC_DAY: &str = "utc_day";
 
 pub const ASTERION_DAILY_ESCAPE_REWARD_KEY: &str = "asterion_daily_escape";
 pub const CHESS_WIN_REWARD_KEY: &str = "chess_win_payout";
+pub const LATEANIA_ARCHDEMON_REWARD_KEY: &str = "lateania_archdemon_defeat";
+pub const LATEANIA_FRONTIER_KING_REWARD_KEY: &str = "lateania_frontier_king_defeat";
 pub const SSHATTRICK_WIN_REWARD_KEY: &str = "sshattrick_win_payout";
 pub const TRON_WIN_2P_REWARD_KEY: &str = "tron_win_2p";
 pub const TRON_WIN_3P_REWARD_KEY: &str = "tron_win_3p";
@@ -19,8 +21,10 @@ pub const TRON_WIN_4P_REWARD_KEY: &str = "tron_win_4p";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DailyPuzzleRewardGame {
+    LeWord,
     Minesweeper,
     Nonogram,
+    RubiksCube,
     Solitaire,
     Sudoku,
 }
@@ -28,8 +32,10 @@ pub enum DailyPuzzleRewardGame {
 impl DailyPuzzleRewardGame {
     pub fn key(self) -> &'static str {
         match self {
+            Self::LeWord => "le_word",
             Self::Minesweeper => "minesweeper",
             Self::Nonogram => "nonogram",
+            Self::RubiksCube => "rubiks_cube",
             Self::Solitaire => "solitaire",
             Self::Sudoku => "sudoku",
         }
@@ -141,6 +147,14 @@ mod tests {
         assert_eq!(
             daily_puzzle_reward_key(DailyPuzzleRewardGame::Solitaire, "draw-3"),
             "solitaire_daily_draw_3_win"
+        );
+        assert_eq!(
+            daily_puzzle_reward_key(DailyPuzzleRewardGame::LeWord, "daily"),
+            "le_word_daily_daily_win"
+        );
+        assert_eq!(
+            daily_puzzle_reward_key(DailyPuzzleRewardGame::RubiksCube, "daily"),
+            "rubiks_cube_daily_daily_win"
         );
     }
 }

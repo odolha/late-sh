@@ -4,8 +4,8 @@ use late_core::models::asterion::ASTERION_ESCAPE_LEDGER_REASON;
 use late_core::models::chips::UserChips;
 use late_core::models::game_payout::{GamePayout, GamePayoutClaim};
 use late_core::models::reward::{
-    ASTERION_DAILY_ESCAPE_REWARD_KEY, DailyPuzzleRewardGame, REWARD_CLAIM_POLICY_UTC_DAY,
-    RewardTemplate, daily_puzzle_reward_key,
+    ASTERION_DAILY_ESCAPE_REWARD_KEY, DailyPuzzleRewardGame, REWARD_CLAIM_POLICY_PER_EVENT,
+    REWARD_CLAIM_POLICY_UTC_DAY, RewardTemplate, daily_puzzle_reward_key,
 };
 use tokio::sync::broadcast;
 use uuid::Uuid;
@@ -14,6 +14,9 @@ use crate::app::activity::{
     channel::ActivitySender,
     event::{ActivityEvent, ActivityGame, ActivityKind},
 };
+
+const LIFETIME_REWARD_PERIOD_KIND: &str = "lifetime";
+const LIFETIME_REWARD_PERIOD_KEY: &str = "once";
 
 #[derive(Clone)]
 pub struct ChipService {
@@ -185,6 +188,31 @@ impl ChipService {
         Ok(reward_grant(template.reward_chips, claim))
     }
 
+    pub async fn credit_lifetime_reward_template(
+        &self,
+        user_id: Uuid,
+        reward_key: &str,
+        ledger_reason: &str,
+    ) -> anyhow::Result<RewardGrant> {
+        let client = self.db.get().await?;
+        let template = RewardTemplate::get_active_by_key(&**client, reward_key).await?;
+        template.ensure_claim_policy(REWARD_CLAIM_POLICY_PER_EVENT)?;
+        let claim = GamePayout::grant_period(
+            &client,
+            late_core::models::game_payout::GamePayoutPeriodGrant {
+                user_id,
+                game: template.game()?,
+                payout_kind: template.payout_kind()?,
+                period_kind: LIFETIME_REWARD_PERIOD_KIND,
+                period_key: LIFETIME_REWARD_PERIOD_KEY,
+                amount: template.reward_chips,
+                ledger_reason,
+            },
+        )
+        .await?;
+        Ok(reward_grant(template.reward_chips, claim))
+    }
+
     pub async fn restore_floor(&self, user_id: Uuid) -> anyhow::Result<i64> {
         let client = self.db.get().await?;
         let chips = UserChips::restore_floor(&client, user_id).await?;
@@ -202,8 +230,10 @@ const fn reward_grant(amount: i64, claim: GamePayoutClaim) -> RewardGrant {
 
 const fn daily_puzzle_reward_game(game: ActivityGame) -> Option<DailyPuzzleRewardGame> {
     match game {
+        ActivityGame::LeWord => Some(DailyPuzzleRewardGame::LeWord),
         ActivityGame::Minesweeper => Some(DailyPuzzleRewardGame::Minesweeper),
         ActivityGame::Nonogram => Some(DailyPuzzleRewardGame::Nonogram),
+        ActivityGame::RubiksCube => Some(DailyPuzzleRewardGame::RubiksCube),
         ActivityGame::Solitaire => Some(DailyPuzzleRewardGame::Solitaire),
         ActivityGame::Sudoku => Some(DailyPuzzleRewardGame::Sudoku),
         ActivityGame::Sshattrick => None,
@@ -218,12 +248,20 @@ mod tests {
     #[test]
     fn daily_puzzle_reward_game_accepts_only_daily_puzzle_games() {
         assert_eq!(
+            daily_puzzle_reward_game(ActivityGame::LeWord),
+            Some(DailyPuzzleRewardGame::LeWord)
+        );
+        assert_eq!(
             daily_puzzle_reward_game(ActivityGame::Minesweeper),
             Some(DailyPuzzleRewardGame::Minesweeper)
         );
         assert_eq!(
             daily_puzzle_reward_game(ActivityGame::Sudoku),
             Some(DailyPuzzleRewardGame::Sudoku)
+        );
+        assert_eq!(
+            daily_puzzle_reward_game(ActivityGame::RubiksCube),
+            Some(DailyPuzzleRewardGame::RubiksCube)
         );
         assert_eq!(daily_puzzle_reward_game(ActivityGame::Lateris), None);
         assert_eq!(daily_puzzle_reward_game(ActivityGame::Blackjack), None);

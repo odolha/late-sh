@@ -56,6 +56,18 @@ LATE_LIVEKIT_API_SECRET ?= secret
 # Shared MVP voice room name.
 LATE_VOICE_ROOM ?= late-voice
 
+# --- IRC ---
+# Enable the embedded IRC server in local dev.
+LATE_IRC_ENABLED ?= 1
+# Plaintext IRC listen port.
+LATE_IRC_PORT ?= 6667
+
+# --- Door games (Rebels in the Sky) ---
+LATE_REBELS_ENABLED ?= 1                                    # Enable the Rebels in the Sky door game (1=on, 0=off)
+LATE_REBELS_HOST ?= frittura.org                            # Rebels SSH server hostname to proxy to
+LATE_REBELS_PORT ?= 3788                                    # Rebels SSH server port
+LATE_REBELS_SECRET ?= $(shell openssl rand -hex 32 2>/dev/null || od -An -N32 -tx1 /dev/urandom | tr -d ' \n') # Shared secret seeding the derived rebels identity
+
 # --- Web ---
 LATE_WEB_PORT ?= 3000                                       # Web server listen port
 LATE_WEB_URL ?= http://localhost:$(LATE_WEB_PORT)           # Public web URL (used by SSH server)
@@ -124,6 +136,20 @@ LATE_FILES_S3_SECRET_ACCESS_KEY ?=  								                        # S3/R2 secr
 	@echo "LATE_LIVEKIT_API_KEY=$(LATE_LIVEKIT_API_KEY)" >> .env
 	@echo "LATE_LIVEKIT_API_SECRET=$(LATE_LIVEKIT_API_SECRET)" >> .env
 	@echo "LATE_VOICE_ROOM=$(LATE_VOICE_ROOM)" >> .env
+	@echo "LATE_IRC_ENABLED=$(LATE_IRC_ENABLED)" >> .env
+	@echo "LATE_IRC_PORT=$(LATE_IRC_PORT)" >> .env
+	@echo "" >> .env
+	@echo "# Optional IRC TLS/tuning overrides:" >> .env
+	@echo "# LATE_IRC_TLS_CERT=/path/to/fullchain.pem" >> .env
+	@echo "# LATE_IRC_TLS_KEY=/path/to/privkey.pem" >> .env
+	@echo "# LATE_IRC_MAX_CONNS_GLOBAL=200" >> .env
+	@echo "# LATE_IRC_MAX_CONNS_PER_USER=3" >> .env
+	@echo "# LATE_IRC_MAX_AUTH_FAILURES_PER_IP=20" >> .env
+	@echo "# LATE_IRC_AUTH_FAILURE_WINDOW_SECS=300" >> .env
+	@echo "LATE_REBELS_ENABLED=$(LATE_REBELS_ENABLED)" >> .env
+	@echo "LATE_REBELS_HOST=$(LATE_REBELS_HOST)" >> .env
+	@echo "LATE_REBELS_PORT=$(LATE_REBELS_PORT)" >> .env
+	@echo "LATE_REBELS_SECRET=$(LATE_REBELS_SECRET)" >> .env
 	@echo "LATE_WEB_PORT=$(LATE_WEB_PORT)" >> .env
 	@echo "LATE_WEB_URL=$(LATE_WEB_URL)" >> .env
 	@echo "LATE_SSH_INTERNAL_URL=$(LATE_SSH_INTERNAL_URL)" >> .env
@@ -153,12 +179,21 @@ INSTANCE2_OVERRIDES = \
   LATE_WEB_PORT=3001 \
   LATE_PG_HOST_PORT=5434 \
   LATE_ICECAST_HOST_PORT=8001 \
+  LATE_LIQUIDSOAP_HOST_PORT=1235 \
+  LATE_IRC_PORT=6668 \
   LATE_LIVEKIT_HOST_PORT=7883 \
   LATE_LIVEKIT_RTC_TCP_PORT=7884 \
   LATE_LIVEKIT_RTC_UDP_PORT=7885
 
 CHECK_PACKAGES = -p late-cli -p late-core -p late-ssh -p late-web
 CHECK_CARGO_ENV = CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0
+CHECK_INSTANCE ?= late-check
+CHECK_PG_HOST_PORT ?= 55433
+CHECK_COMPOSE = CHECK_PG_HOST_PORT=$(CHECK_PG_HOST_PORT) docker compose -p $(CHECK_INSTANCE) -f docker-compose.check.yml
+CHECK_TEST_DATABASE_URL ?= host=127.0.0.1 port=$(CHECK_PG_HOST_PORT) user=postgres password=postgres dbname=postgres
+CHECK_DB_STOP = $(CHECK_COMPOSE) down -v --remove-orphans
+CHECK_DB_RESET = $(CHECK_DB_STOP) >/dev/null 2>&1 || true
+CHECK_DB_START = $(CHECK_DB_RESET); $(CHECK_COMPOSE) up -d --wait postgres
 
 .PHONY: .env-instance2
 .env-instance2:
@@ -172,17 +207,31 @@ start-instance2:
 keys:
 	@if [ ! -f server_key ]; then ssh-keygen -t ed25519 -f server_key -N "" -q; fi
 
+.PHONY: check-db
+check-db:
+	$(CHECK_DB_START)
+
+.PHONY: check-db-down
+check-db-down:
+	$(CHECK_DB_STOP)
+
 .PHONY: check
-check:
-	cargo fmt $(CHECK_PACKAGES) -- --check
-	$(CHECK_CARGO_ENV) cargo clippy $(CHECK_PACKAGES) --all-targets --no-deps -- -D warnings
-	$(CHECK_CARGO_ENV) cargo nextest run $(CHECK_PACKAGES) --all-targets --no-fail-fast
+check: .env
+	@set -e; \
+	trap 'status=$$?; $(CHECK_DB_STOP); exit $$status' EXIT; \
+	$(CHECK_DB_START); \
+	cargo fmt $(CHECK_PACKAGES) -- --check; \
+	$(CHECK_CARGO_ENV) cargo clippy $(CHECK_PACKAGES) --all-targets --no-deps -- -D warnings; \
+	TEST_DATABASE_URL="$(CHECK_TEST_DATABASE_URL)" $(CHECK_CARGO_ENV) cargo nextest run $(CHECK_PACKAGES) --all-targets --no-fail-fast
 
 .PHONY: checkci
-checkci:
-	cargo fmt --all -- --check
-	$(CHECK_CARGO_ENV) cargo clippy --workspace --all-targets --features otel -- -D warnings
-	$(CHECK_CARGO_ENV) cargo nextest run --workspace --all-targets
+checkci: .env
+	@set -e; \
+	trap 'status=$$?; $(CHECK_DB_STOP); exit $$status' EXIT; \
+	$(CHECK_DB_START); \
+	cargo fmt --all -- --check; \
+	$(CHECK_CARGO_ENV) cargo clippy --workspace --all-targets --features otel -- -D warnings; \
+	TEST_DATABASE_URL="$(CHECK_TEST_DATABASE_URL)" $(CHECK_CARGO_ENV) cargo nextest run --workspace --all-targets
 
 start: .env keys
 	docker compose -f docker-compose.yml up --build

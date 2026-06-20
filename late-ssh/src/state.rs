@@ -1,8 +1,10 @@
 use crate::app::activity::event::ActivityEvent;
 use crate::app::ai::svc::AiService;
+use crate::app::arcade::le_word::svc::LeWordService;
 use crate::app::arcade::minesweeper::svc::MinesweeperService;
 use crate::app::arcade::nonogram::state::Library as NonogramLibrary;
 use crate::app::arcade::nonogram::svc::NonogramService;
+use crate::app::arcade::rubiks_cube::svc::RubiksCubeService;
 use crate::app::arcade::snake::svc::SnakeService;
 use crate::app::arcade::solitaire::svc::SolitaireService;
 use crate::app::arcade::sudoku::svc::SudokuService;
@@ -107,6 +109,8 @@ pub struct State {
     pub twenty_forty_eight_service: TwentyFortyEightService,
     pub tetris_service: LaterisService,
     pub snake_service: SnakeService,
+    pub rubiks_cube_service: RubiksCubeService,
+    pub le_word_service: LeWordService,
     pub sudoku_service: SudokuService,
     pub nonogram_service: NonogramService,
     pub solitaire_service: SolitaireService,
@@ -139,9 +143,9 @@ pub struct State {
         watch::Receiver<HashMap<String, crate::app::audio::radio_meta::svc::ArtistTitle>>,
     pub session_registry: SessionRegistry,
     pub paired_client_registry: PairedClientRegistry,
+    pub irc_registry: crate::ircd::registry::IrcRegistry,
     pub ssh_attempt_limiter: IpRateLimiter,
     pub ws_pair_limiter: IpRateLimiter,
-    pub voice_listen_limiter: IpRateLimiter,
     pub pinstar_registry: crate::app::pinstar::svc::PinstarServerRegistry,
     pub is_draining: Arc<std::sync::atomic::AtomicBool>,
 }

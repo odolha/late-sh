@@ -12,7 +12,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{broadcast, mpsc, watch};
 use uuid::Uuid;
 
 use late_core::models::leaderboard::LeaderboardData;
@@ -25,10 +25,10 @@ use crate::{
     app::audio::{client_state::ClientAudioState, viz::Visualizer},
     app::files::inline_image::InlineImageSymbolMode,
     app::files::terminal_image::{
-        TerminalImageProtocol, TerminalImageRenderState, iterm2_capabilities_probe,
-        kitty_cleanup_commands, protocol_from_env_hint, protocol_from_term,
-        protocol_from_terminal_features, protocol_from_xtversion, term_disables_terminal_images,
-        terminal_image_cleanup_commands, terminal_string_terminator,
+        TerminalImageProtocol, TerminalImageRenderState, da1_probe, iterm2_capabilities_probe,
+        kitty_cleanup_commands, protocol_from_device_attributes, protocol_from_env_hint,
+        protocol_from_term, protocol_from_terminal_features, protocol_from_xtversion,
+        term_disables_terminal_images, terminal_image_cleanup_commands, terminal_string_terminator,
     },
     app::{
         chat,
@@ -46,36 +46,56 @@ use crate::{
     state::ActiveUsers,
 };
 
-/// Which desktop-notification OSC sequence(s) to emit. Chosen by the user
-/// in profile settings; stored as a string key and mapped here.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum NotificationMode {
-    Both,
-    Osc777,
-    Osc9,
+struct VoiceJoinTaskResult {
+    channel_id: Uuid,
+    username: String,
+    ticket: Result<crate::app::voice::svc::VoiceJoinTicket, String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VoiceToggleIntent {
+    JoinOrSwitch,
+    Leave,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IconPickerTarget {
+    Composer,
+    Reaction { room_id: Uuid, message_id: Uuid },
+}
+
+fn voice_toggle_intent(
+    joined_channel_id: Option<Uuid>,
+    active_channel_id: Option<Uuid>,
+) -> VoiceToggleIntent {
+    match (joined_channel_id, active_channel_id) {
+        (Some(joined), Some(active)) if joined != active => VoiceToggleIntent::JoinOrSwitch,
+        (Some(_), _) => VoiceToggleIntent::Leave,
+        (None, _) => VoiceToggleIntent::JoinOrSwitch,
+    }
 }
 
 pub(crate) const GAME_SELECTION_2048: usize = 0;
 pub(crate) const GAME_SELECTION_TETRIS: usize = 1;
-pub(crate) const GAME_SELECTION_SUDOKU: usize = 2;
-pub(crate) const GAME_SELECTION_NONOGRAMS: usize = 3;
-pub(crate) const GAME_SELECTION_MINESWEEPER: usize = 4;
-pub(crate) const GAME_SELECTION_SOLITAIRE: usize = 5;
-pub(crate) const GAME_SELECTION_SNAKE: usize = 6;
-pub(crate) const GAME_SELECTION_NES_SQUIRREL_DOMINO: usize = 7;
-pub(crate) const GAME_SELECTION_NES_THWAITE: usize = 8;
-pub(crate) const GAME_SELECTION_NES_DABG: usize = 9;
-pub(crate) const GAME_SELECTION_NES_FALLING: usize = 10;
-pub(crate) const GAME_SELECTION_NES_BRICK_BREAKER: usize = 11;
-pub(crate) const GAME_SELECTION_NES_ESCAPE_FROM_PONG: usize = 12;
-pub(crate) const GAME_SELECTION_NES_RHDE: usize = 13;
-pub(crate) const GAME_SELECTION_NES_CONCENTRATION_ROOM: usize = 14;
-pub(crate) const GAME_SELECTION_NES_ZAP_RUDER: usize = 15;
-pub(crate) const GAME_SELECTION_NES_2048: usize = 16;
-pub(crate) const GAME_SELECTION_RACER: usize = 17;
+pub(crate) const GAME_SELECTION_LE_WORD: usize = 2;
+pub(crate) const GAME_SELECTION_SUDOKU: usize = 3;
+pub(crate) const GAME_SELECTION_NONOGRAMS: usize = 4;
+pub(crate) const GAME_SELECTION_MINESWEEPER: usize = 5;
+pub(crate) const GAME_SELECTION_SOLITAIRE: usize = 6;
+pub(crate) const GAME_SELECTION_SNAKE: usize = 7;
+pub(crate) const GAME_SELECTION_RACER: usize = 8;
+pub(crate) const GAME_SELECTION_NES_SQUIRREL_DOMINO: usize = 9;
+pub(crate) const GAME_SELECTION_NES_THWAITE: usize = 10;
+pub(crate) const GAME_SELECTION_NES_DABG: usize = 11;
+pub(crate) const GAME_SELECTION_NES_FALLING: usize = 12;
+pub(crate) const GAME_SELECTION_NES_BRICK_BREAKER: usize = 13;
+pub(crate) const GAME_SELECTION_NES_ESCAPE_FROM_PONG: usize = 14;
+pub(crate) const GAME_SELECTION_NES_RHDE: usize = 15;
+pub(crate) const GAME_SELECTION_NES_CONCENTRATION_ROOM: usize = 16;
+pub(crate) const GAME_SELECTION_NES_ZAP_RUDER: usize = 17;
+pub(crate) const GAME_SELECTION_NES_2048: usize = 18;
+pub(crate) const GAME_SELECTION_RUBIKS_CUBE: usize = 19;
 pub(crate) const DEFAULT_GAME_SELECTION: usize = GAME_SELECTION_2048;
-pub(crate) const DOOR_SELECTION_LATEANIA: usize = 0;
-pub(crate) const DEFAULT_DOOR_GAME_SELECTION: usize = DOOR_SELECTION_LATEANIA;
 
 const BONSAI_V2_ACTIVITY_WINDOW_TICKS: usize = 15 * 60 * 5;
 
@@ -88,19 +108,6 @@ fn aquarium_area_for_terminal(cols: u16, rows: u16) -> Rect {
 pub(crate) enum DashboardGameToggleTarget {
     Arcade,
     Room,
-}
-
-impl NotificationMode {
-    /// Map the `notify_format` profile field to a concrete mode. Unknown
-    /// or missing values fall back to `Both`, matching the on-read
-    /// default in `late_core::models::user::extract_notify_format`.
-    pub(crate) fn from_format(format: Option<&str>) -> Self {
-        match format.unwrap_or("both") {
-            "osc777" => Self::Osc777,
-            "osc9" => Self::Osc9,
-            _ => Self::Both,
-        }
-    }
 }
 
 fn seed_activity_from_history(
@@ -193,10 +200,14 @@ pub struct SessionConfig {
     pub initial_2048_high_score: Option<late_core::models::twenty_forty_eight::HighScore>,
     pub tetris_service: crate::app::arcade::tetris::svc::LaterisService,
     pub snake_service: crate::app::arcade::snake::svc::SnakeService,
+    pub rubiks_cube_service: crate::app::arcade::rubiks_cube::svc::RubiksCubeService,
     pub initial_tetris_game: Option<late_core::models::tetris::Game>,
     pub initial_snake_game: Option<late_core::models::snake::Game>,
     pub initial_tetris_high_score: Option<late_core::models::tetris::HighScore>,
     pub initial_snake_high_score: Option<late_core::models::snake::HighScore>,
+    pub le_word_service: crate::app::arcade::le_word::svc::LeWordService,
+    pub initial_le_word_daily_word: Option<late_core::models::le_word::DailyWord>,
+    pub initial_le_word_game: Option<late_core::models::le_word::Game>,
     pub sudoku_service: crate::app::arcade::sudoku::svc::SudokuService,
     pub initial_sudoku_games: Vec<late_core::models::sudoku::Game>,
     pub nonogram_service: crate::app::arcade::nonogram::svc::NonogramService,
@@ -234,6 +245,11 @@ pub struct SessionConfig {
 
     /// Session / connection
     pub web_url: String,
+    /// Rebels in the Sky door-game backend (from the global Config).
+    pub rebels_enabled: bool,
+    pub rebels_host: String,
+    pub rebels_port: u16,
+    pub rebels_secret: String,
     pub session_token: String,
     pub session_registry: Option<SessionRegistry>,
     pub paired_client_registry: Option<PairedClientRegistry>,
@@ -349,6 +365,8 @@ pub struct App {
     pub(crate) audio: crate::app::audio::state::AudioState,
     pub(crate) voice: crate::app::voice::state::VoiceState,
     pub(crate) voice_service: crate::app::voice::svc::VoiceService,
+    voice_join_tx: mpsc::UnboundedSender<VoiceJoinTaskResult>,
+    voice_join_rx: mpsc::UnboundedReceiver<VoiceJoinTaskResult>,
     pub(crate) user_id: Uuid,
     pub(crate) permissions: Permissions,
     pub(crate) is_admin: bool,
@@ -416,10 +434,22 @@ pub struct App {
     pub(crate) game_selection: usize,
     pub(crate) is_playing_game: bool,
     pub(crate) dashboard_game_toggle_target: Option<DashboardGameToggleTarget>,
-    pub(crate) door_game_selection: usize,
     pub(crate) door_delete_confirm: bool,
     pub(crate) lateania_service: crate::app::door::lateania::svc::LateaniaService,
     pub(crate) lateania_state: Option<crate::app::door::lateania::state::State>,
+    pub(crate) rebels_state: Option<crate::app::door::rebels::state::State>,
+    /// Per-session TERM string (from the PTY request), used to size the rebels
+    /// PTY.
+    pub(crate) rebels_term: String,
+    /// Rebels in the Sky backend config (from the global Config).
+    pub(crate) rebels_enabled: bool,
+    pub(crate) rebels_host: String,
+    pub(crate) rebels_port: u16,
+    pub(crate) rebels_secret: String,
+    /// Render-loop wakeup, set by the active transport. Threaded into the rebels
+    /// proxy so new remote output repaints promptly. `None` in headless/test
+    /// paths (no render loop).
+    pub(crate) repaint_signal: Option<std::sync::Arc<crate::render_signal::RenderSignal>>,
     pub(crate) rooms_service: crate::app::rooms::svc::RoomsService,
     pub(crate) room_game_registry: crate::app::rooms::registry::RoomGameRegistry,
     pub(crate) rooms_selected_index: usize,
@@ -427,6 +457,8 @@ pub struct App {
     pub(crate) rooms_last_active_room_id: Option<Uuid>,
     pub(crate) rooms_last_touched_room_id: Option<Uuid>,
     pub(crate) rooms_last_touched_at: Option<Instant>,
+    pub(crate) rooms_enter_request_id: u64,
+    pub(crate) rooms_pending_enter_request_id: Option<u64>,
     pub(crate) rooms_create_flow: Option<crate::app::rooms::backend::CreateRoomFlow>,
     pub(crate) rooms_filter: crate::app::rooms::filter::RoomsFilter,
     pub(crate) rooms_search_active: bool,
@@ -439,6 +471,8 @@ pub struct App {
     pub(crate) twenty_forty_eight_state: crate::app::arcade::twenty_forty_eight::state::State,
     pub(crate) tetris_state: crate::app::arcade::tetris::state::State,
     pub(crate) snake_state: crate::app::arcade::snake::state::State,
+    pub(crate) rubiks_cube_state: crate::app::arcade::rubiks_cube::state::State,
+    pub(crate) le_word_state: crate::app::arcade::le_word::state::State,
     pub(crate) sudoku_state: crate::app::arcade::sudoku::state::State,
     pub(crate) nonogram_state: crate::app::arcade::nonogram::state::State,
     pub(crate) solitaire_state: crate::app::arcade::solitaire::state::State,
@@ -446,6 +480,10 @@ pub struct App {
     pub(crate) nes_cabinet_state: crate::app::arcade::nes_cabinet::state::State,
     pub(crate) racer_state: crate::app::arcade::racer::state::State,
     pub(crate) active_room_game: Option<Box<dyn crate::app::rooms::backend::ActiveRoomBackend>>,
+    /// Rooms whose current pending turn already emitted a "your turn"
+    /// notification; each room is cleared once that turn passes.
+    pub(crate) rooms_turn_notified_room_ids: HashSet<Uuid>,
+    pub(crate) rooms_last_turn_scan_at: Option<Instant>,
     /// `Some` while the user is inside the dartboard game, `None` otherwise.
     /// Constructed on entry (connecting + consuming a color slot) and
     /// dropped on leave (firing `server.disconnect()` via `LocalClient`'s
@@ -501,8 +539,10 @@ pub struct App {
     pub(crate) inline_image_symbol_mode: InlineImageSymbolMode,
     pub(crate) terminal_image_render_state: TerminalImageRenderState,
 
-    /// Last time a desktop notification was emitted (shared cooldown).
-    pub(crate) last_notify_at: Option<Instant>,
+    /// Desktop-notification domain: producers push through cloned
+    /// `notifier` handles; render drains `notify_outbox` into OSC bytes.
+    pub(crate) notifier: crate::app::notify::Notifier,
+    pub(crate) notify_outbox: crate::app::notify::Outbox,
 
     /// Last background color sent to the terminal via OSC 11 (if any).
     pub(crate) last_terminal_bg: Option<ratatui::style::Color>,
@@ -514,6 +554,7 @@ pub struct App {
     pub(crate) icon_picker_open: bool,
     pub(crate) icon_picker_state: super::icon_picker::IconPickerState,
     pub(crate) icon_catalog: Option<super::icon_picker::catalog::IconCatalogData>,
+    pub(crate) icon_picker_target: IconPickerTarget,
 
     /// Most recent left-button click inside the chat scroll, used to
     /// disambiguate single vs double clicks on message bodies and
@@ -628,6 +669,7 @@ impl App {
         };
         let inline_image_symbol_mode = InlineImageSymbolMode::from_identity(&config.term);
         let pending_terminal_commands = Vec::new();
+        let (notifier, notify_outbox) = crate::app::notify::channel();
 
         let twenty_forty_eight_state = if let Some(game) = config.initial_2048_game {
             crate::app::arcade::twenty_forty_eight::state::State::restore(
@@ -703,6 +745,16 @@ impl App {
             config.user_id,
             config.sudoku_service.clone(),
             config.initial_sudoku_games,
+        );
+        let rubiks_cube_state = crate::app::arcade::rubiks_cube::state::State::new(
+            config.user_id,
+            config.rubiks_cube_service.clone(),
+        );
+        let le_word_state = crate::app::arcade::le_word::state::State::new(
+            config.user_id,
+            config.le_word_service.clone(),
+            config.initial_le_word_daily_word,
+            config.initial_le_word_game,
         );
         let nonogram_state = crate::app::arcade::nonogram::state::State::new(
             config.user_id,
@@ -840,6 +892,7 @@ impl App {
         let active_users = config.active_users.clone();
         let afk_users = config.afk_users.clone();
         let voice_service = config.voice_service.clone();
+        let (voice_join_tx, voice_join_rx) = mpsc::unbounded_channel();
         let splash_hint = super::common::splash_tips::choose_splash_hint(config.is_new_user);
         let initial_profile = Profile {
             theme_id: Some(config.initial_theme_id.clone()),
@@ -902,6 +955,8 @@ impl App {
             audio: crate::app::audio::state::AudioState::new(config.audio_service, config.user_id),
             voice: crate::app::voice::state::VoiceState::new(config.voice_service),
             voice_service,
+            voice_join_tx,
+            voice_join_rx,
             user_id: config.user_id,
             permissions: config.permissions,
             is_admin: config.permissions.is_admin(),
@@ -920,6 +975,7 @@ impl App {
                 config.user_id,
                 config.permissions,
                 active_users.clone(),
+                notifier.clone(),
             ),
             afk_user_ids: crate::state::afk_users_snapshot(&afk_users),
             dashboard_chat_rows_cache: chat::ui::ChatRowsCache::default(),
@@ -967,10 +1023,16 @@ impl App {
             game_selection: DEFAULT_GAME_SELECTION,
             is_playing_game: false,
             dashboard_game_toggle_target: None,
-            door_game_selection: DEFAULT_DOOR_GAME_SELECTION,
             door_delete_confirm: false,
             lateania_service: config.lateania_service,
             lateania_state: None,
+            rebels_state: None,
+            rebels_term: config.term.clone(),
+            rebels_enabled: config.rebels_enabled,
+            rebels_host: config.rebels_host,
+            rebels_port: config.rebels_port,
+            rebels_secret: config.rebels_secret,
+            repaint_signal: None,
             rooms_service: config.rooms_service,
             room_game_registry: config.room_game_registry,
             rooms_selected_index: 0,
@@ -978,6 +1040,8 @@ impl App {
             rooms_last_active_room_id: None,
             rooms_last_touched_room_id: None,
             rooms_last_touched_at: None,
+            rooms_enter_request_id: 0,
+            rooms_pending_enter_request_id: None,
             rooms_create_flow: None,
             rooms_filter: crate::app::rooms::filter::RoomsFilter::default(),
             rooms_search_active: false,
@@ -989,6 +1053,8 @@ impl App {
             twenty_forty_eight_state,
             tetris_state,
             snake_state,
+            rubiks_cube_state,
+            le_word_state,
             sudoku_state,
             nonogram_state,
             solitaire_state,
@@ -996,6 +1062,8 @@ impl App {
             nes_cabinet_state,
             racer_state,
             active_room_game: None,
+            rooms_turn_notified_room_ids: HashSet::new(),
+            rooms_last_turn_scan_at: None,
             dartboard_state: None,
             directory_state: crate::app::directory::state::DirectoryState::new(),
             pinstar_state: None,
@@ -1016,11 +1084,13 @@ impl App {
             terminal_images_disabled,
             inline_image_symbol_mode,
             terminal_image_render_state: TerminalImageRenderState::default(),
-            last_notify_at: None,
+            notifier,
+            notify_outbox,
             is_draining: config.is_draining,
             icon_picker_open: false,
             icon_picker_state: super::icon_picker::IconPickerState::default(),
             icon_catalog: None,
+            icon_picker_target: IconPickerTarget::Composer,
             last_chat_click: None,
             pending_chat_profile_open: None,
             last_terminal_bg: None,
@@ -1082,6 +1152,35 @@ impl App {
 
     pub(crate) fn leave_lateania(&mut self) {
         self.lateania_state = None;
+    }
+
+    /// Store the active transport's render-loop wakeup so the rebels proxy can
+    /// repaint promptly on new remote output.
+    pub(crate) fn set_repaint_signal(
+        &mut self,
+        signal: std::sync::Arc<crate::render_signal::RenderSignal>,
+    ) {
+        self.repaint_signal = Some(signal);
+    }
+
+    pub(crate) fn enter_rebels(&mut self) {
+        if self.rebels_state.is_some() {
+            return;
+        }
+        self.rebels_state = Some(crate::app::door::rebels::state::State::new(
+            self.user_id,
+            self.rebels_host.clone(),
+            self.rebels_port,
+            self.rebels_secret.clone(),
+            self.rebels_term.clone(),
+            self.rebels_enabled,
+            self.repaint_signal.clone(),
+        ));
+    }
+
+    fn leave_rebels(&mut self) {
+        // Dropping the State drops the proxy, which closes the outbound channel.
+        self.rebels_state = None;
     }
 
     pub(crate) fn activate_artboard_interaction(&mut self) -> bool {
@@ -1276,6 +1375,9 @@ impl App {
 
     pub(crate) fn set_screen(&mut self, screen: Screen) {
         if self.screen == screen {
+            if screen == Screen::Rebels {
+                self.enter_rebels();
+            }
             if screen == Screen::Artboard {
                 self.enter_dartboard();
             }
@@ -1308,6 +1410,11 @@ impl App {
             self.force_full_repaint();
         }
 
+        if self.screen == Screen::Rebels {
+            self.leave_rebels();
+            self.force_full_repaint();
+        }
+
         if self.screen == Screen::Pinstar {
             self.leave_pinstar();
             self.force_full_repaint();
@@ -1322,6 +1429,9 @@ impl App {
 
         if self.screen == Screen::Artboard {
             self.enter_dartboard();
+        }
+        if self.screen == Screen::Rebels {
+            self.enter_rebels();
         }
         if self.screen == Screen::Pinstar {
             self.enter_directory();
@@ -1350,6 +1460,12 @@ impl App {
     }
 
     pub(crate) fn apply_xtversion_reply(&mut self, value: &str) {
+        tracing::trace!(
+            value,
+            protocol = ?protocol_from_xtversion(value),
+            images_disabled = self.terminal_images_disabled,
+            "terminal xtversion reply"
+        );
         self.apply_inline_image_symbol_mode(InlineImageSymbolMode::from_identity(value));
         if self.terminal_images_disabled {
             return;
@@ -1360,10 +1476,38 @@ impl App {
     }
 
     pub(crate) fn apply_terminal_capabilities(&mut self, value: &str) {
+        tracing::trace!(
+            value,
+            protocol = ?protocol_from_terminal_features(value),
+            images_disabled = self.terminal_images_disabled,
+            "terminal capabilities reply"
+        );
         if self.terminal_images_disabled {
             return;
         }
         if let Some(protocol) = protocol_from_terminal_features(value) {
+            self.terminal_image_protocol = Some(protocol);
+        }
+    }
+
+    pub(crate) fn apply_primary_device_attributes(&mut self, attrs: &[u16]) {
+        tracing::trace!(
+            ?attrs,
+            current_protocol = ?self.terminal_image_protocol,
+            images_disabled = self.terminal_images_disabled,
+            "terminal DA1 reply"
+        );
+        if self.terminal_images_disabled {
+            return;
+        }
+        // DA1 sixel is the weakest protocol signal: terminals like WezTerm
+        // advertise sixel here while supporting richer iTerm2 graphics, so
+        // never displace a protocol detected from TERM, env hints, XTVERSION,
+        // or the iTerm2 capabilities reply.
+        if self.terminal_image_protocol.is_some() {
+            return;
+        }
+        if let Some(protocol) = protocol_from_device_attributes(attrs) {
             self.terminal_image_protocol = Some(protocol);
         }
     }
@@ -1388,6 +1532,16 @@ impl App {
     pub fn handle_input(&mut self, data: &[u8]) {
         if !data.is_empty() {
             self.bonsai_v2_activity_ticks_remaining = BONSAI_V2_ACTIVITY_WINDOW_TICKS;
+        }
+        // While the proxied rebels game is running, every byte (keys + mouse)
+        // goes straight to the remote; late.sh parses nothing. Exit is by
+        // quitting rebels itself (Esc/Ctrl-C), which closes the channel.
+        if self.screen == crate::app::common::primitives::Screen::Rebels
+            && let Some(state) = self.rebels_state.as_ref()
+            && state.is_running()
+        {
+            state.forward_input(data);
+            return;
         }
         crate::app::input::handle(self, data)
     }
@@ -1528,54 +1682,104 @@ impl App {
             .is_some_and(|registry| registry.has_voice_cli(&self.session_token))
     }
 
+    /// The voice channel the user can currently join, based on the visible
+    /// chat or active game surface.
+    pub fn active_voice_channel(&self) -> Option<Uuid> {
+        if let Screen::Rooms = self.screen
+            && let Some(room) = self.rooms_active_room.as_ref()
+        {
+            return room.voice_channel_id;
+        }
+        let room_id = self.current_visible_chat_room_id()?;
+        self.chat.room_voice_channel_id(room_id)
+    }
+
     pub fn voice_join(&mut self) -> Banner {
-        let Some(registry) = &self.paired_client_registry else {
+        let Some(channel_id) = self.active_voice_channel() else {
+            return Banner::error("No voice channel here.");
+        };
+        if self.paired_client_registry.is_none() {
             return Banner::error("No paired CLI with voice support. Update and run `late`.");
         };
+        self.start_voice_join_task(channel_id);
+
+        Banner::success("Joining voice muted...")
+    }
+
+    fn start_voice_join_task(&mut self, channel_id: Uuid) {
         let username = self.username.clone();
         let muted = true;
         let deafened = false;
-        let ticket = match self
-            .voice_service
-            .join_ticket(self.user_id, &username, muted, deafened)
-        {
-            Ok(ticket) => ticket,
-            Err(err) => return Banner::error(&err.to_string()),
-        };
-
-        let sent = registry.send_control_to_voice_cli(
-            &self.session_token,
-            PairControlMessage::VoiceJoin {
-                room: ticket.room.clone(),
-                url: ticket.url,
-                token: ticket.token,
-                muted: ticket.muted,
-                deafened: ticket.deafened,
-            },
-        );
-        if !sent {
-            return Banner::error("No paired CLI with voice support. Update and run `late`.");
-        }
-
-        self.voice_service.update_local_state(
-            self.user_id,
-            username,
-            ticket.muted,
-            ticket.deafened,
-            false,
-        );
-        Banner::success("Joining voice muted")
+        let user_id = self.user_id;
+        let voice = self.voice_service.clone();
+        let tx = self.voice_join_tx.clone();
+        tokio::spawn(async move {
+            let ticket = voice
+                .checked_join_ticket(channel_id, user_id, &username, muted, deafened)
+                .await
+                .map_err(|err| err.to_string());
+            let _ = tx.send(VoiceJoinTaskResult {
+                channel_id,
+                username,
+                ticket,
+            });
+        });
     }
 
-    pub fn voice_leave(&mut self) -> Banner {
+    pub(crate) fn drain_voice_join_results(&mut self) {
+        while let Ok(result) = self.voice_join_rx.try_recv() {
+            self.handle_voice_join_result(result);
+        }
+    }
+
+    fn handle_voice_join_result(&mut self, result: VoiceJoinTaskResult) {
+        let ticket = match result.ticket {
+            Ok(ticket) => ticket,
+            Err(message) => {
+                self.banner = Some(Banner::error(&message));
+                return;
+            }
+        };
+        if self.active_voice_channel() != Some(result.channel_id) {
+            self.banner = Some(Banner::error("Voice room changed before join completed"));
+            return;
+        }
+
         let sent = self
             .paired_client_registry
             .as_ref()
             .is_some_and(|registry| {
-                registry
-                    .send_control_to_voice_cli(&self.session_token, PairControlMessage::VoiceLeave)
+                registry.send_control_to_voice_cli(
+                    &self.session_token,
+                    PairControlMessage::VoiceJoin {
+                        room: ticket.room.clone(),
+                        url: ticket.url,
+                        token: ticket.token,
+                        muted: ticket.muted,
+                        deafened: ticket.deafened,
+                    },
+                )
             });
-        self.voice_service.leave(self.user_id);
+        if !sent {
+            self.banner = Some(Banner::error(
+                "No paired CLI with voice support. Update and run `late`.",
+            ));
+            return;
+        }
+
+        self.voice_service.update_local_state(
+            result.channel_id,
+            self.user_id,
+            result.username,
+            ticket.muted,
+            ticket.deafened,
+            false,
+        );
+        self.banner = Some(Banner::success("Joining voice muted"));
+    }
+
+    pub fn voice_leave(&mut self) -> Banner {
+        let sent = self.voice_leave_current_channel();
         if sent {
             Banner::success("Left voice")
         } else {
@@ -1584,11 +1788,25 @@ impl App {
     }
 
     pub fn voice_toggle_join(&mut self) -> Banner {
-        if self.voice.is_joined(self.user_id) {
-            self.voice_leave()
-        } else {
-            self.voice_join()
+        match voice_toggle_intent(
+            self.voice.current_room(self.user_id),
+            self.active_voice_channel(),
+        ) {
+            VoiceToggleIntent::JoinOrSwitch => self.voice_join(),
+            VoiceToggleIntent::Leave => self.voice_leave(),
         }
+    }
+
+    fn voice_leave_current_channel(&mut self) -> bool {
+        let sent = self
+            .paired_client_registry
+            .as_ref()
+            .is_some_and(|registry| {
+                registry
+                    .send_control_to_voice_cli(&self.session_token, PairControlMessage::VoiceLeave)
+            });
+        self.voice_service.leave(self.user_id);
+        sent
     }
 
     pub fn voice_toggle_muted(&mut self) -> Banner {
@@ -1608,13 +1826,16 @@ impl App {
         if !sent {
             return Banner::error("No paired CLI with voice support");
         }
-        self.voice_service.update_local_state(
-            self.user_id,
-            self.username.clone(),
-            muted,
-            self.voice.deafened(self.user_id),
-            false,
-        );
+        if let Some(room_id) = self.voice.current_room(self.user_id) {
+            self.voice_service.update_local_state(
+                room_id,
+                self.user_id,
+                self.username.clone(),
+                muted,
+                self.voice.deafened(self.user_id),
+                false,
+            );
+        }
         if muted {
             Banner::success("Voice mic muted")
         } else {
@@ -1639,13 +1860,16 @@ impl App {
         if !sent {
             return Banner::error("No paired CLI with voice support");
         }
-        self.voice_service.update_local_state(
-            self.user_id,
-            self.username.clone(),
-            self.voice.muted(self.user_id),
-            deafened,
-            false,
-        );
+        if let Some(room_id) = self.voice.current_room(self.user_id) {
+            self.voice_service.update_local_state(
+                room_id,
+                self.user_id,
+                self.username.clone(),
+                self.voice.muted(self.user_id),
+                deafened,
+                false,
+            );
+        }
         if deafened {
             Banner::success("Voice deafened")
         } else {
@@ -1694,6 +1918,9 @@ impl App {
         buf.extend_from_slice(b"\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[?2004h");
         buf.extend_from_slice(&crate::app::files::terminal_image::xtversion_probe());
         buf.extend_from_slice(&iterm2_capabilities_probe());
+        // DA1 last: nearly every terminal answers it, and replies arrive in
+        // probe order, so the richer protocol replies above get first claim.
+        buf.extend_from_slice(&da1_probe());
         buf
     }
 
@@ -1785,35 +2012,6 @@ mod tests {
     }
 
     #[test]
-    fn notification_mode_from_format_maps_known_values() {
-        assert_eq!(
-            NotificationMode::from_format(Some("both")),
-            NotificationMode::Both
-        );
-        assert_eq!(
-            NotificationMode::from_format(Some("osc777")),
-            NotificationMode::Osc777
-        );
-        assert_eq!(
-            NotificationMode::from_format(Some("osc9")),
-            NotificationMode::Osc9
-        );
-    }
-
-    #[test]
-    fn notification_mode_from_format_defaults_to_both() {
-        assert_eq!(NotificationMode::from_format(None), NotificationMode::Both);
-        assert_eq!(
-            NotificationMode::from_format(Some("")),
-            NotificationMode::Both
-        );
-        assert_eq!(
-            NotificationMode::from_format(Some("garbage")),
-            NotificationMode::Both
-        );
-    }
-
-    #[test]
     fn seed_activity_from_history_drops_events_already_in_history() {
         let (tx, mut rx) = tokio::sync::broadcast::channel(8);
         let event = ActivityEvent::joined(uuid::Uuid::nil(), "alice");
@@ -1867,5 +2065,44 @@ mod tests {
     fn cursor_shape_sequences_match_expected_descusr_codes() {
         assert_eq!(CURSOR_SHAPE_STEADY_BLOCK, b"\x1b[2 q");
         assert_eq!(CURSOR_SHAPE_STEADY_UNDERLINE, b"\x1b[4 q");
+    }
+
+    #[test]
+    fn voice_toggle_intent_joins_when_not_already_in_voice() {
+        let active = uuid::Uuid::from_u128(1);
+
+        assert_eq!(
+            voice_toggle_intent(None, Some(active)),
+            VoiceToggleIntent::JoinOrSwitch
+        );
+        assert_eq!(
+            voice_toggle_intent(None, None),
+            VoiceToggleIntent::JoinOrSwitch
+        );
+    }
+
+    #[test]
+    fn voice_toggle_intent_leaves_current_voice_room() {
+        let room = uuid::Uuid::from_u128(1);
+
+        assert_eq!(
+            voice_toggle_intent(Some(room), Some(room)),
+            VoiceToggleIntent::Leave
+        );
+        assert_eq!(
+            voice_toggle_intent(Some(room), None),
+            VoiceToggleIntent::Leave
+        );
+    }
+
+    #[test]
+    fn voice_toggle_intent_switches_to_active_voice_room() {
+        let joined = uuid::Uuid::from_u128(1);
+        let active = uuid::Uuid::from_u128(2);
+
+        assert_eq!(
+            voice_toggle_intent(Some(joined), Some(active)),
+            VoiceToggleIntent::JoinOrSwitch
+        );
     }
 }

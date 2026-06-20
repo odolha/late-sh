@@ -6,7 +6,7 @@ use serde_json::json;
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 #[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::{
     env, fs,
     fs::OpenOptions,
@@ -192,6 +192,13 @@ impl WebviewPlaybackController {
         if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             command.env("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
+        #[cfg(unix)]
+        {
+            // Keep WebKitGTK media subprocesses in the helper's process group
+            // so switching away from YouTube can terminate the whole helper
+            // tree on Linux setups where playback outlives the direct child.
+            command.process_group(0);
+        }
 
         let child = match command.spawn() {
             Ok(child) => child,
@@ -326,13 +333,29 @@ impl WebviewPlaybackController {
         let Some(mut child) = self.child.take() else {
             return;
         };
-        if let Err(err) = child.kill() {
+        if let Err(err) = kill_webview_helper(&mut child) {
             warn!(error = %err, "failed to stop embedded YouTube webview helper");
             return;
         }
         let _ = child.wait();
         info!("stopped embedded YouTube webview helper");
     }
+}
+
+#[cfg(unix)]
+fn kill_webview_helper(child: &mut Child) -> Result<()> {
+    let pid = child.id() as i32;
+    nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(-pid),
+        nix::sys::signal::Signal::SIGKILL,
+    )
+    .with_context(|| format!("failed to kill webview helper process group {pid}"))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn kill_webview_helper(child: &mut Child) -> Result<()> {
+    child.kill().context("failed to kill webview helper")
 }
 
 struct WebviewHelperStderr {
@@ -532,6 +555,7 @@ pub(super) async fn run_viz_ws(
     info!("pair websocket established");
     let mut heartbeat = interval(Duration::from_secs(1));
     let mut voice_state_heartbeat = interval(Duration::from_secs(15));
+    let mut voice_speaking_poll = interval(Duration::from_millis(250));
     send_client_state(&mut ws, client, playback).await?;
     let mut last_icecast_output_available =
         playback.icecast_output_available.load(Ordering::Relaxed);
@@ -577,6 +601,11 @@ pub(super) async fn run_viz_ws(
             }
             _ = voice_state_heartbeat.tick(), if voice.joined => {
                 send_voice_state(&mut ws, voice).await?;
+            }
+            _ = voice_speaking_poll.tick(), if voice.joined => {
+                if voice.sync_speaking_from_media() {
+                    send_voice_state(&mut ws, voice).await?;
+                }
             }
             maybe_msg = ws.next() => {
                 let Some(msg) = maybe_msg else {

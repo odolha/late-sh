@@ -3,7 +3,7 @@
 ## Metadata
 - Domain: late.sh SSH chat, synthetic chat entries, and dashboard/room chat surfaces
 - Primary audience: LLM agents working in `late-ssh/src/app/chat`
-- Last updated: 2026-06-11
+- Last updated: 2026-06-17
 - Status: Active
 - Parent context: `../../../../CONTEXT.md`
 
@@ -17,7 +17,7 @@ Included here:
 - Home chat rooms, DMs, public/private topic rooms, synthetic entries, and game-backed room chat.
 - Home/Dashboard chat center, room rail, and embedded Rooms chat surfaces.
 - Message composer, replies, edits, deletes, reactions, pinned messages, ignores, overlays, and autocomplete.
-- Synthetic chat entries: RSS, News, Mentions/Notifications, Voice, and Discover. Showcase/Projects and Work/Profiles still use chat-adjacent services/state, but their UI is hosted on Directory page 6.
+- Synthetic chat entries: RSS, News, Mentions/Notifications, and Discover. Voice is not a synthetic room slot; enabled chat/game rooms render an embedded voice strip and expose `/voice`/`/mute` controls. Showcase/Projects and Work/Profiles still use chat-adjacent services/state, but their UI is hosted on Directory page 7.
 - Chat service refresh/tail/event contracts, DB model constraints, keybindings, tests, and gotchas.
 
 Global SSH, audio, games, profile, rooms/blackjack, observability, and repo-wide test policy stay in the root context.
@@ -39,8 +39,8 @@ late-ssh/src/app/chat/
 |-- news/                        # Synthetic News entry: articles + #lounge announcement
 |-- notifications/               # Synthetic Mentions entry: mention notifications
 |-- polls/                       # /poll modal state/input/UI
-|-- showcase/                    # Projects service/state/UI reused by Directory page 6
-`-- work/                        # Profiles service/state/UI reused by Directory page 6
+|-- showcase/                    # Projects service/state/UI reused by Directory page 7
+`-- work/                        # Profiles service/state/UI reused by Directory page 7
 ```
 
 Related tests:
@@ -48,8 +48,10 @@ Related tests:
 ```text
 late-ssh/tests/chat/
 |-- main.rs
+|-- announcements.rs             # Login #announcements loading/read-cursor behavior
 |-- svc.rs                       # Broad ChatService integration coverage
 |-- news.rs                      # ArticleService integration coverage
+|-- sheet.rs                     # Character-sheet model/service coverage
 |-- showcase.rs                  # ShowcaseService integration coverage
 |-- work.rs                      # WorkService integration coverage
 `-- state.rs                     # Placeholder; direct ChatState integration tests need more accessors
@@ -106,7 +108,7 @@ Normal display flow:
 
 Login announcements:
 - `app::announcements::load_login_announcements` runs during SSH session bootstrap, outside `ChatState`.
-- If public `#announcements` exists, the user is idempotently joined, up to the latest unread messages from other users are loaded from `chat_messages`, and `chat_room_members.last_read_at` advances to the newest displayed message.
+- If public `#announcements` exists, the user is idempotently joined and up to 10 oldest unread messages from other users are loaded from `chat_messages` without marking them read. Dismissing the modal advances `chat_room_members.last_read_at` to `latest_displayed_at()`.
 - The resulting modal is stored on `App`, appears only after splash/settings are gone, consumes input while visible, scrolls with j/k, and closes on Enter/Esc/q.
 
 ---
@@ -139,7 +141,7 @@ Messages:
 
 Reactions:
 - `chat_message_reactions` primary key is `(message_id, user_id)`.
-- Each user has at most one numeric reaction kind `0..=9` per message.
+- Each user has at most one icon-picker reaction per message.
 - Message/user deletion cascades remove reactions.
 
 Notifications:
@@ -151,17 +153,16 @@ Notifications:
 
 ## 6. Rooms And Selection
 
-`RoomSlot` represents either a real room or one of the Home synthetic entries: RSS (`RoomSlot::Feeds`), News, Notifications/Mentions, Voice, or Discover. `RoomSlot::Showcase` and `RoomSlot::Work` remain in code for state compatibility and focused helpers, but they are no longer emitted by Home visual order, room rail, or room jump.
+`RoomSlot` represents either a real room or one of the Home synthetic entries: RSS (`RoomSlot::Feeds`), News, Notifications/Mentions, or Discover. `RoomSlot::Showcase` and `RoomSlot::Work` remain in code for state compatibility and focused helpers, but they are no longer emitted by Home visual order, room rail, or room jump. Voice is rendered as an embedded strip on voice-enabled rooms, not as its own room slot.
 
 Visual order is defined in `state.rs::visual_order_for_rooms` and mirrored by cozy room-rail rendering in `ui.rs`. The base navigation order is:
 1. Favorite real rooms in `users.settings.favorite_room_ids` order.
-2. Core permanent rooms: `lounge`, `announcements`, `suggestions`, `bugs`.
-3. Notifications/Mentions.
-4. News.
-5. RSS, when the current user has at least one RSS/Atom subscription.
-6. Other non-DM chat-list rooms/channels, excluding favorites.
-7. DMs, sorted by unread status, then snapshot latest-message activity, then peer display name. Do not derive this order from lazily loaded room tails.
-8. Discover / `+ browse rooms`.
+2. Core permanent rooms plus synthetic updates: `lounge`, `announcements`, `suggestions`, `bugs`, Notifications/Mentions, News, and RSS when available. Collapsing Core hides these synthetic update entries too.
+3. Other non-DM chat-list rooms/channels, excluding favorites.
+4. DMs, sorted by unread status, then snapshot latest-message activity, then peer display name. Do not derive this order from lazily loaded room tails.
+5. Discover / `+ browse rooms`.
+
+`RoomSection::Updates` remains only for legacy Directory-hosted Showcase/Work state; collapsing Updates does not affect Home rail entries.
 
 Hub Shop room effects add render-time top sections in the cozy room rail. Active `room_bump` effects on non-permanent public topic rooms render first under a dedicated `bumped` section as plain synthetic `join #slug` text rows; the synthetic row never shows glow/spark/pulse/hack/bump suffixes. The real room stays in its normal navigation section if the viewer has it, and pressing Enter on the synthetic row joins/moves through the existing public-room join path. `room_spark`, `room_glow`, and `room_pulse` are one-minute page-level visuals over the selected room content; they must not add top text, promote rooms, or restyle room-list rows. `pinned_vibe` is sold as Hack Room: for one hour it is the only effect allowed to change real room-list text/color, adding the `hacking` suffix for every viewer. Active effects flow through `ChatRoomListView.active_room_effects`. Hit testing uses the same visual slot list, so bumped room clicks stay aligned with rendering.
 
@@ -177,7 +178,7 @@ Game rooms stay in `ChatState.rooms` for embedded Rooms chat, but `is_chat_list_
 Room navigation:
 - `h`/`l`, left/right arrows, `Ctrl+P`/`Ctrl+N` switch room selection.
 - `Space` activates room-jump mode, assigning keys from `ROOM_JUMP_KEYS`. Jumping to the already selected room/synthetic entry still re-runs the entry's read/list side effects so stale unread badges clear.
-- Global `Ctrl+/` opens the room jump modal. Rows include unread counts and synthetic entries for RSS, News, Voice, Mentions, and custom room browse. Showcase/Projects and Work/Profiles live on Directory page 6 instead. Results are ordered favorites first, then unread entries, then latest message/activity; typed `@` and `#` prefixes filter to DMs or rooms while keeping that ordering.
+- Global `Ctrl+/` opens the room jump modal. Rows include unread counts and synthetic entries for RSS, News, Mentions, and custom room browse. Showcase/Projects and Work/Profiles live on Directory page 7 instead. Results are ordered favorites first, then unread entries, then latest message/activity; typed `@` and `#` prefixes filter to DMs or rooms while keeping that ordering.
 - While composing on Home, `Ctrl+N`/`Ctrl+P` switch real rooms while preserving draft text and dropping reply/edit state.
 - Synthetic entries are selected with booleans (`news_selected`, `notifications_selected`, `discover_selected`, `showcase_selected`, `work_selected`), not `selected_room_id`.
 
@@ -245,6 +246,10 @@ User commands:
 - `/exit` opens quit confirm.
 - `/icons` opens the icon picker (same as `Ctrl+]`).
 - `/poll` opens a modal for the currently visible real room. Polls are room-scoped, support two or three options, can run for 10, 20, or 30 minutes, and are limited to one active poll per room. Active polls render at the top of the room message pane; while one is visible, `va`, `vb`, and `vc` vote for poll options. `v1`, `v2`, and `v3` remain music stream/station selectors. Failed starts show the remaining active wait in the banner.
+- `/roll [NdM ...]` rolls dice into the current room; bare `/roll` defaults to `d20`, caps are 100 dice per group and 1000 sides.
+- `/voice` joins the enabled voice channel for the active room; `/mute` toggles paired-CLI mic mute.
+- `/ultimate` opens owned Ultimate Spells.
+- Staff-only `/audio`, `/audio fallback`, and `/audio skip` route trusted music controls.
 - `/ignore [@user]` mutes a user or lists muted users.
 - `/invite @user` adds a user to the selected non-DM room.
 - `/leave` leaves the selected non-permanent room.
@@ -274,9 +279,10 @@ Moderation modal commands:
 - `view <@user|#room|bans|audit|artboard|help> [pagenumber]`
 - `artboard curate <live|YYYY-MM-DD> [reason...]`
 - `artboard restore [YYYY-MM-DD] [reason...]`
-- `kick <server|#room> @name [reason...]`
+- `room-voice <#room> <on|off>`
+- `kick <server|voice|#room> @name [reason...]`
 - `ban <server|#room|artboard|audio> @name [duration] [reason...]`
-- `unban <server|#room|artboard|audio> @name [reason...]`
+- `unban <server|#room|artboard|audio|voice> @name [reason...]`
 - `admin`
 - `admin grant mod @name`
 - `admin revoke mod @name`
@@ -301,7 +307,7 @@ Autocomplete:
 - Arrow keys move selection.
 - Tab/Enter confirms.
 - Esc dismisses popup without leaving compose mode.
-- Pressing `/` while not composing on Home starts command compose for the active room, except on News where `/` is a synthetic-entry filter toggle. Directory Profiles/Projects use `/` as the mine-only filter inside page 6.
+- Pressing `/` while not composing on Home starts command compose for the active room, except on News where `/` is a synthetic-entry filter toggle. Directory Profiles/Projects use `/` as the mine-only filter inside page 7.
 
 Image uploads and inline rendering:
 - File-upload storage is optional. It is enabled only when `LATE_FILES_S3_ENDPOINT`/`S3_ENDPOINT`, `LATE_FILES_S3_BUCKET`, `LATE_FILES_PUBLIC_BASE_URL`, and S3 credentials are present. Infra variable details live in `infra/README.md`.
@@ -312,7 +318,7 @@ Image uploads and inline rendering:
 - Non-admin uploads use a per-session `ChatState` cooldown. This is intentionally lightweight, not a server-side quota.
 - URL downloads for upload and inline rendering must go through `files::image_upload::download_url_bytes`: validate `http(s)`, reject localhost/private/link-local/reserved resolved IPs, pin reqwest DNS to the validated addresses, disable redirects, and stream with a hard byte cap. Do not add new ad hoc `reqwest.get(url).bytes()` paths for chat images.
 - Inline image rendering detects likely image URLs in visible room messages, fetches them through the same secure downloader, rejects oversized decoded dimensions, retries transient failures with backoff, and caches an `InlineImagePreview` by message id. Inline previews are only the RGB block fallback used by scrolling chat rows. Kitty/iTerm2/Sixel native image data is fetched separately, lazily, only while the explicit selected-message image modal is open on a supported terminal. Inline previews are best-effort; failures are intentionally silent/noisy only at trace level.
-- Kitty, iTerm2, and Sixel image support is intentionally narrow and modal-only. `files::terminal_image` detects Kitty-family terminals from PTY `TERM`, XTVERSION, and forwarded env hints: Kitty, Ghostty, Rio, Warp, and Konsole. It detects iTerm2-family support from `TERM_PROGRAM`/`LC_TERMINAL`, XTVERSION, `TERM_FEATURES`, `OSC 1337;Capabilities`, and env hints for iTerm2, WezTerm, mintty, and hterm-style identities. It detects Sixel from explicit identities (`windows terminal`, `foot`, `contour`, `mlterm`, `sixel`) plus `WT_SESSION`/`WT_PROFILE_ID` env hints. If `TERM` is tmux, full image previews are intentionally disabled and chat uses the RGB block fallback; no tmux graphics passthrough is attempted. Unsupported or undetected terminals, including stock Alacritty, keep the RGB block preview. Kitty images use late.sh-owned ids in the `0x4C000000..0x4CFFFFFF` range plus a dedicated z-index so cleanup can target them by range/z-index as well as by visible placement. Sixel payloads are generated only for Sixel sessions, use adaptive palette fallback, and fail back to the RGB block preview if the final payload still exceeds the hard byte cap or the cached Sixel size cannot fit the current modal. A forced repaint resets terminal image placement state so modal images are re-emitted after clear/resize/drop recovery. Direct terminals get Kitty cleanup commands on enter/leave alt-screen. Alt-screen enter/leave and forced full repaint begin with an ST terminator so a killed session that left iTerm2/Sixel inside an unterminated DCS/OSC image payload can recover before normal clear/repaint bytes. Closing an iTerm2 or Sixel image modal forces a full repaint because those inline images are not tracked/deleted like Kitty placements.
+- Kitty, iTerm2, and Sixel image support is intentionally narrow and modal-only. `files::terminal_image` detects Kitty-family terminals from PTY `TERM`, XTVERSION, and forwarded env hints: Kitty, Ghostty, Rio, Warp, and Konsole. It detects iTerm2-family support from `TERM_PROGRAM`/`LC_TERMINAL`, XTVERSION, `TERM_FEATURES`, `OSC 1337;Capabilities`, and env hints for iTerm2, WezTerm, mintty, and hterm-style identities. It detects Sixel from explicit identities (`windows terminal`, `foot`, `contour`, `mlterm`, `sixel`), `WT_SESSION`/`WT_PROFILE_ID` env hints, and DA1 (Primary Device Attributes) replies advertising attribute 4 — the DA1 probe is sent last at alt-screen entry and only fills in Sixel when no richer protocol was detected, so Kitty/iTerm2 always win over Sixel. If `TERM` is tmux, full image previews are intentionally disabled and chat uses the RGB block fallback; no tmux graphics passthrough is attempted. Unsupported or undetected terminals, including stock Alacritty, keep the RGB block preview. Kitty images use late.sh-owned ids in the `0x4C000000..0x4CFFFFFF` range plus a dedicated z-index so cleanup can target them by range/z-index as well as by visible placement. Sixel payloads are generated only for Sixel sessions, use adaptive palette fallback, and fail back to the RGB block preview if the final payload still exceeds the hard byte cap. Because Sixel has no terminal-side scaling, the image modal reports its image cell capacity into `TerminalImageFrame` during draw, the render loop feeds it back into chat state, and Sixel fetches encode to fit that capacity (first fetch is deferred one frame after the modal opens until capacity is known; a cached Sixel encode that no longer fits, e.g. after shrink, is re-fetched at the new capacity). A forced repaint resets terminal image placement state so modal images are re-emitted after clear/resize/drop recovery. Direct terminals get Kitty cleanup commands on enter/leave alt-screen. Alt-screen enter/leave and forced full repaint begin with an ST terminator so a killed session that left iTerm2/Sixel inside an unterminated DCS/OSC image payload can recover before normal clear/repaint bytes. Closing an iTerm2 or Sixel image modal forces a full repaint because those inline images are not tracked/deleted like Kitty placements.
 
 ---
 
@@ -331,7 +337,8 @@ Keys:
 - Enter jumps from a reply to its loaded target.
 - `f` enters reaction leader mode.
 - `f` again while reaction leader is active opens reaction-owner overlay.
-- Digits `0..9` while reaction leader is active toggle reactions, exit reaction leader mode, and keep the message selected.
+- Digits `1..9` while reaction leader is active toggle quick reactions, exit reaction leader mode, and keep the message selected.
+- Digit `0` while reaction leader is active opens the icon picker for a custom reaction.
 - `Ctrl+P` toggles selected-message pin state; admin only.
 
 Selection deltas are message-based, not row-based. Positive means older, negative means newer.
@@ -342,7 +349,8 @@ Selection deltas are message-based, not row-based. Positive means older, negativ
 
 Reactions:
 - One reaction per `(message_id, user_id)`.
-- Reaction kinds are `0..9`.
+- Reactions are stored as icon text in `chat_message_reactions.icon`.
+- Quick reaction keys `1..9` map to the default emoji set; `0` opens the full icon picker.
 - UI appends reaction footer chips under the message body or news card.
 - Reaction summaries live in `message_reactions: HashMap<Uuid, Vec<ChatMessageReactionSummary>>`.
 - Reaction-owner overlay waits for a matching `ReactionOwnersListed` event keyed by `pending_reaction_owners_message_id`.
@@ -444,7 +452,7 @@ Message rendering:
 - Highlighted reply targets get background styling across the whole row range.
 - Message wrapping is word-aware and uses Unicode display width, not codepoint count; hard splits are only valid for a single word longer than width.
 - Display author labels are plain usernames without leading `@`; mention syntax still uses `@username`.
-- Author labels render as `username [monthly awards] [special...] [bonsai] [badge] [flag] [brb]`. Special badges come from a hardcoded per-username allowlist in `chat/special_badges.rs` and must stay in `mod`, `developer`, `artist` order. The bonsai glyph comes from `bonsai_glyphs` keyed by user_id. Monthly award badges come from `profile_award_badges` keyed by user_id and represent top-3 last-completed-UTC-month leaderboard awards for that user, ordered by rank and then category priority, rendered as one bracketed group. Equipped store badge and flag are split for separate hit targets and rendered badge before flag. The `/brb` moon badge is derived from shared `ActiveSession.afk`, not message metadata, so it is visible to all viewers while the author is away. Hub Shop Bot Username Color sets `bot_username_color_active` for the buyer and brightens `bot`, `graybeard`, and `dealer` author labels while active; chat row fingerprints include that flag.
+- Author labels render as `username [profile awards] [special...] [bonsai] [badge] [flag] [brb]`. Special badges come from a hardcoded per-username allowlist in `chat/special_badges.rs` and must stay in `mod`, `developer`, `artist` order. The bonsai glyph comes from `bonsai_glyphs` keyed by user_id. Profile award badges come from `profile_award_badges` keyed by user_id: top-3 last-completed-UTC-month leaderboard awards plus the best rankless Lateania boss achievement badge (`LAD` unless `LFK` is also present, then `LFK`), ordered by rank and then category priority, rendered as one bracketed group. Equipped store badge and flag are split for separate hit targets and rendered badge before flag. The `/brb` moon badge is derived from shared `ActiveSession.afk`, not message metadata, so it is visible to all viewers while the author is away. Hub Shop Bot Username Color sets `bot_username_color_active` for the buyer and brightens `bot`, `graybeard`, and `dealer` author labels while active; chat row fingerprints include that flag.
 - Author badge glyphs are separated by `AUTHOR_BADGE_SEPARATOR` (` `). The separator was intentionally returned to a plain space after dot separators failed to prevent terminal-cell drift.
 - Investigation note: if a known author glyph is missing on a newly rendered message but appears after terminal resize, first suspect Ratatui/crossterm diff rendering of wide emoji cells, not author metadata. Sent-message events reload author metadata before `push_message`, chat row fingerprints include `bonsai_glyphs`, `chat_badges`, `profile_award_badges`, and AFK state, and resize forces a full terminal clear/redraw. A prior workaround forced full repaint on message-selection scroll, but it was removed because it caused visible flicker; prefer a targeted ratatui/backend fix for wide/VS16 emoji cell drift.
 - Ratatui wide/VS16 investigation detail: Ratatui owns the buffer diff model: it renders widgets into a buffer, diffs current vs previous, then writes only changed cells to the backend. Official docs describe that flow at `https://ratatui.rs/concepts/rendering/under-the-hood/`. In this app's failure mode, `ratatui-core` emits extra trailing-cell updates for wide VS16 emoji, while `ratatui-crossterm` prints `cell.symbol()` but tracks the last position as if every printed symbol advances exactly 1 cell. A glyph like `🛡️` is one visible grapheme but 2 terminal cells wide, so the backend's "next update is adjacent, no `MoveTo` needed" optimization can become wrong after wide glyphs. This should be treated first as a Ratatui backend/diff issue, not a `crossterm` crate issue: crossterm is printing what Ratatui asks it to print, while Ratatui's backend decides when cursor moves are needed.
@@ -483,7 +491,8 @@ Cache:
 | `c` | Copy selected message body |
 | `f` | Favorite/unfavorite the selected real room |
 | `[` / `]` | Move the selected favorite up/down in the room rail |
-| `f` then `0..9` | React to selected message |
+| `f` then `1..9` | Quick-react to selected message |
+| `f` then `0` | Open icon picker for a custom reaction |
 | `f` then `f` | Open reaction-owner overlay |
 | `Ctrl+P` | Admin toggle selected-message pin |
 | `Ctrl+]` | Open icon picker; inserts only into main chat composer |
@@ -537,7 +546,7 @@ modals and the icon picker). Username profile-opens are debounced via
 | Mentions | `j/k` navigate, Enter jump to referenced room/message |
 | Discover | `j/k` navigate, Enter join selected public room |
 
-Directory Projects and Profiles reshuffle their listing on page/tab entry. News keeps its chronological order — only mine-only filtering applies. The slash-command composer in `app/input.rs` skips itself when News is selected so `/` reaches the synthetic-entry handler; Directory page 6 routes `/` directly to Projects/Profiles filtering.
+Directory Projects and Profiles reshuffle their listing on page/tab entry. News keeps its chronological order — only mine-only filtering applies. The slash-command composer in `app/input.rs` skips itself when News is selected so `/` reaches the synthetic-entry handler; Directory page 7 routes `/` directly to Projects/Profiles filtering.
 
 When changing keybindings, update root `CONTEXT.md`'s keybinding checklist plus the relevant input handler, help modal, footer hints, and tests.
 
@@ -577,8 +586,8 @@ When changing keybindings, update root `CONTEXT.md`'s keybinding checklist plus 
 ### Notifications
 
 1. `send_message` calls `notification_svc.create_mentions_task`.
-2. `ChatState` also queues desktop notifications locally for DMs and direct mentions.
-3. Render drains `pending_notifications` through user settings in root `render.rs`.
+2. `ChatState` also pushes desktop notifications through its `app/notify` `Notifier` handle for friend joins, DMs, direct mentions, and newly started polls.
+3. Render drains `App::notify_outbox` through user settings in root `render.rs`; see the notify-domain bullet in root `CONTEXT.md`.
 
 ---
 
@@ -609,8 +618,10 @@ Repo-wide rule from root context still applies:
 - LLM agents must not run `cargo test`, `cargo nextest`, or `cargo clippy`; note expected commands for the human owner instead.
 
 Existing integration coverage:
+- `tests/chat/announcements.rs`: login #announcements loading, read cursor behavior, paging.
 - `tests/chat/svc.rs`: send, reactions, pins, summaries, room tails, ignored users, discover listing/joining, public room create/fill, delete events, ignore/unignore.
 - `tests/chat/news.rs`: article snapshots, empty list, author resolution, duplicate URL failure, direct DB inserts appearing after list refresh.
+- `tests/chat/sheet.rs`: character sheet model/upsert plus `open_sheet_task`/`save_sheet_task` room-scoped authorization.
 - `tests/chat/showcase.rs`: create event/snapshot, non-owner update failure, admin delete, unread cursor behavior.
 - `tests/chat/work.rs`: profile create/update snapshot behavior, public slug preservation, non-owner update failure, admin delete, unread cursor behavior.
 - `tests/chat/state.rs`: placeholder; direct `ChatState` tests need accessors or indirect UI/input tests.
@@ -641,7 +652,7 @@ Test gaps:
 - DM/private message bodies must not leak to non-members through broadcast handling.
 - Ignore filtering is non-DM only.
 - `#announcements` admin-only currently depends on the provided `room_slug`; stale/missing slug is a fragile path.
-- Login `#announcements` modal uses `chat_room_members.last_read_at`; do not add a separate announcement-read table unless the room model itself changes.
+- Login `#announcements` modal marks `chat_room_members.last_read_at` only when dismissed; do not add a separate announcement-read table unless the room model itself changes.
 - Reaction and pin tasks are async; UI should not assume optimistic success.
 - Poll create/vote tasks are async; `ChatEvent::PollUpdated` patches the local active-poll map and `ChatSnapshot.active_polls` refreshes authoritative visibility. Successful poll creation spawns a sleep-until-expiry finalizer that atomically claims the expired poll in Postgres, marks it inactive, and posts compact results into the room as the poll creator. `ChatService::start_poll_finalizer_recovery_task` runs a coarse 10-minute recovery scan for expired active polls so restarts/redeploys do not strand result posts; the DB claim is the cross-replica duplicate guard.
 - Poll vote shortcuts use `va/vb/vc` when the selected/visible real room has an active poll, leaving music `v1/v2/v3` selectors available.

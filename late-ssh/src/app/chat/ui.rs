@@ -39,7 +39,7 @@ use super::state::{
 };
 use super::ui_text::{reaction_label, wrap_chat_entry_to_lines};
 
-const REACTION_PICKER_KEYS: [i16; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+const REACTION_PICKER_KEYS: [i16; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const CHAT_COMPOSER_GAP_HEIGHT: u16 = 1;
 const AUTHOR_BADGE_SEPARATOR: &str = " ";
 const FRIEND_BADGE: &str = "★";
@@ -65,6 +65,9 @@ pub struct DashboardChatView<'a> {
     pub afk_user_ids: &'a HashSet<Uuid>,
     pub message_reactions: &'a HashMap<Uuid, Vec<ChatMessageReactionSummary>>,
     pub current_user_id: Uuid,
+    pub voice_channel_id: Option<Uuid>,
+    pub voice_snapshot: &'a crate::app::voice::svc::VoiceSnapshot,
+    pub voice_paired_cli_supports_voice: bool,
     pub show_flag_fallback: bool,
     pub selected_message_id: Option<Uuid>,
     pub selected_image_message: bool,
@@ -89,6 +92,9 @@ pub struct DashboardChatView<'a> {
     /// Cell that, when present, receives the composer block rect so mouse
     /// hit-testing in `app::input` can detect double-clicks into the bar.
     pub composer_rect_slot: Option<&'a std::cell::Cell<Option<Rect>>>,
+    /// Cell that, when present, receives the top visible wrapped row for the
+    /// same composer render. Click-to-cursor uses this when long drafts scroll.
+    pub composer_viewport_top_slot: Option<&'a std::cell::Cell<Option<usize>>>,
     /// Cell that, when present, receives this frame's chat-scroll hit
     /// layout so `app::input` can map clicks in the message area to a
     /// message id, header segment, or inline-image row.
@@ -289,6 +295,10 @@ fn reaction_picker_choice_width(key: i16) -> usize {
     1 + 1 + reaction_label(key).width()
 }
 
+fn reaction_picker_custom_width() -> usize {
+    "0 icon".width()
+}
+
 fn push_reaction_picker_choice(reaction_spans: &mut Vec<Span<'static>>, dim: Style, key: i16) {
     reaction_spans.push(Span::styled(
         key.to_string(),
@@ -322,6 +332,26 @@ fn reaction_picker_placeholder_lines(dim: Style, width: usize) -> Vec<Line<'stat
         push_reaction_picker_choice(&mut current_spans, dim, key);
         current_width += choice_width;
     }
+
+    let separator_width = usize::from(!current_spans.is_empty()) * 2;
+    let custom_width = reaction_picker_custom_width();
+    if !current_spans.is_empty() && current_width + separator_width + custom_width > available_width
+    {
+        lines.push(Line::from(std::mem::take(&mut current_spans)));
+        current_width = 0;
+    }
+    if !current_spans.is_empty() {
+        current_spans.push(Span::styled("  ", dim));
+        current_width += 2;
+    }
+    current_spans.push(Span::styled(
+        "0",
+        Style::default()
+            .fg(theme::AMBER())
+            .add_modifier(Modifier::BOLD),
+    ));
+    current_spans.push(Span::styled(" icon", dim));
+    current_width += custom_width;
 
     let owner_hint_width = 8;
     if !current_spans.is_empty() && current_width + owner_hint_width > available_width {
@@ -420,6 +450,45 @@ fn horizontal_inset(rect: Rect, pad: u16) -> Rect {
         y: rect.y,
         width: rect.width.saturating_sub(pad * 2),
         height: rect.height,
+    }
+}
+
+/// Replay of ratatui-textarea's `next_scroll_top` minimal-scroll rule: the
+/// viewport only moves when the cursor would leave it, otherwise it keeps the
+/// previous top. `prev_top` must come from the previous render of the same
+/// composer (the slot persists across frames, see `ChatState`); feeding it a
+/// fresh `None` every frame would bottom-anchor the result at the cursor and
+/// drift from the widget's real viewport.
+fn next_composer_viewport_top(
+    prev_top: Option<usize>,
+    cursor_row: usize,
+    visible_rows: u16,
+) -> usize {
+    let prev_top = prev_top.unwrap_or(0);
+    let visible_rows = usize::from(visible_rows).max(1);
+    if cursor_row < prev_top {
+        cursor_row
+    } else if prev_top.saturating_add(visible_rows) <= cursor_row {
+        cursor_row + 1 - visible_rows
+    } else {
+        prev_top
+    }
+}
+
+fn record_composer_mouse_target(
+    composer: &TextArea<'static>,
+    composer_area: Rect,
+    rect_slot: Option<&std::cell::Cell<Option<Rect>>>,
+    viewport_top_slot: Option<&std::cell::Cell<Option<usize>>>,
+) {
+    if let Some(slot) = rect_slot {
+        slot.set(Some(composer_area));
+    }
+    if let Some(slot) = viewport_top_slot {
+        let visible_rows = composer_area.height.saturating_sub(2);
+        let top =
+            next_composer_viewport_top(slot.get(), composer.screen_cursor().row, visible_rows);
+        slot.set(Some(top));
     }
 }
 
@@ -886,7 +955,26 @@ pub fn draw_dashboard_chat_card(
         ));
     let visible_composer_lines = total_composer_lines.min(5);
     let composer_height = visible_composer_lines as u16 + 2;
-    let (messages_area, composer_area) = split_chat_and_composer(area, composer_height);
+    let (mut messages_area, composer_area) = split_chat_and_composer(area, composer_height);
+    if let Some(voice_channel_id) = view.voice_channel_id {
+        let voice_view = crate::app::voice::ui::VoiceRoomView {
+            snapshot: view.voice_snapshot,
+            room_id: voice_channel_id,
+            current_user_id: view.current_user_id,
+            paired_cli_supports_voice: view.voice_paired_cli_supports_voice,
+        };
+        let strip_height = crate::app::voice::ui::VOICE_STRIP_HEIGHT.min(messages_area.height);
+        let strip = Rect {
+            height: strip_height,
+            ..messages_area
+        };
+        crate::app::voice::ui::draw_voice_strip(frame, strip, &voice_view);
+        messages_area = Rect {
+            y: messages_area.y + strip_height,
+            height: messages_area.height.saturating_sub(strip_height),
+            ..messages_area
+        };
+    }
     let (poll_area, messages_area) = split_poll_and_messages(messages_area, view.active_poll);
 
     let lines: Vec<Line<'static>>;
@@ -973,9 +1061,12 @@ pub fn draw_dashboard_chat_card(
             keep_composer_focused: view.keep_composer_focused,
         },
     );
-    if let Some(slot) = view.composer_rect_slot {
-        slot.set(Some(composer_area));
-    }
+    record_composer_mouse_target(
+        view.composer,
+        composer_area,
+        view.composer_rect_slot,
+        view.composer_viewport_top_slot,
+    );
 }
 
 // ── Chat rows cache & scroll ────────────────────────────────
@@ -1432,6 +1523,14 @@ fn draw_image_modal(
     let max_popup_width = anchor.width.saturating_sub(4).clamp(12, 132);
     let max_popup_height = anchor.height.saturating_sub(2).max(5);
     let modal_bg = Style::default().bg(theme::BG_CANVAS());
+
+    // Report the modal's image capacity so the next Sixel fetch encodes to a
+    // size that fits; oversized Sixel payloads are dropped by the filter
+    // below because Sixel has no terminal-side scaling.
+    terminal_images.set_modal_capacity(
+        max_popup_width.saturating_sub(4).max(1),
+        max_popup_height.saturating_sub(4).max(1),
+    );
 
     let terminal_image = view.terminal_image.filter(|data| {
         if view.terminal_image_protocol != Some(TerminalImageProtocol::Sixel) {
@@ -2102,9 +2201,10 @@ pub struct ChatRenderInput<'a> {
     pub notifications_selected: bool,
     pub notifications_unread_count: i64,
     pub notifications_view: super::notifications::ui::NotificationListView<'a>,
-    pub voice_selected: bool,
-    pub voice_participant_count: usize,
-    pub voice_view: crate::app::voice::ui::VoiceRoomView<'a>,
+    pub voice_channels_by_room_id:
+        &'a HashMap<Uuid, late_core::models::voice_channel::VoiceChannel>,
+    pub voice_snapshot: &'a crate::app::voice::svc::VoiceSnapshot,
+    pub voice_paired_cli_supports_voice: bool,
     pub showcase_selected: bool,
     pub showcase_unread_count: i64,
     pub showcase_view: super::showcase::ui::ShowcaseListView<'a>,
@@ -2119,6 +2219,9 @@ pub struct ChatRenderInput<'a> {
     /// Cell that, when present, receives the composer block rect so mouse
     /// hit-testing in `app::input` can detect double-clicks into the bar.
     pub composer_rect_slot: Option<&'a std::cell::Cell<Option<Rect>>>,
+    /// Cell that, when present, receives the top visible wrapped row for the
+    /// same composer render. Click-to-cursor uses this when long drafts scroll.
+    pub composer_viewport_top_slot: Option<&'a std::cell::Cell<Option<usize>>>,
     /// Cell that, when present, receives this frame's chat-scroll hit
     /// layout — only set in the real-room message branch (synthetic
     /// entries like Discover/News/Showcase don't produce one).
@@ -2161,8 +2264,6 @@ pub(crate) struct ChatRoomListView<'a> {
     pub news_unread_count: i64,
     pub notifications_selected: bool,
     pub notifications_unread_count: i64,
-    pub voice_selected: bool,
-    pub voice_participant_count: usize,
     pub discover_selected: bool,
     pub showcase_selected: bool,
     pub showcase_unread_count: i64,
@@ -2183,6 +2284,10 @@ pub struct EmbeddedRoomChatView<'a> {
     pub message_reactions: &'a HashMap<Uuid, Vec<ChatMessageReactionSummary>>,
     pub inline_images: &'a HashMap<Uuid, InlineImagePreview>,
     pub current_user_id: Uuid,
+    /// Voice channel for this view, drawn as a strip at the top when present.
+    pub voice_channel_id: Option<Uuid>,
+    pub voice_snapshot: &'a crate::app::voice::svc::VoiceSnapshot,
+    pub voice_paired_cli_supports_voice: bool,
     pub show_flag_fallback: bool,
     pub selected_message_id: Option<Uuid>,
     pub selected_image_message: bool,
@@ -2202,6 +2307,9 @@ pub struct EmbeddedRoomChatView<'a> {
     /// Cell that, when present, receives the composer block rect so mouse
     /// hit-testing in `app::input` can detect double-clicks into the bar.
     pub composer_rect_slot: Option<&'a std::cell::Cell<Option<Rect>>>,
+    /// Cell that, when present, receives the top visible wrapped row for the
+    /// same composer render. Click-to-cursor uses this when long drafts scroll.
+    pub composer_viewport_top_slot: Option<&'a std::cell::Cell<Option<usize>>>,
     /// Cell that, when present, receives this frame's chat-scroll hit
     /// layout (with `content` set to the painted text area, not the
     /// bordered frame).
@@ -2234,14 +2342,31 @@ pub fn draw_embedded_room_chat(
             composer_text_width,
         ));
     let composer_height = total_composer_lines.min(4) as u16 + 2;
-    let (messages_area, composer_area) = split_chat_and_composer(area, composer_height);
+    let (mut messages_area, composer_area) = split_chat_and_composer(area, composer_height);
 
-    let messages_block = Block::default()
-        .title(format!("── {} ", view.title))
-        .borders(Borders::TOP)
-        .border_style(Style::default().fg(theme::BORDER()));
-    let messages_inner = messages_block.inner(messages_area);
-    let messages_text_area = horizontal_inset(messages_inner, 1);
+    // A voice channel shows the compact voice strip at the top of the chat
+    // panel; text-only views render unchanged.
+    if let Some(voice_channel_id) = view.voice_channel_id {
+        let voice_view = crate::app::voice::ui::VoiceRoomView {
+            snapshot: view.voice_snapshot,
+            room_id: voice_channel_id,
+            current_user_id: view.current_user_id,
+            paired_cli_supports_voice: view.voice_paired_cli_supports_voice,
+        };
+        let strip_height = crate::app::voice::ui::VOICE_STRIP_HEIGHT.min(messages_area.height);
+        let strip = Rect {
+            height: strip_height,
+            ..messages_area
+        };
+        crate::app::voice::ui::draw_voice_strip(frame, strip, &voice_view);
+        messages_area = Rect {
+            y: messages_area.y + strip_height,
+            height: messages_area.height.saturating_sub(strip_height),
+            ..messages_area
+        };
+    }
+
+    let messages_text_area = horizontal_inset(messages_area, 1);
 
     let height = messages_text_area.height.max(1) as usize;
     let width = messages_text_area.width.max(1) as usize;
@@ -2280,7 +2405,6 @@ pub fn draw_embedded_room_chat(
         visible.lines
     };
 
-    frame.render_widget(messages_block, messages_area);
     frame.render_widget(Paragraph::new(lines), messages_text_area);
     if let (Some(slot), false, false) = (
         view.chat_hit_slot,
@@ -2317,9 +2441,12 @@ pub fn draw_embedded_room_chat(
             keep_composer_focused: view.keep_composer_focused,
         },
     );
-    if let Some(slot) = view.composer_rect_slot {
-        slot.set(Some(composer_area));
-    }
+    record_composer_mouse_target(
+        view.composer,
+        composer_area,
+        view.composer_rect_slot,
+        view.composer_viewport_top_slot,
+    );
 }
 
 struct RoomListRows {
@@ -2373,11 +2500,7 @@ fn strip_room_section_header_prefix(mut text: &str) -> &str {
 
 fn chat_selection_mode(view: &ChatRenderInput<'_>, area: Rect) -> ChatSelectionMode {
     let composer_text_width = area.width.saturating_sub(2).max(1) as usize;
-    if view.notifications_selected
-        || view.voice_selected
-        || view.discover_selected
-        || view.feeds_selected
-    {
+    if view.notifications_selected || view.discover_selected || view.feeds_selected {
         ChatSelectionMode::Compact
     } else if view.news_selected {
         ChatSelectionMode::Composer {
@@ -2461,8 +2584,6 @@ fn room_list_view_from_render_input<'a>(view: &'a ChatRenderInput<'a>) -> ChatRo
         news_unread_count: view.news_unread_count,
         notifications_selected: view.notifications_selected,
         notifications_unread_count: view.notifications_unread_count,
-        voice_selected: view.voice_selected,
-        voice_participant_count: view.voice_participant_count,
         discover_selected: view.discover_selected,
         showcase_selected: view.showcase_selected,
         showcase_unread_count: view.showcase_unread_count,
@@ -2480,9 +2601,6 @@ pub(crate) fn home_title_room_label(view: &ChatRenderInput<'_>) -> Option<String
     }
     if view.notifications_selected {
         return Some("mentions".to_string());
-    }
-    if view.voice_selected {
-        return Some("voice".to_string());
     }
     if view.discover_selected {
         return Some("browse rooms".to_string());
@@ -2558,7 +2676,6 @@ fn build_room_list_rows(view: &ChatRoomListView<'_>, rooms_area: Rect) -> RoomLi
         !view.feeds_selected
             && !view.news_selected
             && !view.notifications_selected
-            && !view.voice_selected
             && !view.discover_selected
             && !view.showcase_selected
             && !view.work_selected
@@ -2629,23 +2746,6 @@ fn build_room_list_rows(view: &ChatRoomListView<'_>, rooms_area: Rect) -> RoomLi
         Some(RoomSlot::Notifications),
         view.notifications_selected,
     );
-
-    let voice_line = {
-        let prefix = room_jump_prefix(
-            view.room_jump_active.then(|| jump_keys.next()).flatten(),
-            view.room_jump_active,
-            view.voice_selected,
-        );
-        let style = if view.voice_selected {
-            Style::default()
-                .fg(theme::AMBER())
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(theme::TEXT())
-        };
-        Line::from(Span::styled(format!("{prefix}voice"), style))
-    };
-    push_row(voice_line, Some(RoomSlot::Voice), view.voice_selected);
 
     let news_line = {
         let prefix = room_jump_prefix(
@@ -3268,7 +3368,6 @@ fn build_cozy_room_rail_rows(view: &ChatRoomListView<'_>, width: u16) -> RoomLis
             }
         }
         push_slot(RoomSlot::Notifications, &mut push_row);
-        push_slot(RoomSlot::Voice, &mut push_row);
         push_slot(RoomSlot::News, &mut push_row);
         if view.feeds_available {
             push_slot(RoomSlot::Feeds, &mut push_row);
@@ -3354,7 +3453,6 @@ fn room_slot_label_and_unread(view: &ChatRoomListView<'_>, slot: RoomSlot) -> (S
         RoomSlot::Feeds => ("rss".to_string(), view.feeds_unread_count),
         RoomSlot::News => ("news".to_string(), view.news_unread_count),
         RoomSlot::Notifications => ("mentions".to_string(), view.notifications_unread_count),
-        RoomSlot::Voice => ("voice".to_string(), view.voice_participant_count as i64),
         RoomSlot::Discover => ("+ browse rooms".to_string(), 0),
         RoomSlot::Showcase => ("showcase".to_string(), view.showcase_unread_count),
         RoomSlot::Work => ("work".to_string(), view.work_unread_count),
@@ -3470,7 +3568,6 @@ fn cozy_slot_selected(view: &ChatRoomListView<'_>, slot: RoomSlot) -> bool {
             feeds_selected: view.feeds_selected,
             news_selected: view.news_selected,
             notifications_selected: view.notifications_selected,
-            voice_selected: view.voice_selected,
             discover_selected: view.discover_selected,
             showcase_selected: view.showcase_selected,
             work_selected: view.work_selected,
@@ -3538,8 +3635,6 @@ fn draw_selected_content(
             messages_area,
             &view.notifications_view,
         );
-    } else if view.voice_selected {
-        crate::app::voice::ui::draw_voice_room(frame, messages_area, &view.voice_view);
     } else if view.discover_selected {
         super::discover::ui::draw_discover_list(frame, messages_area, &view.discover_view);
     } else if view.showcase_selected {
@@ -3560,6 +3655,32 @@ fn draw_selected_content(
                         .iter()
                         .find(|(room, _)| is_chat_list_room(room))
                 })
+        };
+
+        // A voice channel shows a compact voice strip pinned at the very top;
+        // text-only rooms render unchanged with the messages at full height.
+        let messages_area = if let Some((room, _)) = selected_room
+            && let Some(channel) = view.voice_channels_by_room_id.get(&room.id)
+        {
+            let voice_view = crate::app::voice::ui::VoiceRoomView {
+                snapshot: view.voice_snapshot,
+                room_id: channel.id,
+                current_user_id,
+                paired_cli_supports_voice: view.voice_paired_cli_supports_voice,
+            };
+            let strip_height = crate::app::voice::ui::VOICE_STRIP_HEIGHT.min(messages_area.height);
+            let strip = Rect {
+                height: strip_height,
+                ..messages_area
+            };
+            crate::app::voice::ui::draw_voice_strip(frame, strip, &voice_view);
+            Rect {
+                y: messages_area.y + strip_height,
+                height: messages_area.height.saturating_sub(strip_height),
+                ..messages_area
+            }
+        } else {
+            messages_area
         };
 
         let mut chat_hits: Option<Vec<ChatRowHit>> = None;
@@ -3692,8 +3813,6 @@ fn draw_selected_content(
         )))
         .block(hint_block);
         frame.render_widget(hint_text, composer_area);
-    } else if view.voice_selected {
-        crate::app::voice::ui::draw_voice_controls(frame, composer_area, &view.voice_view);
     } else if view.showcase_selected {
         if let Some(showcase_state) = view.showcase_state {
             super::showcase::ui::draw_showcase_composer(
@@ -3775,9 +3894,12 @@ fn draw_selected_content(
                 keep_composer_focused: view.keep_composer_focused,
             },
         );
-        if let Some(slot) = view.composer_rect_slot {
-            slot.set(Some(composer_area));
-        }
+        record_composer_mouse_target(
+            view.composer,
+            composer_area,
+            view.composer_rect_slot,
+            view.composer_viewport_top_slot,
+        );
     }
 }
 
@@ -4029,6 +4151,9 @@ mod tests {
         static FRIEND_USER_IDS: OnceLock<HashSet<Uuid>> = OnceLock::new();
         static AFK_USER_IDS: OnceLock<HashSet<Uuid>> = OnceLock::new();
         static VOICE_SNAPSHOT: OnceLock<crate::app::voice::svc::VoiceSnapshot> = OnceLock::new();
+        static VOICE_CHANNELS: OnceLock<
+            HashMap<Uuid, late_core::models::voice_channel::VoiceChannel>,
+        > = OnceLock::new();
         static COLLAPSED_SECTIONS: OnceLock<HashSet<RoomSection>> = OnceLock::new();
         static ACTIVE_ROOM_EFFECTS: OnceLock<HashMap<Uuid, Vec<ActiveChatRoomEffect>>> =
             OnceLock::new();
@@ -4108,14 +4233,9 @@ mod tests {
                 selected_index: 0,
                 marker_read_at: None,
             },
-            voice_selected: false,
-            voice_participant_count: 0,
-            voice_view: crate::app::voice::ui::VoiceRoomView {
-                snapshot: VOICE_SNAPSHOT.get_or_init(Default::default),
-                current_user_id: Uuid::nil(),
-                paired_cli_supports_voice: false,
-                browser_listen_url: "http://localhost:3000/voice",
-            },
+            voice_channels_by_room_id: VOICE_CHANNELS.get_or_init(HashMap::new),
+            voice_snapshot: VOICE_SNAPSHOT.get_or_init(Default::default),
+            voice_paired_cli_supports_voice: false,
             showcase_selected: false,
             showcase_unread_count: 0,
             showcase_view: crate::app::chat::showcase::ui::ShowcaseListView {
@@ -4143,6 +4263,7 @@ mod tests {
             work_composing: false,
             keep_composer_focused: false,
             composer_rect_slot: None,
+            composer_viewport_top_slot: None,
             chat_hit_slot: None,
         }
     }
@@ -4162,6 +4283,31 @@ mod tests {
         // ⏎ is 3 bytes but 1 display column.
         let tiers = ["⏎⏎⏎⏎", ""];
         assert_eq!(pick_title_that_fits(6, &tiers), "⏎⏎⏎⏎");
+    }
+
+    #[test]
+    fn composer_viewport_top_scrolls_to_keep_cursor_visible() {
+        assert_eq!(next_composer_viewport_top(Some(0), 0, 4), 0);
+        assert_eq!(next_composer_viewport_top(Some(0), 3, 4), 0);
+        assert_eq!(next_composer_viewport_top(Some(0), 4, 4), 1);
+        assert_eq!(next_composer_viewport_top(Some(6), 4, 4), 4);
+    }
+
+    #[test]
+    fn composer_viewport_top_treats_zero_height_as_one_row() {
+        assert_eq!(next_composer_viewport_top(Some(0), 2, 0), 2);
+    }
+
+    #[test]
+    fn composer_viewport_top_keeps_prev_top_when_cursor_moves_up_within_view() {
+        // Regression: a 10-row draft in a 5-row viewport scrolls to top 5
+        // while typing. Pressing Up to row 6 must keep top 5, like the
+        // widget's own viewport, not re-anchor to 6 - 5 + 1 = 2. This relies
+        // on the slot persisting across frames so prev_top is real.
+        assert_eq!(next_composer_viewport_top(Some(5), 9, 5), 5);
+        assert_eq!(next_composer_viewport_top(Some(5), 6, 5), 5);
+        // Only a fresh slot (first ever render) bottom-anchors at the cursor.
+        assert_eq!(next_composer_viewport_top(None, 6, 5), 2);
     }
 
     #[test]
@@ -4331,7 +4477,7 @@ mod tests {
             .collect();
         assert_eq!(
             rendered,
-            "1 👍  2 🧡  3 😂  4 👀  5 🔥  6 🙌  7 🚀  8 🤔  9 💩  0 👋  f list"
+            "1 👍  2 🧡  3 😂  4 👀  5 🔥  6 🙌  7 🚀  8 🤔  9 💩  0 icon  f list"
         );
     }
 
@@ -4353,7 +4499,7 @@ mod tests {
             rendered,
             vec![
                 "1 👍  2 🧡  3 😂  4 👀  5 🔥  6 🙌  7 🚀  8 🤔",
-                "9 💩  0 👋  f list",
+                "9 💩  0 icon  f list",
             ]
         );
     }
@@ -4366,7 +4512,7 @@ mod tests {
     }
 
     #[test]
-    fn reaction_picker_placeholder_keeps_zero_choice_at_mid_width() {
+    fn reaction_picker_placeholder_keeps_custom_zero_choice_at_mid_width() {
         let lines = reaction_picker_placeholder_lines(Style::default(), 50);
         let rendered: String = lines
             .iter()
@@ -4375,8 +4521,8 @@ mod tests {
             .collect();
 
         assert!(
-            rendered.contains("0 👋"),
-            "zero reaction choice missing from {rendered:?}",
+            rendered.contains("0 icon"),
+            "custom icon reaction choice missing from {rendered:?}",
         );
     }
 
@@ -4416,20 +4562,16 @@ mod tests {
             "ninth reaction choice missing from {row_1:?}",
         );
         assert!(
-            row_1.contains("0 👋"),
-            "zero reaction choice missing from {row_1:?}",
+            row_1.contains("0 icon"),
+            "custom icon reaction choice missing from {row_1:?}",
         );
         assert!(
             row_1.contains("f list"),
             "reaction owner hint missing from {row_1:?}",
         );
         assert!(
-            !row_1.contains("0 👋  f list"),
-            "reaction owner hint should not collapse below two separator spaces plus wide emoji padding: {row_1:?}",
-        );
-        assert!(
-            row_1.contains("0 👋   f list"),
-            "reaction owner hint should preserve two separator spaces plus wide emoji padding: {row_1:?}",
+            row_1.contains("0 icon  f list"),
+            "reaction owner hint should preserve separator spacing after custom icon choice: {row_1:?}",
         );
     }
 
@@ -4659,12 +4801,7 @@ mod tests {
 
         assert_eq!(
             hit_slots,
-            vec![
-                RoomSlot::Notifications,
-                RoomSlot::Voice,
-                RoomSlot::News,
-                RoomSlot::Discover,
-            ]
+            vec![RoomSlot::Notifications, RoomSlot::News, RoomSlot::Discover,]
         );
     }
 
@@ -4735,14 +4872,13 @@ mod tests {
             .collect();
 
         assert_eq!(
-            &keyed_slots[..6],
+            &keyed_slots[..5],
             &[
                 (RoomSlot::Room(lounge.id), "a lounge".to_string()),
                 (RoomSlot::Notifications, "s mentions".to_string()),
-                (RoomSlot::Voice, "d voice".to_string()),
-                (RoomSlot::News, "f news".to_string()),
-                (RoomSlot::Feeds, "g rss".to_string()),
-                (RoomSlot::Room(rust.id), "h rust".to_string()),
+                (RoomSlot::News, "d news".to_string()),
+                (RoomSlot::Feeds, "f rss".to_string()),
+                (RoomSlot::Room(rust.id), "g rust".to_string()),
             ]
         );
     }
@@ -5147,11 +5283,11 @@ mod tests {
             &["mod"],
             Some("shop"),
             Some("bonsai"),
-            Some("AW1 LC2 SN3"),
+            Some("AW1 CHIP2 SN3"),
             None,
         );
 
-        assert_eq!(prefix, "alice [AW1 LC2 SN3] mod bonsai shop");
+        assert_eq!(prefix, "alice [AW1 CHIP2 SN3] mod bonsai shop");
         assert_eq!(segs.len(), 5);
         assert_eq!(segs[0].target, HeaderTarget::Profile);
         assert_eq!(segs[1].target, HeaderTarget::Profile);
@@ -5163,7 +5299,7 @@ mod tests {
         assert_eq!(segs[1].start_col, expected_awards_offset);
         assert_eq!(
             segs[1].end_col,
-            expected_awards_offset + UnicodeWidthStr::width("[AW1 LC2 SN3]") as u16
+            expected_awards_offset + UnicodeWidthStr::width("[AW1 CHIP2 SN3]") as u16
         );
     }
 
@@ -5201,13 +5337,13 @@ mod tests {
             &["mod", "developer", "artist"],
             &chat_badges,
             Some("bonsai"),
-            Some("AW1 LC2"),
+            Some("AW1 CHIP2"),
             Some("brb"),
         );
 
         assert_eq!(
             prefix,
-            "alice [AW1 LC2] mod developer artist bonsai badge flag brb"
+            "alice [AW1 CHIP2] mod developer artist bonsai badge flag brb"
         );
     }
 

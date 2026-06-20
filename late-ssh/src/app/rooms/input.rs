@@ -460,8 +460,28 @@ pub(crate) fn enter_room(app: &mut App, room: crate::app::rooms::svc::RoomListIt
         return false;
     }
 
+    app.rooms_enter_request_id = app.rooms_enter_request_id.wrapping_add(1);
+    let request_id = app.rooms_enter_request_id;
+    app.rooms_pending_enter_request_id = Some(request_id);
+    app.rooms_service
+        .enter_game_room_task(app.user_id, request_id, room.clone());
+    app.banner = Some(Banner::success(&format!(
+        "Entering table: {}",
+        room.display_name
+    )));
+    true
+}
+
+pub(crate) fn complete_enter_room(
+    app: &mut App,
+    room: crate::app::rooms::svc::RoomListItem,
+) -> bool {
+    if !can_enter_room(room.game_kind, app.is_admin, app.is_moderator) {
+        app.banner = Some(Banner::error("You cannot enter this room."));
+        return false;
+    }
+
     app.chat.join_game_room_chat(room.chat_room_id);
-    app.chat.request_room_tail(room.chat_room_id);
     app.rooms_service.touch_room_task(room.id);
     app.rooms_last_touched_room_id = Some(room.id);
     app.rooms_last_touched_at = Some(Instant::now());
@@ -511,13 +531,13 @@ fn handle_active_room_key(app: &mut App, byte: u8) -> bool {
         return true;
     }
 
-    if handle_active_room_game_key(app, byte) {
-        return true;
-    }
-
     if should_route_active_room_selected_chat_key(app, chat_room_id, byte)
         && crate::app::chat::input::handle_message_action_in_room(app, chat_room_id, byte)
     {
+        return true;
+    }
+
+    if handle_active_room_game_key(app, byte) {
         return true;
     }
 

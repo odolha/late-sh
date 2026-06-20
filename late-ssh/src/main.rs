@@ -164,8 +164,9 @@ async fn main() -> anyhow::Result<()> {
         paired_client_registry.clone(),
         active_users.clone(),
     );
-    let voice_service = VoiceService::new(config.voice.clone());
+    let voice_service = VoiceService::new(config.voice.clone()).with_db(db.clone());
     let session_registry = SessionRegistry::new();
+    let irc_registry = late_ssh::ircd::registry::IrcRegistry::new();
     let notification_service = NotificationService::new(db.clone());
     let chat_service = ChatService::new_with_active_users(
         db.clone(),
@@ -174,6 +175,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .with_username_directory(username_directory.clone())
     .with_session_registry(session_registry.clone())
+    .with_irc_registry(irc_registry.clone())
     .with_force_admin(config.force_admin);
     let _poll_finalizer_recovery_task = chat_service.start_poll_finalizer_recovery_task();
     let ai_service = AiService::new(
@@ -183,7 +185,8 @@ async fn main() -> anyhow::Result<()> {
     );
     let profile_service = ProfileService::new(db.clone(), active_users.clone())
         .with_username_directory(username_directory.clone())
-        .with_session_registry(session_registry.clone());
+        .with_session_registry(session_registry.clone())
+        .with_irc_registry(irc_registry.clone());
     let article_service = ArticleService::new(db.clone(), ai_service.clone(), chat_service.clone());
     let feed_service = FeedService::new(db.clone());
     feed_service.start_poll_task();
@@ -196,6 +199,12 @@ async fn main() -> anyhow::Result<()> {
         .with_activity_feed(activity_tx.clone());
     let snake_service = late_ssh::app::arcade::snake::svc::SnakeService::new(db.clone())
         .with_activity_feed(activity_tx.clone());
+    let rubiks_cube_service = late_ssh::app::arcade::rubiks_cube::svc::RubiksCubeService::new(
+        db.clone(),
+        activity_tx.clone(),
+    );
+    let le_word_service =
+        late_ssh::app::arcade::le_word::svc::LeWordService::new(db.clone(), activity_tx.clone());
     let chip_service = late_ssh::app::games::chips::svc::ChipService::new(db.clone());
     let _chip_activity_reward_task = chip_service.start_activity_reward_task(activity_tx.clone());
     let rooms_service = late_ssh::app::rooms::svc::RoomsService::new(db.clone());
@@ -237,6 +246,7 @@ async fn main() -> anyhow::Result<()> {
     );
     let lateania_service = late_ssh::app::door::lateania::svc::LateaniaService::new(
         activity_publisher.clone(),
+        chip_service.clone(),
         db.clone(),
     );
     let sshattrick_room_manager =
@@ -291,7 +301,8 @@ async fn main() -> anyhow::Result<()> {
     let chat_service = chat_service.with_moderation_infra(
         ModerationInfra::default()
             .with_force_admin(config.force_admin)
-            .with_artboard_handles(dartboard_server.clone(), dartboard_provenance.clone()),
+            .with_artboard_handles(dartboard_server.clone(), dartboard_provenance.clone())
+            .with_voice(voice_service.clone()),
     );
     let leaderboard_service = late_ssh::app::LeaderboardService::new(db.clone());
     let _profile_award_snapshot_task = leaderboard_service
@@ -326,10 +337,6 @@ async fn main() -> anyhow::Result<()> {
         config.ws_pair_max_attempts_per_ip,
         config.ws_pair_rate_limit_window_secs,
     );
-    let voice_listen_limiter = IpRateLimiter::new(
-        config.ws_pair_max_attempts_per_ip,
-        config.ws_pair_rate_limit_window_secs,
-    );
     let pinstar_registry =
         late_ssh::app::pinstar::svc::PinstarServerRegistry::new(Some(db.clone()));
 
@@ -350,6 +357,8 @@ async fn main() -> anyhow::Result<()> {
         twenty_forty_eight_service,
         tetris_service,
         snake_service,
+        rubiks_cube_service,
+        le_word_service,
         sudoku_service,
         nonogram_service,
         solitaire_service,
@@ -381,9 +390,9 @@ async fn main() -> anyhow::Result<()> {
         radio_meta_rx: radio_meta_rx.clone(),
         session_registry,
         paired_client_registry,
+        irc_registry: irc_registry.clone(),
         ssh_attempt_limiter,
         ws_pair_limiter,
-        voice_listen_limiter,
         pinstar_registry,
         is_draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
@@ -467,6 +476,16 @@ async fn main() -> anyhow::Result<()> {
             .context("ssh server failed")
     });
 
+    if state.config.irc.enabled {
+        let irc_state = state.clone();
+        let irc_shutdown = accept_shutdown.clone();
+        tasks.spawn(async move {
+            late_ssh::ircd::serve::run(irc_state, Some(irc_shutdown))
+                .await
+                .context("irc server failed")
+        });
+    }
+
     let now_playing_shutdown = session_shutdown.clone();
     let now_playing_task = now_playing_service.start_poll_task(now_playing_shutdown);
     tasks.spawn(async move {
@@ -517,7 +536,6 @@ async fn main() -> anyhow::Result<()> {
     let limiter_cleanup_shutdown = singleton_shutdown.clone();
     let ssh_limiter = state.ssh_attempt_limiter.clone();
     let ws_limiter = state.ws_pair_limiter.clone();
-    let voice_listen_limiter = state.voice_listen_limiter.clone();
     tasks.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(300));
         interval.tick().await; // skip immediate first tick
@@ -527,7 +545,6 @@ async fn main() -> anyhow::Result<()> {
                 _ = interval.tick() => {
                     ssh_limiter.cleanup();
                     ws_limiter.cleanup();
-                    voice_listen_limiter.cleanup();
                 }
             }
         }

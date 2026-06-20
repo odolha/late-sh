@@ -19,7 +19,7 @@ use crate::app::{
             create_modal::BlackjackCreateModal,
             player::BlackjackPlayerDirectory,
             settings::BlackjackTableSettings,
-            state::{BlackjackSnapshot, Phase, State},
+            state::{BlackjackSnapshot, Phase, SeatPhase, State},
             svc::{BlackjackEvent, BlackjackService},
         },
         svc::{GameKind, RoomListItem, RoomsService},
@@ -174,6 +174,17 @@ impl RoomGameManager for BlackjackTableManager {
         })
     }
 
+    fn is_awaiting_user_action(&self, room: &RoomListItem, user_id: Uuid) -> bool {
+        self.tables.lock_recover().get(&room.id).is_some_and(|svc| {
+            let snapshot = svc.current_snapshot();
+            snapshot.phase == Phase::PlayerTurn
+                && snapshot
+                    .seats
+                    .iter()
+                    .any(|seat| seat.user_id == Some(user_id) && seat.phase == SeatPhase::Playing)
+        })
+    }
+
     fn subscribe_room_events(&self) -> broadcast::Receiver<RoomGameEvent> {
         self.room_event_tx.subscribe()
     }
@@ -201,6 +212,10 @@ impl ActiveRoomBackend for State {
 
     fn tick(&mut self) {
         State::tick(self);
+    }
+
+    fn awaiting_my_action(&self) -> bool {
+        self.awaiting_action()
     }
 
     fn touch_activity(&self) {
