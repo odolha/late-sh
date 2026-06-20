@@ -2,6 +2,7 @@ pub mod input;
 pub mod minesweeper;
 pub mod nes_cabinet;
 pub mod nonogram;
+pub mod racer;
 pub mod snake;
 pub mod solitaire;
 pub mod sudoku;

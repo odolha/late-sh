@@ -72,6 +72,7 @@ pub(crate) const GAME_SELECTION_NES_RHDE: usize = 13;
 pub(crate) const GAME_SELECTION_NES_CONCENTRATION_ROOM: usize = 14;
 pub(crate) const GAME_SELECTION_NES_ZAP_RUDER: usize = 15;
 pub(crate) const GAME_SELECTION_NES_2048: usize = 16;
+pub(crate) const GAME_SELECTION_RACER: usize = 17;
 pub(crate) const DEFAULT_GAME_SELECTION: usize = GAME_SELECTION_2048;
 pub(crate) const DOOR_SELECTION_LATEANIA: usize = 0;
 pub(crate) const DEFAULT_DOOR_GAME_SELECTION: usize = DOOR_SELECTION_LATEANIA;
@@ -443,6 +444,7 @@ pub struct App {
     pub(crate) solitaire_state: crate::app::arcade::solitaire::state::State,
     pub(crate) minesweeper_state: crate::app::arcade::minesweeper::state::State,
     pub(crate) nes_cabinet_state: crate::app::arcade::nes_cabinet::state::State,
+    pub(crate) racer_state: crate::app::arcade::racer::state::State,
     pub(crate) active_room_game: Option<Box<dyn crate::app::rooms::backend::ActiveRoomBackend>>,
     /// `Some` while the user is inside the dartboard game, `None` otherwise.
     /// Constructed on entry (connecting + consuming a color slot) and
@@ -719,6 +721,7 @@ impl App {
             config.initial_minesweeper_games,
         );
         let nes_cabinet_state = crate::app::arcade::nes_cabinet::state::State::new();
+        let racer_state = crate::app::arcade::racer::state::State::new();
         let rooms_snapshot_rx = config.rooms_service.subscribe_snapshot();
         let rooms_snapshot = rooms_snapshot_rx.borrow().clone();
         crate::app::dashboard::state::seed_persisted_room_joins_from_rooms(
@@ -991,6 +994,7 @@ impl App {
             solitaire_state,
             minesweeper_state,
             nes_cabinet_state,
+            racer_state,
             active_room_game: None,
             dartboard_state: None,
             directory_state: crate::app::directory::state::DirectoryState::new(),

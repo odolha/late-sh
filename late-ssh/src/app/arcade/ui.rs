@@ -14,8 +14,9 @@ use crate::app::{
         GAME_SELECTION_NES_BRICK_BREAKER, GAME_SELECTION_NES_CONCENTRATION_ROOM,
         GAME_SELECTION_NES_DABG, GAME_SELECTION_NES_ESCAPE_FROM_PONG, GAME_SELECTION_NES_FALLING,
         GAME_SELECTION_NES_RHDE, GAME_SELECTION_NES_SQUIRREL_DOMINO, GAME_SELECTION_NES_THWAITE,
-        GAME_SELECTION_NES_ZAP_RUDER, GAME_SELECTION_NONOGRAMS, GAME_SELECTION_SNAKE,
-        GAME_SELECTION_SOLITAIRE, GAME_SELECTION_SUDOKU, GAME_SELECTION_TETRIS,
+        GAME_SELECTION_NES_ZAP_RUDER, GAME_SELECTION_NONOGRAMS, GAME_SELECTION_RACER,
+        GAME_SELECTION_SNAKE, GAME_SELECTION_SOLITAIRE, GAME_SELECTION_SUDOKU,
+        GAME_SELECTION_TETRIS,
     },
 };
 
@@ -188,6 +189,7 @@ pub fn game_title(selection: usize) -> &'static str {
         GAME_SELECTION_MINESWEEPER => "Minesweeper",
         GAME_SELECTION_SOLITAIRE => "Solitaire",
         GAME_SELECTION_SNAKE => "Snake",
+        GAME_SELECTION_RACER => "Shit I'm Late",
         _ => "The Arcade",
     }
 }
@@ -198,6 +200,7 @@ pub struct ArcadeHubView<'a> {
     pub twenty_forty_eight_state: &'a super::twenty_forty_eight::state::State,
     pub tetris_state: &'a super::tetris::state::State,
     pub snake_state: &'a super::snake::state::State,
+    pub racer_state: &'a super::racer::state::State,
     pub nes_cabinet_state: &'a super::nes_cabinet::state::State,
     pub sudoku_state: &'a super::sudoku::state::State,
     pub nonogram_state: &'a super::nonogram::state::State,
@@ -222,6 +225,9 @@ pub fn draw_arcade_hub(frame: &mut Frame, area: Rect, view: &ArcadeHubView<'_>) 
             return;
         } else if view.game_selection == GAME_SELECTION_SNAKE {
             super::snake::ui::draw_game(frame, area, view.snake_state, show_bottom_bar);
+            return;
+        } else if view.game_selection == GAME_SELECTION_RACER {
+            super::racer::ui::draw_game(frame, area, view.racer_state, show_bottom_bar);
             return;
         } else if super::input::is_nes_selection(view.game_selection) {
             super::nes_cabinet::ui::draw_game(frame, area, view.nes_cabinet_state, show_bottom_bar);
@@ -362,6 +368,18 @@ fn draw_header(frame: &mut Frame, area: Rect, selection: usize) {
             "Classic Snake game, eat, grow and survive!",
             "     ",
         ),
+        GAME_SELECTION_RACER => (
+            vec![
+                r#"     ████████╗██████╗  █████╗ ███████╗███████╗██╗ ██████╗"#,
+                r#"     ╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██╔════╝██║██╔════╝"#,
+                r#"        ██║   ██████╔╝███████║█████╗  █████╗  ██║██║     "#,
+                r#"        ██║   ██╔══██╗██╔══██║██╔══╝  ██╔══╝  ██║██║     "#,
+                r#"        ██║   ██║  ██║██║  ██║██║     ██║     ██║╚██████╗"#,
+                r#"        ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝     ╚═╝ ╚═════╝"#,
+            ],
+            "Traffic. You're Late. Overtake or crash.",
+            "     ",
+        ),
         selection if super::input::is_nes_selection(selection) => (
             vec![
                 r#"     ███╗   ██╗███████╗███████╗"#,
@@ -448,6 +466,16 @@ fn draw_game_list(frame: &mut Frame, area: Rect, view: &ArcadeHubView<'_>) {
             "Snake",
             "Eat grow and avoid danger. Speed rises as you survive.",
             format!("Best {}", view.snake_state.best_score),
+        ),
+        (
+            GAME_SELECTION_RACER,
+            "Traffic",
+            "Traffic. You're Late. Overtake or crash.",
+            if view.racer_state.best_score > 0 {
+                format!("Best {:>11}", view.racer_state.best_score)
+            } else {
+                "No runs yet".to_string()
+            },
         ),
     ] {
         draw_game_entry(
