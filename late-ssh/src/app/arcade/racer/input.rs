@@ -11,8 +11,8 @@ pub fn handle_key(state: &mut State, byte: u8) -> bool {
     match byte {
         b'w' | b'W' => { set_input(state, PlayerInput::Accelerate); true }
         b's' | b'S' => { set_input(state, PlayerInput::Brake); true }
-        b'a' | b'A' => { state.switch_lane(); true }
-        b'd' | b'D' => { state.switch_lane(); true }
+        b'a' | b'A' => { state.move_left(); true }
+        b'd' | b'D' => { state.move_right(); true }
         b' '        => { set_input(state, PlayerInput::Handbrake); true }
         b'p' | b'P' => { state.toggle_pause(); true }
         b'r' | b'R' => { state.restart(); true }
@@ -24,7 +24,8 @@ pub fn handle_arrow(state: &mut State, key: u8) -> bool {
     match key {
         b'A' => { set_input(state, PlayerInput::Accelerate); true }
         b'B' => { set_input(state, PlayerInput::Brake); true }
-        b'C' | b'D' => { state.switch_lane(); true }
+        b'C' => { state.move_right(); true }
+        b'D' => { state.move_left(); true }
         _ => false,
     }
 }
@@ -51,12 +52,15 @@ mod tests {
     }
 
     #[test]
-    fn a_switches_lane() {
+    fn a_moves_left_and_d_moves_right() {
         let mut s = State::new();
         s.ai_cars.clear();
-        let original = s.player_lane;
+        let start = s.player_lane;
         handle_key(&mut s, b'a');
-        assert_ne!(s.player_lane, original);
+        // Player starts at first same-dir lane, so 'a' moves into oncoming side.
+        assert!(s.player_lane.0 < start.0);
+        handle_key(&mut s, b'd');
+        assert_eq!(s.player_lane, start);
     }
 
     #[test]

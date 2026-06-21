@@ -18,6 +18,8 @@ const ROAD_BG: Color = Color::Rgb(18, 18, 18);
 const BORDER_FG: Color = Color::Rgb(80, 80, 80);
 const DIVIDER_FG: Color = Color::Rgb(200, 160, 0);
 const LANE_MARKING_FG: Color = Color::Rgb(60, 60, 60);
+/// Dashed lane divider between adjacent lanes in the same direction group.
+const LANE_DIVIDER_FG: Color = Color::Rgb(120, 120, 120);
 
 const PLAYER_FG: Color = Color::Cyan;
 const SAME_DIR_FG: Color = Color::Rgb(180, 180, 180);
@@ -45,6 +47,13 @@ const MINI_PLAYER: Color = Color::Rgb(0, 100, 100);
 /// Car occupies the middle 3 cols of the 5-wide lane, with 1-char padding each side.
 fn is_car_col(col: u16) -> bool {
     col >= 1 && col <= 3
+}
+
+/// Leftmost screen column of lane `lane_idx`, given the road's left-border x.
+fn lane_screen_start(road_x: u16, lane_idx: usize) -> u16 {
+    let base = road_x + 1 + (lane_idx as u16) * Config::LANE_WIDTH;
+    // Add 1 for the group divider once we're in the same-dir group.
+    if lane_idx >= Config::LANES_ONCOMING { base + 1 } else { base }
 }
 
 // ─── Road draw ────────────────────────────────────────────────────────────────
@@ -102,28 +111,34 @@ fn darken(c: Color, factor: f32) -> Color {
 
 // ─── Minimap ─────────────────────────────────────────────────────────────────
 
-// Minimap width = 5: │ <left-lane> · <right-lane> │
-const MINI_W: u16 = 5;
+/// X column of lane `lane_idx` within the minimap (relative to minimap's left edge).
+fn mini_lane_offset(lane_idx: usize) -> u16 {
+    let base = 1 + lane_idx as u16;
+    if lane_idx >= Config::LANES_ONCOMING { base + 1 } else { base }
+}
 
 fn draw_minimap(frame: &mut Frame, area: Rect, state: &State) {
     // 1 minimap row = CAR_HEIGHT_ROWS game rows = one "car height" of road
     let scale_m = Config::CAR_HEIGHT_ROWS as f32 * Config::METERS_PER_ROW;
     let rows = ((Config::MINIMAP_RANGE_M / scale_m) as u16).min(area.height);
     let buf = frame.buffer_mut();
+    let divider_x = area.x + 1 + Config::LANES_ONCOMING as u16;
+    let right_border_x = area.x + Config::MINI_W - 1;
 
     // Road outline — draw every row first, cars painted on top below
     for mr in 0..rows {
         let sy = area.y + mr;
-        let set = |buf: &mut ratatui::buffer::Buffer, x, sym, fg| {
+        for x in area.x..area.x + Config::MINI_W {
             if let Some(c) = buf.cell_mut((x, sy)) {
-                c.set_symbol(sym).set_fg(fg).set_bg(MINI_BG);
+                if x == area.x || x == right_border_x {
+                    c.set_symbol("│").set_fg(MINI_BORDER).set_bg(MINI_BG);
+                } else if x == divider_x {
+                    c.set_symbol("·").set_fg(MINI_DIVIDER).set_bg(MINI_BG);
+                } else {
+                    c.set_symbol(" ").set_fg(MINI_BG).set_bg(MINI_BG);
+                }
             }
-        };
-        set(buf, area.x,     "│", MINI_BORDER);
-        set(buf, area.x + 1, " ", MINI_BG);
-        set(buf, area.x + 2, "·", MINI_DIVIDER);
-        set(buf, area.x + 3, " ", MINI_BG);
-        set(buf, area.x + 4, "│", MINI_BORDER);
+        }
     }
 
     // AI cars — mr=0 is furthest ahead, mr=rows-1 is nearest to player
@@ -136,7 +151,7 @@ fn draw_minimap(frame: &mut Frame, area: Rect, state: &State) {
         if idx >= rows { continue; }
         let mr = (rows - 1) - idx;
         let sy = area.y + mr;
-        let x = area.x + match car.lane { Lane::Left => 1, Lane::Right => 3 };
+        let x = area.x + mini_lane_offset(car.lane.0);
         let fg = match car.direction {
             TrafficDir::Same => MINI_SAME,
             TrafficDir::Oncoming => MINI_ONCOMING,
@@ -147,7 +162,7 @@ fn draw_minimap(frame: &mut Frame, area: Rect, state: &State) {
     }
 
     // Player marker at the bottom
-    let x = area.x + match state.player_lane { Lane::Left => 1, Lane::Right => 3 };
+    let x = area.x + mini_lane_offset(state.player_lane.0);
     if let Some(c) = buf.cell_mut((x, area.y + rows.saturating_sub(1))) {
         c.set_symbol("▲").set_fg(MINI_PLAYER).set_bg(MINI_BG);
     }
@@ -279,13 +294,12 @@ fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
             cell.set_symbol("│").set_fg(BORDER_FG).set_bg(ROAD_BG);
         }
 
-        // Lanes: left starts at col 1, divider at col 6, right starts at col 7
-        let left_start = area.x + 1;
-        let right_start = area.x + 7;
-        let divider_x = area.x + 6;
+        // Each lane is rendered left-to-right; oncoming group then group divider then same-dir group.
+        let divider_x = area.x + 1 + (Config::LANES_ONCOMING as u16) * Config::LANE_WIDTH;
 
-        for lane_x_start in [left_start, right_start] {
-            let lane = if lane_x_start == left_start { Lane::Left } else { Lane::Right };
+        for lane_idx in 0..Config::TOTAL_LANES {
+            let lane = Lane(lane_idx);
+            let lane_x_start = lane_screen_start(area.x, lane_idx);
             let car_hit = cars.iter().find(|c| {
                 c.lane == lane && ri >= c.top_row && ri < c.top_row + c.height
             });
@@ -303,7 +317,7 @@ fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
             }
         }
 
-        // Center divider — dashed yellow line
+        // Group divider — dashed yellow line between oncoming and same-dir sides.
         let divider_sym = if track_row.rem_euclid(4) < 2 { "│" } else { " " };
         if let Some(cell) = buf.cell_mut((divider_x, screen_y)) {
             cell.set_symbol(divider_sym).set_fg(DIVIDER_FG).set_bg(ROAD_BG);
@@ -329,13 +343,38 @@ fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
     }
 }
 
-/// Empty lane cell: subtle road markings at lane edges.
-fn lane_bg_cell(track_row: i32, col: u16, _lane: Lane) -> (&'static str, Color) {
-    if (col == 0 || col == 4) && track_row.rem_euclid(6) < 3 {
-        ("·", LANE_MARKING_FG)
-    } else {
-        (" ", ROAD_BG)
+/// Empty lane cell.
+/// - At the very outer road edges: subtle dotted shoulder markings.
+/// - At boundaries between two lanes in the same direction group: dashed white divider.
+/// - Everywhere else: blank road.
+fn lane_bg_cell(track_row: i32, col: u16, lane: Lane) -> (&'static str, Color) {
+    let lane_idx = lane.0;
+    let last_lane_w = Config::LANE_WIDTH - 1;
+
+    // Dashed white divider on the shared edge between two same-group lanes.
+    let next_same_group = lane_idx + 1 < Config::TOTAL_LANES
+        && Lane(lane_idx + 1).direction() == lane.direction();
+    let prev_same_group = lane_idx > 0
+        && Lane(lane_idx - 1).direction() == lane.direction();
+
+    if col == last_lane_w && next_same_group {
+        if track_row.rem_euclid(4) < 2 {
+            return ("│", LANE_DIVIDER_FG);
+        }
+        return (" ", ROAD_BG);
     }
+    if col == 0 && prev_same_group {
+        // The previous lane already drew the divider on its right edge; leave blank.
+        return (" ", ROAD_BG);
+    }
+
+    // Outer road shoulders only (leftmost lane's col 0, rightmost lane's col 4).
+    let is_outer_left = lane_idx == 0 && col == 0;
+    let is_outer_right = lane_idx == Config::TOTAL_LANES - 1 && col == last_lane_w;
+    if (is_outer_left || is_outer_right) && track_row.rem_euclid(6) < 3 {
+        return ("·", LANE_MARKING_FG);
+    }
+    (" ", ROAD_BG)
 }
 
 // ─── Stats panel ─────────────────────────────────────────────────────────────
@@ -424,13 +463,18 @@ fn draw_stats(frame: &mut Frame, area: Rect, state: &State) {
 
     // Lane indicator
     lines.push(Line::from(""));
-    let lane_str = match state.player_lane {
-        Lane::Left => " Lane    LEFT (oncoming!)",
-        Lane::Right => " Lane    RIGHT (your lane)",
-    };
-    let lane_color = match state.player_lane {
-        Lane::Left => Color::Red,
-        Lane::Right => theme::SUCCESS(),
+    let (lane_str, lane_color) = if state.player_lane.is_oncoming() {
+        (
+            format!(" Lane    {} of {} (ONCOMING!)",
+                state.player_lane.0 + 1, Config::TOTAL_LANES),
+            Color::Red,
+        )
+    } else {
+        let same_idx = state.player_lane.0 - Config::LANES_ONCOMING + 1;
+        (
+            format!(" Lane    {} of {} (your side)", same_idx, Config::LANES_SAME_DIR),
+            theme::SUCCESS(),
+        )
     };
     lines.push(Line::from(Span::styled(
         lane_str,
@@ -528,10 +572,10 @@ pub fn draw_game(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: 
     let tree_r: u16 = 8;
     let stats_gap: u16 = 2;
     let stats_min: u16 = 28;
-    let block_w = MINI_W + mini_gap + tree_l + road_width + tree_r + stats_gap + stats_min;
+    let block_w = Config::MINI_W + mini_gap + tree_l + road_width + tree_r + stats_gap + stats_min;
     let block_x = content_area.x + content_area.width.saturating_sub(block_w) / 2;
     let mini_x = block_x;
-    let tree_left_x = block_x + MINI_W + mini_gap;
+    let tree_left_x = block_x + Config::MINI_W + mini_gap;
     let road_x = tree_left_x + tree_l;
     let road_y = content_area.y + content_area.height.saturating_sub(road_height) / 2;
     let right_tree_end = road_x + road_width + tree_r;
@@ -557,7 +601,7 @@ pub fn draw_game(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: 
     let mini_area = Rect {
         x: mini_x,
         y: road_y,
-        width: MINI_W,
+        width: Config::MINI_W,
         height: minimap_rows.min(road_height),
     };
 

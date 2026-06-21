@@ -24,8 +24,18 @@ impl Config {
     pub const SPAWN_WEIGHT_XL: f32 = 0.1;
     /// Width of each lane in chars.
     pub const LANE_WIDTH: u16 = 5;
-    /// Total road width: left border + left lane + center divider + right lane + right border.
-    pub const TOTAL_ROAD_WIDTH: u16 = 13; // 1+5+1+5+1
+    /// Number of oncoming-traffic lanes (rendered on the left side of the road).
+    pub const LANES_ONCOMING: usize = 2;
+    /// Number of same-direction lanes (rendered on the right side of the road).
+    pub const LANES_SAME_DIR: usize = 2;
+    /// Total number of lanes.
+    pub const TOTAL_LANES: usize = Self::LANES_ONCOMING + Self::LANES_SAME_DIR;
+    /// Total road width: borders + all lanes + center group divider.
+    pub const TOTAL_ROAD_WIDTH: u16 =
+        1 + (Self::TOTAL_LANES as u16) * Self::LANE_WIDTH + 1 + 1;
+    /// Minimap width: borders + 1 col per lane + group divider.
+    pub const MINI_W: u16 =
+        1 + Self::LANES_ONCOMING as u16 + 1 + Self::LANES_SAME_DIR as u16 + 1;
     /// Total track length in meters (10 km).
     pub const TRACK_LENGTH_M: f32 = 10_000.0;
     /// Meters represented by one terminal row.
@@ -75,27 +85,33 @@ impl Config {
     /// Key repeat fires every ~30ms, so 150ms gives ~5 repeat events of margin.
     pub const INPUT_HOLD_MS: u64 = 150;
     /// Minimum terminal width needed to render game + stats.
-    pub const MIN_TERMINAL_WIDTH: u16 = 5 + 2 + 6 + Self::TOTAL_ROAD_WIDTH + 8 + 2 + 28; // mini+gap+trees+road+trees+gap+stats
+    pub const MIN_TERMINAL_WIDTH: u16 =
+        Self::MINI_W + 2 + 6 + Self::TOTAL_ROAD_WIDTH + 8 + 2 + 28; // mini+gap+trees+road+trees+gap+stats
     /// Minimum terminal height needed (road + bottom bar).
     pub const MIN_TERMINAL_HEIGHT: u16 = Self::VISIBLE_ROWS + 5;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/// Lane index. 0..LANES_ONCOMING are oncoming lanes (left side of road);
+/// LANES_ONCOMING..TOTAL_LANES are same-direction lanes (right side).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Lane {
-    /// Oncoming traffic lane (left in traffic model).
-    Left,
-    /// Same-direction traffic and player starting lane (right in traffic model).
-    Right,
-}
+pub struct Lane(pub usize);
 
 impl Lane {
-    pub fn opposite(self) -> Self {
-        match self {
-            Lane::Left => Lane::Right,
-            Lane::Right => Lane::Left,
+    pub fn direction(self) -> TrafficDir {
+        if self.0 < Config::LANES_ONCOMING {
+            TrafficDir::Oncoming
+        } else {
+            TrafficDir::Same
         }
+    }
+    /// First (leftmost) same-direction lane — player's starting lane.
+    pub fn player_start() -> Self {
+        Lane(Config::LANES_ONCOMING)
+    }
+    pub fn is_oncoming(self) -> bool {
+        self.direction() == TrafficDir::Oncoming
     }
 }
 
@@ -190,7 +206,7 @@ impl State {
         Self {
             player_pos_m: 0.0,
             player_speed_kmh: Config::PLAYER_START_SPEED_KMH,
-            player_lane: Lane::Right,
+            player_lane: Lane::player_start(),
             input: PlayerInput::None,
             input_last_set: None,
             ai_cars: Vec::new(),
@@ -219,11 +235,22 @@ impl State {
         }
     }
 
-    pub fn switch_lane(&mut self) {
+    pub fn move_left(&mut self) {
         if !self.is_playing() || self.is_paused {
             return;
         }
-        self.player_lane = self.player_lane.opposite();
+        if self.player_lane.0 > 0 {
+            self.player_lane = Lane(self.player_lane.0 - 1);
+        }
+    }
+
+    pub fn move_right(&mut self) {
+        if !self.is_playing() || self.is_paused {
+            return;
+        }
+        if self.player_lane.0 + 1 < Config::TOTAL_LANES {
+            self.player_lane = Lane(self.player_lane.0 + 1);
+        }
     }
 
     pub fn tick(&mut self) {
@@ -348,12 +375,8 @@ impl State {
             0.0_f32..(Config::MINIMAP_RANGE_M - Config::VISIBLE_AHEAD_M).max(1.0),
         );
         for i in 0..cluster {
-            let lane = if rng.gen_bool(0.5) { Lane::Left } else { Lane::Right };
-            let direction = if lane == Lane::Left {
-                TrafficDir::Oncoming
-            } else {
-                TrafficDir::Same
-            };
+            let lane = Lane(rng.gen_range(0..Config::TOTAL_LANES));
+            let direction = lane.direction();
             let speed = if direction == TrafficDir::Same {
                 Config::AI_SAME_DIR_SPEED_KMH
             } else {
@@ -426,9 +449,12 @@ mod tests {
     }
 
     #[test]
-    fn lane_opposite() {
-        assert_eq!(Lane::Left.opposite(), Lane::Right);
-        assert_eq!(Lane::Right.opposite(), Lane::Left);
+    fn lane_direction_follows_index() {
+        assert_eq!(Lane(0).direction(), TrafficDir::Oncoming);
+        assert_eq!(
+            Lane(Config::LANES_ONCOMING).direction(),
+            TrafficDir::Same,
+        );
     }
 
     #[test]
@@ -446,12 +472,12 @@ mod tests {
         let mut s = State::new();
         s.ai_cars.clear();
         s.player_pos_m = 100.0;
-        s.player_lane = Lane::Right;
+        s.player_lane = Lane::player_start();
         // AI at player_pos_m + 3.0: diff = 3.0 < ahead_limit (6.0) → collision
         s.ai_cars.push(AiCar {
             pos_m: 103.0,
             speed_kmh: 60.0,
-            lane: Lane::Right,
+            lane: Lane::player_start(),
             direction: TrafficDir::Same,
             size: CarSize::Sm,
         });
@@ -463,12 +489,12 @@ mod tests {
         let mut s = State::new();
         s.ai_cars.clear();
         s.player_pos_m = 100.0;
-        s.player_lane = Lane::Right;
+        s.player_lane = Lane::player_start();
         // AI at player_pos_m + 6.0: diff = 6.0, NOT < ahead_limit → no collision
         s.ai_cars.push(AiCar {
             pos_m: 106.0,
             speed_kmh: 60.0,
-            lane: Lane::Right,
+            lane: Lane::player_start(),
             direction: TrafficDir::Same,
             size: CarSize::Sm,
         });
@@ -480,12 +506,12 @@ mod tests {
         let mut s = State::new();
         s.ai_cars.clear();
         s.player_pos_m = 100.0;
-        s.player_lane = Lane::Right;
+        s.player_lane = Lane::player_start();
         // AI at player_pos_m - 12.0: diff = -12.0, NOT > -behind_limit → no collision
         s.ai_cars.push(AiCar {
             pos_m: 88.0,
             speed_kmh: 60.0,
-            lane: Lane::Right,
+            lane: Lane::player_start(),
             direction: TrafficDir::Same,
             size: CarSize::Sm,
         });
@@ -497,11 +523,11 @@ mod tests {
         let mut s = State::new();
         s.ai_cars.clear();
         s.player_pos_m = 100.0;
-        s.player_lane = Lane::Right;
+        s.player_lane = Lane::player_start();
         s.ai_cars.push(AiCar {
             pos_m: 100.5,
             speed_kmh: 60.0,
-            lane: Lane::Left,
+            lane: Lane(0),
             direction: TrafficDir::Oncoming,
             size: CarSize::Sm,
         });
