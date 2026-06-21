@@ -385,7 +385,8 @@ fn draw_stats(frame: &mut Frame, area: Rect, state: &State) {
     }
 
     let pct = state.progress_pct();
-    let km_done = state.player_pos_m / 1000.0;
+    let km_done = state.player_pos_m * Config::WORLD_DISTANCE_SCALE / 1000.0;
+    let km_total = Config::TRACK_LENGTH_M * Config::WORLD_DISTANCE_SCALE / 1000.0;
 
     let mut lines: Vec<Line<'static>> = vec![
         Line::from(""),
@@ -409,7 +410,7 @@ fn draw_stats(frame: &mut Frame, area: Rect, state: &State) {
         Line::from(vec![
             Span::styled(" Track  ", Style::default().fg(theme::TEXT_DIM())),
             Span::styled(
-                format!("{:.2} / 10.00 km", km_done),
+                format!("{:.1} / {:.0} km", km_done, km_total),
                 Style::default().fg(theme::TEXT_BRIGHT()),
             ),
         ]),
@@ -486,11 +487,11 @@ fn draw_stats(frame: &mut Frame, area: Rect, state: &State) {
 }
 
 fn speed_color(kmh: f32) -> Color {
-    if kmh >= 180.0 {
+    if kmh >= 150.0 {
         Color::Red
-    } else if kmh >= 120.0 {
+    } else if kmh >= 100.0 {
         Color::Yellow
-    } else if kmh >= 60.0 {
+    } else if kmh >= 50.0 {
         theme::SUCCESS()
     } else {
         theme::TEXT_DIM()

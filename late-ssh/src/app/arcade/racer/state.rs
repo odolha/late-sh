@@ -12,9 +12,9 @@ impl Config {
     pub const VISIBLE_ROWS: u16 = 50;
     /// Visual height (in rows) per car size class.
     pub const CAR_HEIGHT_SM: u16 = 3;
-    pub const CAR_HEIGHT_MD: u16 = 4;
-    pub const CAR_HEIGHT_LG: u16 = 6;
-    pub const CAR_HEIGHT_XL: u16 = 8;
+    pub const CAR_HEIGHT_MD: u16 = 5;
+    pub const CAR_HEIGHT_LG: u16 = 7;
+    pub const CAR_HEIGHT_XL: u16 = 11;
     /// Player car height (always Sm).
     pub const CAR_HEIGHT_ROWS: u16 = Self::CAR_HEIGHT_SM;
     /// Spawn weights per size class. Should sum to 1.0.
@@ -25,9 +25,9 @@ impl Config {
     /// Width of each lane in chars.
     pub const LANE_WIDTH: u16 = 5;
     /// Number of oncoming-traffic lanes (rendered on the left side of the road).
-    pub const LANES_ONCOMING: usize = 2;
+    pub const LANES_ONCOMING: usize = 4;
     /// Number of same-direction lanes (rendered on the right side of the road).
-    pub const LANES_SAME_DIR: usize = 2;
+    pub const LANES_SAME_DIR: usize = 4;
     /// Total number of lanes.
     pub const TOTAL_LANES: usize = Self::LANES_ONCOMING + Self::LANES_SAME_DIR;
     /// Total road width: borders + all lanes + center group divider.
@@ -36,24 +36,43 @@ impl Config {
     /// Minimap width: borders + 1 col per lane + group divider.
     pub const MINI_W: u16 =
         1 + Self::LANES_ONCOMING as u16 + 1 + Self::LANES_SAME_DIR as u16 + 1;
-    /// Total track length in meters (10 km).
+    // ─── World scaling ─────────────────────────────────────────────────────────
+    //
+    // To make the game feel realistic without forcing long play sessions, two
+    // scale factors decouple what the player SEES from what the physics MOVES:
+    //
+    // * `WORLD_SPEED_FACTOR`: multiplies displayed km/h to world m/s, so a
+    //   displayed cap of 200 km/h still produces the visual scroll rate of
+    //   a real 250 km/h. All `*_KMH` constants are in displayed units.
+    // * `WORLD_DISTANCE_SCALE`: multiplies physics-meters to displayed-meters.
+    //   So a physics track of 10 km can read as 100 km without ballooning the
+    //   actual play time (which is physics_distance / physics_speed).
+    //
+    // Time-to-finish is preserved by the (WORLD_SPEED_FACTOR / WORLD_DISTANCE_SCALE)
+    // ratio matching the (default_speed / default_distance) ratio of the prior
+    // calibration. With current values: 1.25 / 10 = 0.125, same as before.
+    pub const WORLD_SPEED_FACTOR: f32 = 1.25;
+    pub const WORLD_DISTANCE_SCALE: f32 = 20.0;
+
+    /// Physics track length in world meters (kept short for short play time).
+    /// Displayed length = `TRACK_LENGTH_M * WORLD_DISTANCE_SCALE / 1000` km.
     pub const TRACK_LENGTH_M: f32 = 10_000.0;
-    /// Meters represented by one terminal row.
+    /// World meters represented by one terminal row.
     pub const METERS_PER_ROW: f32 = 3.0;
     /// Rows of road visible behind (below) the player car.
     pub const PLAYER_BOTTOM_MARGIN: u16 = 4;
     /// Screen row of the top (front) of the player car.
     pub const PLAYER_TOP_ROW: u16 = Self::VISIBLE_ROWS - Self::CAR_HEIGHT_ROWS - Self::PLAYER_BOTTOM_MARGIN;
-    /// Player starting speed in km/h.
+    /// Player starting speed in km/h (displayed).
     pub const PLAYER_START_SPEED_KMH: f32 = 50.0;
-    /// Maximum player speed in km/h.
-    pub const PLAYER_MAX_SPEED_KMH: f32 = 250.0;
+    /// Maximum player speed in km/h (displayed).
+    pub const PLAYER_MAX_SPEED_KMH: f32 = 300.0;
     /// Minimum player speed in km/h (full stop allowed).
     pub const PLAYER_MIN_SPEED_KMH: f32 = 0.0;
     /// Acceleration in km/h per second while holding accelerate.
-    pub const ACCEL_KMH_PER_S: f32 = 110.0;
+    pub const ACCEL_KMH_PER_S: f32 = 88.0;
     /// Braking deceleration in km/h per second.
-    pub const DECEL_KMH_PER_S: f32 = 160.0;
+    pub const DECEL_KMH_PER_S: f32 = 128.0;
     /// Passive coasting deceleration in km/h per second.
     pub const COAST_DECEL_KMH_PER_S: f32 = 0.0;
     /// Target number of AI cars on road at any time.
@@ -61,10 +80,10 @@ impl Config {
     /// How far ahead the minimap shows (2 visible screens).
     /// Cars always spawn within this range so they appear on the minimap immediately.
     pub const MINIMAP_RANGE_M: f32 = 2.0 * Self::VISIBLE_ROWS as f32 * Self::METERS_PER_ROW;
-    /// Fixed speed for same-direction NPC cars (km/h).
-    pub const AI_SAME_DIR_SPEED_KMH: f32 = 90.0;
-    /// Fixed speed for oncoming NPC cars (km/h).
-    pub const AI_ONCOMING_SPEED_KMH: f32 = 50.0;
+    /// Fixed speed for same-direction NPC cars (km/h displayed).
+    pub const AI_SAME_DIR_SPEED_KMH: f32 = 72.0;
+    /// Fixed speed for oncoming NPC cars (km/h displayed).
+    pub const AI_ONCOMING_SPEED_KMH: f32 = 40.0;
     /// Minimum center-to-center spawn gap between cars in the same lane/direction.
     /// Must exceed largest car length (XL = 8 rows × 3 m = 24 m) plus a small buffer.
     pub const AI_MIN_SEPARATION_M: f32 = 32.0;
@@ -75,10 +94,11 @@ impl Config {
     /// Initial score: 1000 * track length in meters.
     pub const INITIAL_SCORE: f32 = 1_000.0 * Self::TRACK_LENGTH_M; // 10 000 000
     /// Score decrease per second, calibrated so finishing at START_SPEED yields ~0.
-    /// Time at start speed = TRACK_LEN / (START_SPEED / 3.6).
+    /// Time at start speed = TRACK_LEN / (START_SPEED / 3.6 * WORLD_SPEED_FACTOR).
     /// Decay = INITIAL_SCORE / time_at_start_speed.
-    pub const SCORE_DECAY_PER_S: f32 =
-        Self::INITIAL_SCORE * (Self::PLAYER_START_SPEED_KMH / 3.6) / Self::TRACK_LENGTH_M;
+    pub const SCORE_DECAY_PER_S: f32 = Self::INITIAL_SCORE
+        * (Self::PLAYER_START_SPEED_KMH / 3.6 * Self::WORLD_SPEED_FACTOR)
+        / Self::TRACK_LENGTH_M;
     /// Duration of one world tick in seconds (15 FPS).
     pub const TICK_DT: f32 = 1.0 / 15.0;
     /// How long a held-key input stays active after the last key event.
@@ -279,7 +299,7 @@ impl State {
             .clamp(Config::PLAYER_MIN_SPEED_KMH, Config::PLAYER_MAX_SPEED_KMH);
 
         // Advance player
-        self.player_pos_m += (self.player_speed_kmh / 3.6) * dt;
+        self.player_pos_m += (self.player_speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR) * dt;
         self.elapsed_s += dt;
         self.score = (Config::INITIAL_SCORE - Config::SCORE_DECAY_PER_S * self.elapsed_s)
             .max(0.0) as i64;
@@ -318,8 +338,8 @@ impl State {
     fn update_ai(&mut self, dt: f32) {
         for car in &mut self.ai_cars {
             match car.direction {
-                TrafficDir::Same => car.pos_m += (car.speed_kmh / 3.6) * dt,
-                TrafficDir::Oncoming => car.pos_m -= (car.speed_kmh / 3.6) * dt,
+                TrafficDir::Same => car.pos_m += (car.speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR) * dt,
+                TrafficDir::Oncoming => car.pos_m -= (car.speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR) * dt,
             }
         }
     }
