@@ -52,24 +52,28 @@ fn is_car_col(col: u16) -> bool {
 struct CarOnScreen {
     /// Topmost screen row occupied by the car.
     top_row: i32,
+    /// Height in rows.
+    height: i32,
     lane: Lane,
     fg: Color,
 }
 
 fn collect_cars(state: &State) -> Vec<CarOnScreen> {
-    let half = Config::CAR_HEIGHT_ROWS as i32 / 2;
     let mut cars = Vec::with_capacity(state.ai_cars.len() + 1);
 
     cars.push(CarOnScreen {
         top_row: Config::PLAYER_TOP_ROW as i32,
+        height: Config::CAR_HEIGHT_ROWS as i32,
         lane: state.player_lane,
         fg: PLAYER_FG,
     });
 
     for ai in &state.ai_cars {
         let center = state.track_to_screen_row(ai.pos_m);
+        let h = ai.size.height_rows() as i32;
         cars.push(CarOnScreen {
-            top_row: center - half,
+            top_row: center - h / 2,
+            height: h,
             lane: ai.lane,
             fg: match ai.direction {
                 TrafficDir::Same => SAME_DIR_FG,
@@ -245,7 +249,6 @@ fn draw_verge(frame: &mut Frame, road_area: Rect, left_x: u16, right_end: u16, s
 
 fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
     let cars = collect_cars(state);
-    let car_h = Config::CAR_HEIGHT_ROWS as i32;
     let buf = frame.buffer_mut();
 
     // Base track-row index at the player's front so road markings scroll with speed.
@@ -284,7 +287,7 @@ fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
         for lane_x_start in [left_start, right_start] {
             let lane = if lane_x_start == left_start { Lane::Left } else { Lane::Right };
             let car_hit = cars.iter().find(|c| {
-                c.lane == lane && ri >= c.top_row && ri < c.top_row + car_h
+                c.lane == lane && ri >= c.top_row && ri < c.top_row + c.height
             });
 
             for col in 0..Config::LANE_WIDTH {

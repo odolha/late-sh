@@ -10,8 +10,18 @@ impl Config {
     /// Fixed visible road height in terminal rows. Kept constant to prevent
     /// "wider terminal = longer sight distance" cheating.
     pub const VISIBLE_ROWS: u16 = 50;
-    /// Visual height of each car in rows (~0.8× car body width of 3 chars).
-    pub const CAR_HEIGHT_ROWS: u16 = 3;
+    /// Visual height (in rows) per car size class.
+    pub const CAR_HEIGHT_SM: u16 = 3;
+    pub const CAR_HEIGHT_MD: u16 = 4;
+    pub const CAR_HEIGHT_LG: u16 = 6;
+    pub const CAR_HEIGHT_XL: u16 = 8;
+    /// Player car height (always Sm).
+    pub const CAR_HEIGHT_ROWS: u16 = Self::CAR_HEIGHT_SM;
+    /// Spawn weights per size class. Should sum to 1.0.
+    pub const SPAWN_WEIGHT_SM: f32 = 0.4;
+    pub const SPAWN_WEIGHT_MD: f32 = 0.3;
+    pub const SPAWN_WEIGHT_LG: f32 = 0.2;
+    pub const SPAWN_WEIGHT_XL: f32 = 0.1;
     /// Width of each lane in chars.
     pub const LANE_WIDTH: u16 = 5;
     /// Total road width: left border + left lane + center divider + right lane + right border.
@@ -45,9 +55,9 @@ impl Config {
     pub const AI_SAME_DIR_SPEED_KMH: f32 = 90.0;
     /// Fixed speed for oncoming NPC cars (km/h).
     pub const AI_ONCOMING_SPEED_KMH: f32 = 50.0;
-    /// Minimum center-to-center gap between cars in the same lane/direction.
-    /// Low enough to allow tight clusters; prevents visual overlap (car ≈ 9 m).
-    pub const AI_MIN_SEPARATION_M: f32 = 22.0;
+    /// Minimum center-to-center spawn gap between cars in the same lane/direction.
+    /// Must exceed largest car length (XL = 8 rows × 3 m = 24 m) plus a small buffer.
+    pub const AI_MIN_SEPARATION_M: f32 = 32.0;
     /// Distance behind player before an AI car is despawned.
     pub const AI_DESPAWN_BEHIND_M: f32 = 200.0;
     /// Meters visible ahead of player car front = PLAYER_TOP_ROW * METERS_PER_ROW.
@@ -97,6 +107,36 @@ pub enum TrafficDir {
     Oncoming,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CarSize {
+    Sm,
+    Md,
+    Lg,
+    Xl,
+}
+
+impl CarSize {
+    pub fn height_rows(self) -> u16 {
+        match self {
+            CarSize::Sm => Config::CAR_HEIGHT_SM,
+            CarSize::Md => Config::CAR_HEIGHT_MD,
+            CarSize::Lg => Config::CAR_HEIGHT_LG,
+            CarSize::Xl => Config::CAR_HEIGHT_XL,
+        }
+    }
+
+    pub fn pick_weighted<R: Rng>(rng: &mut R) -> Self {
+        let r: f32 = rng.r#gen();
+        let mut acc = Config::SPAWN_WEIGHT_SM;
+        if r < acc { return CarSize::Sm; }
+        acc += Config::SPAWN_WEIGHT_MD;
+        if r < acc { return CarSize::Md; }
+        acc += Config::SPAWN_WEIGHT_LG;
+        if r < acc { return CarSize::Lg; }
+        CarSize::Xl
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct AiCar {
     /// Center track position in meters.
@@ -104,6 +144,7 @@ pub struct AiCar {
     pub speed_kmh: f32,
     pub lane: Lane,
     pub direction: TrafficDir,
+    pub size: CarSize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -257,26 +298,20 @@ impl State {
     }
 
     fn check_collision(&self) -> bool {
-        // Pixel-perfect: match exactly which screen rows each car occupies.
-        //
-        // Player pos_m → PLAYER_TOP_ROW (top of car).
-        // AI pos_m → center row (top_row = center - half, half = CAR_HEIGHT_ROWS/2).
-        // Rust `as i32` truncates toward zero, so negative offsets behave as ceiling.
-        //
-        // Worked-out bounds for CAR_HEIGHT_ROWS=3, METERS_PER_ROW=3:
-        //   diff = ai.pos_m - player_pos_m ∈ (-12, 6) → visual overlap.
-        let car_h = Config::CAR_HEIGHT_ROWS as i32;
-        let half = car_h / 2;
-        let mpr = Config::METERS_PER_ROW;
-        let ahead_limit = (half + 1) as f32 * mpr;          // 6 m
-        let behind_limit = (car_h + half) as f32 * mpr;     // 12 m
+        // Pixel-perfect: compute the exact screen row range each car occupies
+        // (mirroring the render logic) and check for integer overlap.
+        let p_top = Config::PLAYER_TOP_ROW as i32;
+        let p_bot = p_top + Config::CAR_HEIGHT_ROWS as i32 - 1;
 
         for car in &self.ai_cars {
             if car.lane != self.player_lane {
                 continue;
             }
-            let diff = car.pos_m - self.player_pos_m;
-            if diff > -behind_limit && diff < ahead_limit {
+            let center = self.track_to_screen_row(car.pos_m);
+            let h = car.size.height_rows() as i32;
+            let top = center - h / 2;
+            let bot = top + h - 1;
+            if top <= p_bot && bot >= p_top {
                 return true;
             }
         }
@@ -335,7 +370,8 @@ impl State {
             if !self.spawn_clear(pos, lane, direction) {
                 continue;
             }
-            self.ai_cars.push(AiCar { pos_m: pos, speed_kmh: speed, lane, direction });
+            let size = CarSize::pick_weighted(&mut rng);
+            self.ai_cars.push(AiCar { pos_m: pos, speed_kmh: speed, lane, direction, size });
         }
 
         // Random delay before next spawn event: 0–4 s at 15 fps.
@@ -417,6 +453,7 @@ mod tests {
             speed_kmh: 60.0,
             lane: Lane::Right,
             direction: TrafficDir::Same,
+            size: CarSize::Sm,
         });
         assert!(s.check_collision());
     }
@@ -433,6 +470,7 @@ mod tests {
             speed_kmh: 60.0,
             lane: Lane::Right,
             direction: TrafficDir::Same,
+            size: CarSize::Sm,
         });
         assert!(!s.check_collision());
     }
@@ -449,6 +487,7 @@ mod tests {
             speed_kmh: 60.0,
             lane: Lane::Right,
             direction: TrafficDir::Same,
+            size: CarSize::Sm,
         });
         assert!(!s.check_collision());
     }
@@ -464,6 +503,7 @@ mod tests {
             speed_kmh: 60.0,
             lane: Lane::Left,
             direction: TrafficDir::Oncoming,
+            size: CarSize::Sm,
         });
         assert!(!s.check_collision());
     }
