@@ -30,9 +30,11 @@ impl Config {
     pub const LANES_SAME_DIR: usize = 4;
     /// Total number of lanes.
     pub const TOTAL_LANES: usize = Self::LANES_ONCOMING + Self::LANES_SAME_DIR;
-    /// Total road width: borders + all lanes + center group divider.
+    /// Total road width: borders + N lanes + (N-1) intra/inter-lane separators.
+    /// Each lane is `LANE_WIDTH` cells; every gap between two consecutive lanes
+    /// gets its own dedicated 1-cell separator column.
     pub const TOTAL_ROAD_WIDTH: u16 =
-        1 + (Self::TOTAL_LANES as u16) * Self::LANE_WIDTH + 1 + 1;
+        1 + (Self::TOTAL_LANES as u16) * Self::LANE_WIDTH + (Self::TOTAL_LANES as u16 - 1) + 1;
     /// Minimap width: borders + 1 col per lane + group divider.
     pub const MINI_W: u16 =
         1 + Self::LANES_ONCOMING as u16 + 1 + Self::LANES_SAME_DIR as u16 + 1;
@@ -104,6 +106,10 @@ impl Config {
     /// How long a held-key input stays active after the last key event.
     /// Key repeat fires every ~30ms, so 150ms gives ~5 repeat events of margin.
     pub const INPUT_HOLD_MS: u64 = 150;
+    /// Visual lane-change speed in lanes/second.
+    /// 7.0 → a single lane change animates over ~140 ms (≈ 2 ticks at 15 FPS).
+    /// Affects display only; collision uses the discrete `player_lane`.
+    pub const LANE_TRANSITION_PER_S: f32 = 7.0;
     /// Minimum terminal width needed to render game + stats.
     pub const MIN_TERMINAL_WIDTH: u16 =
         Self::MINI_W + 2 + 6 + Self::TOTAL_ROAD_WIDTH + 8 + 2 + 28; // mini+gap+trees+road+trees+gap+stats
@@ -204,8 +210,11 @@ pub struct State {
     pub player_pos_m: f32,
     /// Current speed in km/h.
     pub player_speed_kmh: f32,
-    /// Current lane.
+    /// Current lane (discrete; used for collision and game logic).
     pub player_lane: Lane,
+    /// Smoothed lane index for rendering only. Catches up to `player_lane.0`
+    /// at `LANE_TRANSITION_PER_S`. Never used for collision.
+    pub player_lane_display: f32,
     /// Held input this tick.
     pub input: PlayerInput,
     /// When the current input was last refreshed by a key event.
@@ -227,6 +236,7 @@ impl State {
             player_pos_m: 0.0,
             player_speed_kmh: Config::PLAYER_START_SPEED_KMH,
             player_lane: Lane::player_start(),
+            player_lane_display: Lane::player_start().0 as f32,
             input: PlayerInput::None,
             input_last_set: None,
             ai_cars: Vec::new(),
@@ -301,6 +311,16 @@ impl State {
         // Advance player
         self.player_pos_m += (self.player_speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR) * dt;
         self.elapsed_s += dt;
+
+        // Ease the rendered lane toward the target lane.
+        let target = self.player_lane.0 as f32;
+        let max_step = Config::LANE_TRANSITION_PER_S * dt;
+        let diff = target - self.player_lane_display;
+        if diff.abs() <= max_step {
+            self.player_lane_display = target;
+        } else {
+            self.player_lane_display += diff.signum() * max_step;
+        }
         self.score = (Config::INITIAL_SCORE - Config::SCORE_DECAY_PER_S * self.elapsed_s)
             .max(0.0) as i64;
 

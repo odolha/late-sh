@@ -50,10 +50,31 @@ fn is_car_col(col: u16) -> bool {
 }
 
 /// Leftmost screen column of lane `lane_idx`, given the road's left-border x.
+/// Layout: border + lane_0 + sep + lane_1 + sep + ... + lane_{N-1} + border.
+/// Every gap between consecutive lanes uses exactly one separator column.
 fn lane_screen_start(road_x: u16, lane_idx: usize) -> u16 {
-    let base = road_x + 1 + (lane_idx as u16) * Config::LANE_WIDTH;
-    // Add 1 for the group divider once we're in the same-dir group.
-    if lane_idx >= Config::LANES_ONCOMING { base + 1 } else { base }
+    road_x + 1 + (lane_idx as u16) * (Config::LANE_WIDTH + 1)
+}
+
+/// Screen column of the separator that follows lane `lane_idx`. Returns `None`
+/// for the last lane (which is followed by the right border, not a separator).
+fn lane_separator_x(road_x: u16, lane_idx: usize) -> Option<u16> {
+    if lane_idx + 1 >= Config::TOTAL_LANES {
+        return None;
+    }
+    Some(lane_screen_start(road_x, lane_idx) + Config::LANE_WIDTH)
+}
+
+/// Leftmost screen column of the player car body (cols 1..=3 within a lane)
+/// given a fractional lane index. Used for smooth lane-change animation.
+fn player_body_x_start(road_x: u16, lane_f: f32) -> u16 {
+    let total = Config::TOTAL_LANES as i32;
+    let floor_i = (lane_f.floor() as i32).clamp(0, total - 1);
+    let frac = (lane_f - floor_i as f32).clamp(0.0, 1.0);
+    let a = lane_screen_start(road_x, floor_i as usize) as f32 + 1.0;
+    let next_i = (floor_i + 1).min(total - 1);
+    let b = lane_screen_start(road_x, next_i as usize) as f32 + 1.0;
+    (a + (b - a) * frac).round() as u16
 }
 
 // ─── Road draw ────────────────────────────────────────────────────────────────
@@ -68,14 +89,9 @@ struct CarOnScreen {
 }
 
 fn collect_cars(state: &State) -> Vec<CarOnScreen> {
-    let mut cars = Vec::with_capacity(state.ai_cars.len() + 1);
-
-    cars.push(CarOnScreen {
-        top_row: Config::PLAYER_TOP_ROW as i32,
-        height: Config::CAR_HEIGHT_ROWS as i32,
-        lane: state.player_lane,
-        fg: PLAYER_FG,
-    });
+    // Note: the player is NOT in this list. It is drawn separately so its
+    // x-position can interpolate smoothly between lanes during transitions.
+    let mut cars = Vec::with_capacity(state.ai_cars.len());
 
     for ai in &state.ai_cars {
         let center = state.track_to_screen_row(ai.pos_m);
@@ -294,9 +310,7 @@ fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
             cell.set_symbol("│").set_fg(BORDER_FG).set_bg(ROAD_BG);
         }
 
-        // Each lane is rendered left-to-right; oncoming group then group divider then same-dir group.
-        let divider_x = area.x + 1 + (Config::LANES_ONCOMING as u16) * Config::LANE_WIDTH;
-
+        // Render each lane as a clean 5-cell strip.
         for lane_idx in 0..Config::TOTAL_LANES {
             let lane = Lane(lane_idx);
             let lane_x_start = lane_screen_start(area.x, lane_idx);
@@ -317,16 +331,41 @@ fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
             }
         }
 
-        // Group divider — dashed yellow line between oncoming and same-dir sides.
-        let divider_sym = if track_row.rem_euclid(4) < 2 { "│" } else { " " };
-        if let Some(cell) = buf.cell_mut((divider_x, screen_y)) {
-            cell.set_symbol(divider_sym).set_fg(DIVIDER_FG).set_bg(ROAD_BG);
+        // Lane separators — one column between each pair of consecutive lanes.
+        // Yellow dashed for oncoming/same-dir boundary, white dashed within a group.
+        for lane_idx in 0..Config::TOTAL_LANES {
+            let Some(sep_x) = lane_separator_x(area.x, lane_idx) else { continue; };
+            let same_group =
+                Lane(lane_idx).direction() == Lane(lane_idx + 1).direction();
+            let (sym, fg) = if same_group {
+                let s = if track_row.rem_euclid(4) < 2 { "│" } else { " " };
+                (s, LANE_DIVIDER_FG)
+            } else {
+                let s = if track_row.rem_euclid(4) < 2 { "│" } else { " " };
+                (s, DIVIDER_FG)
+            };
+            if let Some(cell) = buf.cell_mut((sep_x, screen_y)) {
+                cell.set_symbol(sym).set_fg(fg).set_bg(ROAD_BG);
+            }
         }
 
         // Right border
         let right_border_x = area.x + Config::TOTAL_ROAD_WIDTH - 1;
         if let Some(cell) = buf.cell_mut((right_border_x, screen_y)) {
             cell.set_symbol("│").set_fg(BORDER_FG).set_bg(ROAD_BG);
+        }
+
+        // Player overlay — drawn last so it sits on top of road markings and
+        // can interpolate smoothly between lanes during a transition.
+        let p_top = Config::PLAYER_TOP_ROW as i32;
+        let p_h = Config::CAR_HEIGHT_ROWS as i32;
+        if ri >= p_top && ri < p_top + p_h {
+            let body_x = player_body_x_start(area.x, state.player_lane_display);
+            for col in 0..3 {
+                if let Some(cell) = buf.cell_mut((body_x + col, screen_y)) {
+                    cell.set_symbol("█").set_fg(PLAYER_FG).set_bg(ROAD_BG);
+                }
+            }
         }
 
         // Darken every cell in fade rows so road content fades to black at edges.
@@ -343,34 +382,13 @@ fn draw_road(frame: &mut Frame, area: Rect, state: &State) {
     }
 }
 
-/// Empty lane cell.
-/// - At the very outer road edges: subtle dotted shoulder markings.
-/// - At boundaries between two lanes in the same direction group: dashed white divider.
-/// - Everywhere else: blank road.
+/// Empty lane cell. Lanes themselves are pure space; separators between lanes
+/// live in their own dedicated columns (see `draw_lane_separators`).
+/// Only the very outer lane edges get subtle dotted shoulder markings.
 fn lane_bg_cell(track_row: i32, col: u16, lane: Lane) -> (&'static str, Color) {
     let lane_idx = lane.0;
-    let last_lane_w = Config::LANE_WIDTH - 1;
-
-    // Dashed white divider on the shared edge between two same-group lanes.
-    let next_same_group = lane_idx + 1 < Config::TOTAL_LANES
-        && Lane(lane_idx + 1).direction() == lane.direction();
-    let prev_same_group = lane_idx > 0
-        && Lane(lane_idx - 1).direction() == lane.direction();
-
-    if col == last_lane_w && next_same_group {
-        if track_row.rem_euclid(4) < 2 {
-            return ("│", LANE_DIVIDER_FG);
-        }
-        return (" ", ROAD_BG);
-    }
-    if col == 0 && prev_same_group {
-        // The previous lane already drew the divider on its right edge; leave blank.
-        return (" ", ROAD_BG);
-    }
-
-    // Outer road shoulders only (leftmost lane's col 0, rightmost lane's col 4).
     let is_outer_left = lane_idx == 0 && col == 0;
-    let is_outer_right = lane_idx == Config::TOTAL_LANES - 1 && col == last_lane_w;
+    let is_outer_right = lane_idx == Config::TOTAL_LANES - 1 && col == Config::LANE_WIDTH - 1;
     if (is_outer_left || is_outer_right) && track_row.rem_euclid(6) < 3 {
         return ("·", LANE_MARKING_FG);
     }
