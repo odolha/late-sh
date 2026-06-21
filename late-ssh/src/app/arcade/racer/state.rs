@@ -18,16 +18,16 @@ impl Config {
     /// Player car height (always Sm).
     pub const CAR_HEIGHT_ROWS: u16 = Self::CAR_HEIGHT_SM;
     /// Spawn weights per size class. Should sum to 1.0.
-    pub const SPAWN_WEIGHT_SM: f32 = 0.4;
-    pub const SPAWN_WEIGHT_MD: f32 = 0.3;
+    pub const SPAWN_WEIGHT_SM: f32 = 0.5;
+    pub const SPAWN_WEIGHT_MD: f32 = 0.2;
     pub const SPAWN_WEIGHT_LG: f32 = 0.2;
     pub const SPAWN_WEIGHT_XL: f32 = 0.1;
     /// Width of each lane in chars.
     pub const LANE_WIDTH: u16 = 5;
     /// Number of oncoming-traffic lanes (rendered on the left side of the road).
-    pub const LANES_ONCOMING: usize = 4;
+    pub const LANES_ONCOMING: usize = 2;
     /// Number of same-direction lanes (rendered on the right side of the road).
-    pub const LANES_SAME_DIR: usize = 4;
+    pub const LANES_SAME_DIR: usize = 1;
     /// Total number of lanes.
     pub const TOTAL_LANES: usize = Self::LANES_ONCOMING + Self::LANES_SAME_DIR;
     /// Total road width: borders + N lanes + (N-1) intra/inter-lane separators.
@@ -83,14 +83,20 @@ impl Config {
     /// Passive coasting deceleration in km/h per second.
     pub const COAST_DECEL_KMH_PER_S: f32 = 0.0;
     /// Target number of AI cars on road at any time.
-    pub const AI_CAR_COUNT: usize = 12;
+    pub const AI_CAR_COUNT: usize = 24;
     /// How far ahead the minimap shows (2 visible screens).
     /// Cars always spawn within this range so they appear on the minimap immediately.
     pub const MINIMAP_RANGE_M: f32 = 2.0 * Self::VISIBLE_ROWS as f32 * Self::METERS_PER_ROW;
-    /// Fixed speed for same-direction NPC cars (km/h displayed).
-    pub const AI_SAME_DIR_SPEED_KMH: f32 = 72.0;
-    /// Fixed speed for oncoming NPC cars (km/h displayed).
-    pub const AI_ONCOMING_SPEED_KMH: f32 = 40.0;
+    /// Speed range (displayed km/h) for same-direction NPC cars. Each car picks
+    /// a cruise speed uniformly in this range when it spawns.
+    pub const AI_SAME_DIR_SPEED_MIN_KMH: f32 = 55.0;
+    pub const AI_SAME_DIR_SPEED_MAX_KMH: f32 = 95.0;
+    /// Speed range (displayed km/h) for oncoming NPC cars.
+    pub const AI_ONCOMING_SPEED_MIN_KMH: f32 = 30.0;
+    pub const AI_ONCOMING_SPEED_MAX_KMH: f32 = 55.0;
+    /// Following gap (in rows) an NPC keeps behind a slower car in the same lane.
+    /// 5 rows × 3 m = 15 m, enough for the player's 9 m car to slip between.
+    pub const AI_FOLLOW_GAP_ROWS: u16 = 5;
     /// Minimum center-to-center spawn gap between cars in the same lane/direction.
     /// Must exceed largest car length (XL = 8 rows × 3 m = 24 m) plus a small buffer.
     pub const AI_MIN_SEPARATION_M: f32 = 32.0;
@@ -189,7 +195,11 @@ impl CarSize {
 pub struct AiCar {
     /// Center track position in meters.
     pub pos_m: f32,
+    /// Current actual speed (km/h displayed). Drops to a slower leader's speed
+    /// when the gap closes; otherwise equals `cruise_kmh`.
     pub speed_kmh: f32,
+    /// Desired cruise speed picked at spawn time.
+    pub cruise_kmh: f32,
     pub lane: Lane,
     pub direction: TrafficDir,
     pub size: CarSize,
@@ -362,10 +372,62 @@ impl State {
     }
 
     fn update_ai(&mut self, dt: f32) {
-        for car in &mut self.ai_cars {
+        let follow_gap_m = Config::AI_FOLLOW_GAP_ROWS as f32 * Config::METERS_PER_ROW;
+
+        // Snapshot positions/speeds/sizes so we can read them while mutating each car.
+        // (Tiny vec, cars are few.)
+        let snap: Vec<(f32, Lane, TrafficDir, f32, f32)> = self
+            .ai_cars
+            .iter()
+            .map(|c| {
+                let half_len_m = c.size.height_rows() as f32 * Config::METERS_PER_ROW * 0.5;
+                (c.pos_m, c.lane, c.direction, c.speed_kmh, half_len_m)
+            })
+            .collect();
+
+        for (i, car) in self.ai_cars.iter_mut().enumerate() {
+            let my_half = car.size.height_rows() as f32 * Config::METERS_PER_ROW * 0.5;
+            let my_front = match car.direction {
+                TrafficDir::Same => car.pos_m + my_half,
+                TrafficDir::Oncoming => car.pos_m - my_half,
+            };
+
+            // Find the nearest car ahead in the SAME lane (which implies same direction).
+            // Player is intentionally ignored — NPCs never slow down for the player.
+            let mut nearest: Option<(f32, f32)> = None; // (gap_m, leader_speed_kmh)
+            for (j, &(jpos, jlane, jdir, jspeed, jhalf)) in snap.iter().enumerate() {
+                if i == j || jlane != car.lane {
+                    continue;
+                }
+                let j_back = match jdir {
+                    TrafficDir::Same => jpos - jhalf,
+                    TrafficDir::Oncoming => jpos + jhalf,
+                };
+                let gap = match car.direction {
+                    TrafficDir::Same => j_back - my_front,
+                    TrafficDir::Oncoming => my_front - j_back,
+                };
+                if gap <= 0.0 {
+                    continue;
+                }
+                if nearest.map_or(true, |(g, _)| gap < g) {
+                    nearest = Some((gap, jspeed));
+                }
+            }
+
+            // Snap to leader's speed if closer than the follow gap and leader is slower.
+            car.speed_kmh = match nearest {
+                Some((gap, lspeed)) if gap < follow_gap_m && lspeed < car.cruise_kmh => {
+                    lspeed
+                }
+                _ => car.cruise_kmh,
+            };
+
+            // Advance position.
+            let step = car.speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR * dt;
             match car.direction {
-                TrafficDir::Same => car.pos_m += (car.speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR) * dt,
-                TrafficDir::Oncoming => car.pos_m -= (car.speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR) * dt,
+                TrafficDir::Same => car.pos_m += step,
+                TrafficDir::Oncoming => car.pos_m -= step,
             }
         }
     }
@@ -423,11 +485,12 @@ impl State {
         for i in 0..cluster {
             let lane = Lane(rng.gen_range(0..Config::TOTAL_LANES));
             let direction = lane.direction();
-            let speed = if direction == TrafficDir::Same {
-                Config::AI_SAME_DIR_SPEED_KMH
+            let (smin, smax) = if direction == TrafficDir::Same {
+                (Config::AI_SAME_DIR_SPEED_MIN_KMH, Config::AI_SAME_DIR_SPEED_MAX_KMH)
             } else {
-                Config::AI_ONCOMING_SPEED_KMH
+                (Config::AI_ONCOMING_SPEED_MIN_KMH, Config::AI_ONCOMING_SPEED_MAX_KMH)
             };
+            let cruise = rng.gen_range(smin..=smax);
             let pos = player_pos + Config::VISIBLE_AHEAD_M + base_extra
                 + i as f32 * rng.gen_range(25.0_f32..55.0);
             if pos > player_pos + Config::MINIMAP_RANGE_M {
@@ -440,7 +503,14 @@ impl State {
                 continue;
             }
             let size = CarSize::pick_weighted(&mut rng);
-            self.ai_cars.push(AiCar { pos_m: pos, speed_kmh: speed, lane, direction, size });
+            self.ai_cars.push(AiCar {
+                pos_m: pos,
+                speed_kmh: cruise,
+                cruise_kmh: cruise,
+                lane,
+                direction,
+                size,
+            });
         }
 
         // Random delay before next spawn event: 0–4 s at 15 fps.
@@ -523,6 +593,7 @@ mod tests {
         s.ai_cars.push(AiCar {
             pos_m: 103.0,
             speed_kmh: 60.0,
+            cruise_kmh: 60.0,
             lane: Lane::player_start(),
             direction: TrafficDir::Same,
             size: CarSize::Sm,
@@ -540,6 +611,7 @@ mod tests {
         s.ai_cars.push(AiCar {
             pos_m: 106.0,
             speed_kmh: 60.0,
+            cruise_kmh: 60.0,
             lane: Lane::player_start(),
             direction: TrafficDir::Same,
             size: CarSize::Sm,
@@ -557,6 +629,7 @@ mod tests {
         s.ai_cars.push(AiCar {
             pos_m: 88.0,
             speed_kmh: 60.0,
+            cruise_kmh: 60.0,
             lane: Lane::player_start(),
             direction: TrafficDir::Same,
             size: CarSize::Sm,
@@ -573,6 +646,7 @@ mod tests {
         s.ai_cars.push(AiCar {
             pos_m: 100.5,
             speed_kmh: 60.0,
+            cruise_kmh: 60.0,
             lane: Lane(0),
             direction: TrafficDir::Oncoming,
             size: CarSize::Sm,
