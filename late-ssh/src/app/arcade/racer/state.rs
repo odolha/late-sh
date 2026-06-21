@@ -38,6 +38,11 @@ impl Config {
     /// Minimap width: borders + 1 col per lane + group divider.
     pub const MINI_W: u16 =
         1 + Self::LANES_ONCOMING as u16 + 1 + Self::LANES_SAME_DIR as u16 + 1;
+    /// Width (in chars) of the grass verge to the left of the road.
+    /// Trees are distributed uniformly across this width.
+    pub const GRASS_LEFT_W: u16 = 8;
+    /// Width (in chars) of the grass verge to the right of the road.
+    pub const GRASS_RIGHT_W: u16 = 10;
     // ─── World scaling ─────────────────────────────────────────────────────────
     //
     // To make the game feel realistic without forcing long play sessions, two
@@ -111,8 +116,9 @@ impl Config {
     /// Affects display only; collision uses the discrete `player_lane`.
     pub const LANE_TRANSITION_PER_S: f32 = 7.0;
     /// Minimum terminal width needed to render game + stats.
-    pub const MIN_TERMINAL_WIDTH: u16 =
-        Self::MINI_W + 2 + 6 + Self::TOTAL_ROAD_WIDTH + 8 + 2 + 28; // mini+gap+trees+road+trees+gap+stats
+    pub const MIN_TERMINAL_WIDTH: u16 = Self::MINI_W + 2
+        + Self::GRASS_LEFT_W + Self::TOTAL_ROAD_WIDTH + Self::GRASS_RIGHT_W
+        + 2 + 28; // mini+gap+grass+road+grass+gap+stats
     /// Minimum terminal height needed (road + bottom bar).
     pub const MIN_TERMINAL_HEIGHT: u16 = Self::VISIBLE_ROWS + 5;
 }

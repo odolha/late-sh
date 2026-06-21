@@ -186,20 +186,12 @@ fn draw_minimap(frame: &mut Frame, area: Rect, state: &State) {
 
 // ─── Verge (trees) ───────────────────────────────────────────────────────────
 
-// (dist_from_road_edge, period_rows, phase_offset)
-// Sprite: row_in_period 2=▲hi (top, rendered highest on screen),
-//                       1=▲lo, 0=│ trunk (bottom, rendered lowest).
-const LEFT_TREES: &[(u16, i32, i32)] = &[
-    (2, 22, 0),
-    (5, 18, 9),
-    (8, 26, 4),
-];
-const RIGHT_TREES: &[(u16, i32, i32)] = &[
-    (2, 22, 11),
-    (5, 18, 3),
-    (8, 26, 17),
-];
+/// Place a tree column every TREE_STRIDE cells in grass, starting at distance 2
+/// from the road (col 1 is left as a "shoulder" of clear grass).
+const TREE_STRIDE: u16 = 3;
 
+/// Sprite: row_in_period 2=▲hi (top, rendered highest on screen),
+///                       1=▲lo, 0=│ trunk (bottom, rendered lowest).
 fn tree_sym(row_in_period: i32) -> Option<(&'static str, Color)> {
     match row_in_period {
         0 => Some(("│", TRUNK_FG)),
@@ -207,6 +199,19 @@ fn tree_sym(row_in_period: i32) -> Option<(&'static str, Color)> {
         2 => Some(("▲", TREE_HI)),
         _ => None,
     }
+}
+
+/// Returns `(period, phase)` if this grass column should contain a tree column.
+/// `dist` = distance from the road edge (1-based; 1 is adjacent to road).
+/// `side_seed` differentiates left/right sides so they don't appear mirrored.
+fn maybe_tree_lane(dist: u16, side_seed: i32) -> Option<(i32, i32)> {
+    if dist < 2 || (dist - 2) % TREE_STRIDE != 0 {
+        return None;
+    }
+    let d = dist as i32;
+    let period = 18 + ((d * 7).rem_euclid(9));
+    let phase = (d * 13 + side_seed).rem_euclid(period);
+    Some((period, phase))
 }
 
 fn draw_verge(frame: &mut Frame, road_area: Rect, left_x: u16, right_end: u16, state: &State) {
@@ -250,12 +255,11 @@ fn draw_verge(frame: &mut Frame, road_area: Rect, left_x: u16, right_end: u16, s
             continue;
         }
 
-        // Left tree lanes.
-        for &(dist, period, phase) in LEFT_TREES {
-            let x = match road_area.x.checked_sub(dist) {
-                Some(x) if x >= left_x => x,
-                _ => continue,
-            };
+        // Left grass: trees placed by distance from the road edge.
+        for d in 1..=Config::GRASS_LEFT_W {
+            let Some(x) = road_area.x.checked_sub(d) else { break; };
+            if x < left_x { break; }
+            let Some((period, phase)) = maybe_tree_lane(d, 0) else { continue; };
             let row_in_period = (track_row - phase).rem_euclid(period);
             if let Some((sym, fg)) = tree_sym(row_in_period) {
                 if let Some(c) = buf.cell_mut((x, screen_y)) {
@@ -264,10 +268,11 @@ fn draw_verge(frame: &mut Frame, road_area: Rect, left_x: u16, right_end: u16, s
             }
         }
 
-        // Right tree lanes.
-        for &(dist, period, phase) in RIGHT_TREES {
-            let x = road_right + dist - 1;
-            if x >= right_end { continue; }
+        // Right grass: trees placed by distance from the road edge.
+        for d in 1..=Config::GRASS_RIGHT_W {
+            let x = road_right + d - 1;
+            if x >= right_end { break; }
+            let Some((period, phase)) = maybe_tree_lane(d, 11) else { continue; };
             let row_in_period = (track_row - phase).rem_euclid(period);
             if let Some((sym, fg)) = tree_sym(row_in_period) {
                 if let Some(c) = buf.cell_mut((x, screen_y)) {
@@ -586,18 +591,18 @@ pub fn draw_game(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: 
     // Center the road both horizontally and vertically; stats panel to its right.
     let road_width = Config::TOTAL_ROAD_WIDTH;
     let road_height = content_area.height.min(Config::VISIBLE_ROWS);
-    let mini_gap: u16 = 2; // gap between minimap and left tree zone
-    let tree_l: u16 = 6;
-    let tree_r: u16 = 8;
+    let mini_gap: u16 = 2; // gap between minimap and left grass zone
     let stats_gap: u16 = 2;
     let stats_min: u16 = 28;
-    let block_w = Config::MINI_W + mini_gap + tree_l + road_width + tree_r + stats_gap + stats_min;
+    let block_w = Config::MINI_W + mini_gap
+        + Config::GRASS_LEFT_W + road_width + Config::GRASS_RIGHT_W
+        + stats_gap + stats_min;
     let block_x = content_area.x + content_area.width.saturating_sub(block_w) / 2;
     let mini_x = block_x;
     let tree_left_x = block_x + Config::MINI_W + mini_gap;
-    let road_x = tree_left_x + tree_l;
+    let road_x = tree_left_x + Config::GRASS_LEFT_W;
     let road_y = content_area.y + content_area.height.saturating_sub(road_height) / 2;
-    let right_tree_end = road_x + road_width + tree_r;
+    let right_tree_end = road_x + road_width + Config::GRASS_RIGHT_W;
     let stats_x = right_tree_end + stats_gap;
     let stats_width = (content_area.x + content_area.width).saturating_sub(stats_x);
 
