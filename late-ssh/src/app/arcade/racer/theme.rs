@@ -53,6 +53,15 @@ pub fn theme_icon_glyph(theme: Theme) -> &'static str {
     }
 }
 
+/// Human-readable theme name shown on the HUD "Scenery" row.
+pub fn theme_name(theme: Theme) -> &'static str {
+    match theme {
+        Theme::Standard => "Normal",
+        Theme::Winter => "Winter",
+        Theme::Desert => "Desert",
+    }
+}
+
 // ─── Lane backgrounds ───────────────────────────────────────────────────────
 
 const ASPHALT_BG: Color = Color::Rgb(18, 18, 18);

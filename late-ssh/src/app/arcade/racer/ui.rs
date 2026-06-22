@@ -813,29 +813,43 @@ fn draw_stats(frame: &mut Frame, area: Rect, state: &State, track: &Track, stage
 
     let mut lines: Vec<Line<'static>> = vec![
         Line::from(""),
+        Line::from(Span::styled(
+            format!(" {}", track.name),
+            Style::default()
+                .fg(app_theme::AMBER())
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!("   by {}", track.author),
+            Style::default().fg(app_theme::TEXT_DIM()),
+        )),
+        Line::from(""),
+        // Stage row: icon + name.
         Line::from(vec![
             Span::styled(
                 format!(" {} ", theme::stage_icon_glyph(stage.icon)),
                 Style::default().fg(app_theme::TEXT_BRIGHT()),
             ),
             Span::styled(
-                track.name.to_string(),
-                Style::default().fg(app_theme::AMBER()).add_modifier(Modifier::BOLD),
+                stage.name.to_string(),
+                Style::default()
+                    .fg(app_theme::TEXT_BRIGHT())
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
-        Line::from(Span::styled(
-            format!("   by {}", track.author),
-            Style::default().fg(app_theme::TEXT_DIM()),
-        )),
-        Line::from(""),
+        // Scenery row: theme icon + label + theme name (room for future weather here).
         Line::from(vec![
             Span::styled(
                 format!(" {} ", theme::theme_icon_glyph(stage.theme)),
                 Style::default().fg(app_theme::TEXT_BRIGHT()),
             ),
             Span::styled(
-                stage.name.to_string(),
-                Style::default().fg(app_theme::TEXT_BRIGHT()).add_modifier(Modifier::BOLD),
+                "Scenery: ".to_string(),
+                Style::default().fg(app_theme::TEXT_DIM()),
+            ),
+            Span::styled(
+                theme::theme_name(stage.theme).to_string(),
+                Style::default().fg(app_theme::TEXT_BRIGHT()),
             ),
         ]),
         Line::from(Span::styled(

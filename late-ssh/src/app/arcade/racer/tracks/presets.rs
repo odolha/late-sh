@@ -37,11 +37,11 @@ pub const RURAL_CAR_MIX: &[Car] = &[CAR_HATCHBACK, CAR_VAN, CAR_TRUCK];
 pub const CITY_LANE: Lane = Lane {
     aspect: LaneAspect::AsphaltStandard,
     own_min_speed: 0.0,
-    own_max_speed: 90.0,
+    own_max_speed: 150.0,
     passive_decel: 0.0,
-    traffic_min_speed: 35.0,
-    traffic_max_speed: 75.0,
-    traffic_size: 6,
+    traffic_min_speed: 40.0,
+    traffic_max_speed: 90.0,
+    traffic_size: 12,
     traffic_cars: CITY_CAR_MIX,
     obstacles: &[],
 };
@@ -50,11 +50,11 @@ pub const CITY_LANE: Lane = Lane {
 pub const HIGHWAY_LANE: Lane = Lane {
     aspect: LaneAspect::AsphaltPremium,
     own_min_speed: 50.0,
-    own_max_speed: 200.0,
+    own_max_speed: 260.0,
     passive_decel: 0.0,
-    traffic_min_speed: 80.0,
-    traffic_max_speed: 140.0,
-    traffic_size: 5,
+    traffic_min_speed: 60.0,
+    traffic_max_speed: 150.0,
+    traffic_size: 7,
     traffic_cars: HIGHWAY_CAR_MIX,
     obstacles: &[],
 };
@@ -63,11 +63,11 @@ pub const HIGHWAY_LANE: Lane = Lane {
 pub const RURAL_LANE: Lane = Lane {
     aspect: LaneAspect::AsphaltPatchy,
     own_min_speed: 0.0,
-    own_max_speed: 110.0,
+    own_max_speed: 100.0,
     passive_decel: 2.0,
     traffic_min_speed: 30.0,
     traffic_max_speed: 80.0,
-    traffic_size: 4,
+    traffic_size: 5,
     traffic_cars: RURAL_CAR_MIX,
     obstacles: &[],
 };

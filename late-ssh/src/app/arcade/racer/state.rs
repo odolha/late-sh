@@ -378,28 +378,52 @@ impl State {
             }
         }
 
-        // Apply input → speed delta.
+        // Look up the active lane's bounds and passive decel.
         let lane = self.current_lane_cfg();
         let (own_min, own_max, passive) = lane
             .map(|l| (l.own_min_speed, l.own_max_speed, l.passive_decel))
             .unwrap_or((0.0, 200.0, 0.0));
 
-        let delta = match self.input {
-            PlayerInput::Accelerate => Config::ACCEL_KMH_PER_S * dt,
-            PlayerInput::Brake => -(Config::DECEL_KMH_PER_S * dt),
-            PlayerInput::Handbrake => -(Config::DECEL_KMH_PER_S * 2.0 * dt),
-            PlayerInput::None => -(passive * dt),
-        };
-        self.player_speed_kmh += delta;
+        // Apply input. Inputs respect the active lane's bounds — accel can
+        // never push speed *above* `own_max`, brake/passive_decel can never
+        // pull it *below* `own_min`. Speed that is already out of range
+        // (from a lane change) is only corrected by the soft clamp below.
+        match self.input {
+            PlayerInput::Accelerate => {
+                if self.player_speed_kmh < own_max {
+                    let target = self.player_speed_kmh + Config::ACCEL_KMH_PER_S * dt;
+                    self.player_speed_kmh = target.min(own_max);
+                }
+            }
+            PlayerInput::Brake => {
+                if self.player_speed_kmh > own_min {
+                    let target = self.player_speed_kmh - Config::DECEL_KMH_PER_S * dt;
+                    self.player_speed_kmh = target.max(own_min);
+                }
+            }
+            PlayerInput::Handbrake => {
+                if self.player_speed_kmh > own_min {
+                    let target = self.player_speed_kmh - Config::DECEL_KMH_PER_S * 2.0 * dt;
+                    self.player_speed_kmh = target.max(own_min);
+                }
+            }
+            PlayerInput::None => {
+                if passive > 0.0 && self.player_speed_kmh > own_min {
+                    let target = self.player_speed_kmh - passive * dt;
+                    self.player_speed_kmh = target.max(own_min);
+                }
+            }
+        }
 
-        // Smooth clamp toward the active lane's bounds.
+        // Soft clamp purely for the post-lane-change case: speed sits outside
+        // the new lane's bounds and needs to ease back into range. While the
+        // player stays within range, this branch is a no-op.
         let step = Config::SPEED_CLAMP_PER_S * dt;
         if self.player_speed_kmh > own_max {
             self.player_speed_kmh = (self.player_speed_kmh - step).max(own_max);
         } else if self.player_speed_kmh < own_min {
             self.player_speed_kmh = (self.player_speed_kmh + step).min(own_min);
         }
-        // Hard floor at 0.
         if self.player_speed_kmh < 0.0 {
             self.player_speed_kmh = 0.0;
         }

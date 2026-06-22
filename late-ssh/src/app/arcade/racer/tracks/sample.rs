@@ -124,12 +124,12 @@ const STAGES: &[Stage] = &[
 
 /// The default track.
 pub const TRACK: Track = Track {
-    name: "Long way home",
-    author: "Shit I'm Late team",
+    name: "Sample",
+    author: "odd",
     description:
         "A 60-km drive through city, highway, country and snowy forest. \
          Touches every stage feature — good for testing.",
     stages: STAGES,
-    distance_scale: 0.1,
-    speed_scale: 1.5,
+    distance_scale: 0.2,
+    speed_scale: 2.0,
 };
