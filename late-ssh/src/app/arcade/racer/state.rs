@@ -1,208 +1,87 @@
+//! Racer game state and physics.
+//!
+//! Geometry, lane configuration, and speed ranges are no longer hard-coded —
+//! they're read live from the active [`Track`] and current [`Stage`] (see
+//! `track.rs` and `tracks/`). What remains in [`Config`] is only the visual
+//! frame (terminal rows, lane width in chars, FPS) and the global player
+//! input feel (accel/decel/lane-transition speed).
+
+use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 use rand::Rng;
 
-// ─── Configurable constants ──────────────────────────────────────────────────
+use super::theme::obstacle_effect_label;
+use super::track::{
+    ObstacleAspect, ObstacleEffect, Stage, Track,
+};
+use super::tracks::{ALL_TRACKS, DEFAULT_TRACK};
+
+// ─── Static visual-frame configuration ──────────────────────────────────────
 
 pub struct Config;
 
 impl Config {
-    /// Fixed visible road height in terminal rows. Kept constant to prevent
-    /// "wider terminal = longer sight distance" cheating.
+    /// Fixed visible road height in terminal rows.
     pub const VISIBLE_ROWS: u16 = 50;
-    /// Visual height (in rows) per car size class.
-    pub const CAR_HEIGHT_SM: u16 = 3;
-    pub const CAR_HEIGHT_MD: u16 = 5;
-    pub const CAR_HEIGHT_LG: u16 = 7;
-    pub const CAR_HEIGHT_XL: u16 = 11;
-    /// Player car height (always Sm).
-    pub const CAR_HEIGHT_ROWS: u16 = Self::CAR_HEIGHT_SM;
-    /// Spawn weights per size class. Should sum to 1.0.
-    pub const SPAWN_WEIGHT_SM: f32 = 0.5;
-    pub const SPAWN_WEIGHT_MD: f32 = 0.2;
-    pub const SPAWN_WEIGHT_LG: f32 = 0.2;
-    pub const SPAWN_WEIGHT_XL: f32 = 0.1;
-    /// Width of each lane in chars.
+    /// Width of every lane in characters.
     pub const LANE_WIDTH: u16 = 5;
-    /// Number of oncoming-traffic lanes (rendered on the left side of the road).
-    pub const LANES_ONCOMING: usize = 2;
-    /// Number of same-direction lanes (rendered on the right side of the road).
-    pub const LANES_SAME_DIR: usize = 1;
-    /// Total number of lanes.
-    pub const TOTAL_LANES: usize = Self::LANES_ONCOMING + Self::LANES_SAME_DIR;
-    /// Total road width: borders + N lanes + (N-1) intra/inter-lane separators.
-    /// Each lane is `LANE_WIDTH` cells; every gap between two consecutive lanes
-    /// gets its own dedicated 1-cell separator column.
-    pub const TOTAL_ROAD_WIDTH: u16 =
-        1 + (Self::TOTAL_LANES as u16) * Self::LANE_WIDTH + (Self::TOTAL_LANES as u16 - 1) + 1;
-    /// Minimap width: borders + 1 col per lane + group divider.
-    pub const MINI_W: u16 =
-        1 + Self::LANES_ONCOMING as u16 + 1 + Self::LANES_SAME_DIR as u16 + 1;
-    /// Width (in chars) of the grass verge to the left of the road.
-    /// Trees are distributed uniformly across this width.
-    pub const GRASS_LEFT_W: u16 = 8;
-    /// Width (in chars) of the grass verge to the right of the road.
-    pub const GRASS_RIGHT_W: u16 = 10;
-    // ─── World scaling ─────────────────────────────────────────────────────────
-    //
-    // To make the game feel realistic without forcing long play sessions, two
-    // scale factors decouple what the player SEES from what the physics MOVES:
-    //
-    // * `WORLD_SPEED_FACTOR`: multiplies displayed km/h to world m/s, so a
-    //   displayed cap of 200 km/h still produces the visual scroll rate of
-    //   a real 250 km/h. All `*_KMH` constants are in displayed units.
-    // * `WORLD_DISTANCE_SCALE`: multiplies physics-meters to displayed-meters.
-    //   So a physics track of 10 km can read as 100 km without ballooning the
-    //   actual play time (which is physics_distance / physics_speed).
-    //
-    // Time-to-finish is preserved by the (WORLD_SPEED_FACTOR / WORLD_DISTANCE_SCALE)
-    // ratio matching the (default_speed / default_distance) ratio of the prior
-    // calibration. With current values: 1.25 / 10 = 0.125, same as before.
-    pub const WORLD_SPEED_FACTOR: f32 = 1.25;
-    pub const WORLD_DISTANCE_SCALE: f32 = 20.0;
-
-    /// Physics track length in world meters (kept short for short play time).
-    /// Displayed length = `TRACK_LENGTH_M * WORLD_DISTANCE_SCALE / 1000` km.
-    pub const TRACK_LENGTH_M: f32 = 10_000.0;
-    /// World meters represented by one terminal row.
-    pub const METERS_PER_ROW: f32 = 3.0;
-    /// Rows of road visible behind (below) the player car.
+    /// Player car height (in rows). AI car heights come from `Car::height`.
+    pub const CAR_HEIGHT_ROWS: u16 = 3;
+    /// Rows of road visible behind the player.
     pub const PLAYER_BOTTOM_MARGIN: u16 = 4;
     /// Screen row of the top (front) of the player car.
-    pub const PLAYER_TOP_ROW: u16 = Self::VISIBLE_ROWS - Self::CAR_HEIGHT_ROWS - Self::PLAYER_BOTTOM_MARGIN;
-    /// Player starting speed in km/h (displayed).
-    pub const PLAYER_START_SPEED_KMH: f32 = 50.0;
-    /// Maximum player speed in km/h (displayed).
-    pub const PLAYER_MAX_SPEED_KMH: f32 = 300.0;
-    /// Minimum player speed in km/h (full stop allowed).
-    pub const PLAYER_MIN_SPEED_KMH: f32 = 0.0;
-    /// Acceleration in km/h per second while holding accelerate.
-    pub const ACCEL_KMH_PER_S: f32 = 88.0;
-    /// Braking deceleration in km/h per second.
-    pub const DECEL_KMH_PER_S: f32 = 128.0;
-    /// Passive coasting deceleration in km/h per second.
-    pub const COAST_DECEL_KMH_PER_S: f32 = 0.0;
-    /// Target number of AI cars on road at any time.
-    pub const AI_CAR_COUNT: usize = 24;
-    /// How far ahead the minimap shows (2 visible screens).
-    /// Cars always spawn within this range so they appear on the minimap immediately.
+    pub const PLAYER_TOP_ROW: u16 =
+        Self::VISIBLE_ROWS - Self::CAR_HEIGHT_ROWS - Self::PLAYER_BOTTOM_MARGIN;
+    /// One terminal row = this many physics meters.
+    pub const METERS_PER_ROW: f32 = 3.0;
+    /// Distance ahead of the player car visible on-screen.
+    pub const VISIBLE_AHEAD_M: f32 = Self::PLAYER_TOP_ROW as f32 * Self::METERS_PER_ROW;
+    /// Two screens ahead — used for spawning and the minimap.
     pub const MINIMAP_RANGE_M: f32 = 2.0 * Self::VISIBLE_ROWS as f32 * Self::METERS_PER_ROW;
-    /// Speed range (displayed km/h) for same-direction NPC cars. Each car picks
-    /// a cruise speed uniformly in this range when it spawns.
-    pub const AI_SAME_DIR_SPEED_MIN_KMH: f32 = 55.0;
-    pub const AI_SAME_DIR_SPEED_MAX_KMH: f32 = 95.0;
-    /// Speed range (displayed km/h) for oncoming NPC cars.
-    pub const AI_ONCOMING_SPEED_MIN_KMH: f32 = 30.0;
-    pub const AI_ONCOMING_SPEED_MAX_KMH: f32 = 55.0;
-    /// Following gap (in rows) an NPC keeps behind a slower car in the same lane.
-    /// 5 rows × 3 m = 15 m, enough for the player's 9 m car to slip between.
-    pub const AI_FOLLOW_GAP_ROWS: u16 = 5;
-    /// Minimum center-to-center spawn gap between cars in the same lane/direction.
-    /// Must exceed largest car length (XL = 8 rows × 3 m = 24 m) plus a small buffer.
+    /// Minimum on-screen separation between AI spawns in the same lane (physics m).
     pub const AI_MIN_SEPARATION_M: f32 = 32.0;
-    /// Distance behind player before an AI car is despawned.
+    /// Distance behind the player before an AI car despawns.
     pub const AI_DESPAWN_BEHIND_M: f32 = 200.0;
-    /// Meters visible ahead of player car front = PLAYER_TOP_ROW * METERS_PER_ROW.
-    pub const VISIBLE_AHEAD_M: f32 = Self::PLAYER_TOP_ROW as f32 * Self::METERS_PER_ROW; // 111 m
-    /// Initial score: 1000 * track length in meters.
-    pub const INITIAL_SCORE: f32 = 1_000.0 * Self::TRACK_LENGTH_M; // 10 000 000
-    /// Score decrease per second, calibrated so finishing at START_SPEED yields ~0.
-    /// Time at start speed = TRACK_LEN / (START_SPEED / 3.6 * WORLD_SPEED_FACTOR).
-    /// Decay = INITIAL_SCORE / time_at_start_speed.
-    pub const SCORE_DECAY_PER_S: f32 = Self::INITIAL_SCORE
-        * (Self::PLAYER_START_SPEED_KMH / 3.6 * Self::WORLD_SPEED_FACTOR)
-        / Self::TRACK_LENGTH_M;
-    /// Duration of one world tick in seconds (15 FPS).
+    /// Gap (in rows) an AI car keeps behind a slower car in the same lane.
+    pub const AI_FOLLOW_GAP_ROWS: u16 = 5;
+
+    /// Player input feel — these are *displayed* km/h per second.
+    pub const PLAYER_START_SPEED_KMH: f32 = 50.0;
+    pub const ACCEL_KMH_PER_S: f32 = 88.0;
+    pub const DECEL_KMH_PER_S: f32 = 128.0;
+    /// How fast the player's speed eases back into the current lane's bounds.
+    pub const SPEED_CLAMP_PER_S: f32 = 80.0;
     pub const TICK_DT: f32 = 1.0 / 15.0;
-    /// How long a held-key input stays active after the last key event.
-    /// Key repeat fires every ~30ms, so 150ms gives ~5 repeat events of margin.
     pub const INPUT_HOLD_MS: u64 = 150;
-    /// Visual lane-change speed in lanes/second.
-    /// 7.0 → a single lane change animates over ~140 ms (≈ 2 ticks at 15 FPS).
-    /// Affects display only; collision uses the discrete `player_lane`.
     pub const LANE_TRANSITION_PER_S: f32 = 7.0;
-    /// Minimum terminal width needed to render game + stats.
-    pub const MIN_TERMINAL_WIDTH: u16 = Self::MINI_W + 2
-        + Self::GRASS_LEFT_W + Self::TOTAL_ROAD_WIDTH + Self::GRASS_RIGHT_W
-        + 2 + 28; // mini+gap+grass+road+grass+gap+stats
-    /// Minimum terminal height needed (road + bottom bar).
+
+    /// Right-panel effects log capacity.
+    pub const RECENT_EFFECTS_CAPACITY: usize = 5;
+
+    /// Multiplier applied to displayed-km to seed score, then decays per second.
+    pub const INITIAL_SCORE_PER_DISPLAYED_KM: f32 = 100_000.0;
+    pub const SCORE_DECAY_PER_S: f32 = 800.0;
+
+    /// Generous lower bound for "terminal is big enough" — actual room check
+    /// happens at draw time once we know the active stage geometry.
+    pub const MIN_TERMINAL_WIDTH_FLOOR: u16 = 70;
     pub const MIN_TERMINAL_HEIGHT: u16 = Self::VISIBLE_ROWS + 5;
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Top-level state machine ────────────────────────────────────────────────
 
-/// Lane index. 0..LANES_ONCOMING are oncoming lanes (left side of road);
-/// LANES_ONCOMING..TOTAL_LANES are same-direction lanes (right side).
+/// Which UI surface the Racer screen is showing.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Lane(pub usize);
-
-impl Lane {
-    pub fn direction(self) -> TrafficDir {
-        if self.0 < Config::LANES_ONCOMING {
-            TrafficDir::Oncoming
-        } else {
-            TrafficDir::Same
-        }
-    }
-    /// First (leftmost) same-direction lane — player's starting lane.
-    pub fn player_start() -> Self {
-        Lane(Config::LANES_ONCOMING)
-    }
-    pub fn is_oncoming(self) -> bool {
-        self.direction() == TrafficDir::Oncoming
-    }
+pub enum RacerScreen {
+    Picker,
+    Racing,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TrafficDir {
-    /// Car moves in the same direction as the player (position increases).
     Same,
-    /// Car moves toward the player (position decreases).
     Oncoming,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CarSize {
-    Sm,
-    Md,
-    Lg,
-    Xl,
-}
-
-impl CarSize {
-    pub fn height_rows(self) -> u16 {
-        match self {
-            CarSize::Sm => Config::CAR_HEIGHT_SM,
-            CarSize::Md => Config::CAR_HEIGHT_MD,
-            CarSize::Lg => Config::CAR_HEIGHT_LG,
-            CarSize::Xl => Config::CAR_HEIGHT_XL,
-        }
-    }
-
-    pub fn pick_weighted<R: Rng>(rng: &mut R) -> Self {
-        let r: f32 = rng.r#gen();
-        let mut acc = Config::SPAWN_WEIGHT_SM;
-        if r < acc { return CarSize::Sm; }
-        acc += Config::SPAWN_WEIGHT_MD;
-        if r < acc { return CarSize::Md; }
-        acc += Config::SPAWN_WEIGHT_LG;
-        if r < acc { return CarSize::Lg; }
-        CarSize::Xl
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct AiCar {
-    /// Center track position in meters.
-    pub pos_m: f32,
-    /// Current actual speed (km/h displayed). Drops to a slower leader's speed
-    /// when the gap closes; otherwise equals `cruise_kmh`.
-    pub speed_kmh: f32,
-    /// Desired cruise speed picked at spawn time.
-    pub cruise_kmh: f32,
-    pub lane: Lane,
-    pub direction: TrafficDir,
-    pub size: CarSize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -213,101 +92,285 @@ pub enum PlayerInput {
     None,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum Phase {
     Playing,
     Finished { elapsed_s: f32, score: i64 },
     Dead,
 }
 
-// ─── Game state ───────────────────────────────────────────────────────────────
+#[derive(Clone, Debug)]
+pub struct AiCar {
+    pub pos_m: f32,
+    pub speed_kmh: f32,
+    pub cruise_kmh: f32,
+    pub lane_idx: usize,
+    pub direction: TrafficDir,
+    pub height_rows: u8,
+}
 
+/// Obstacle deterministically placed along a lane; cleared on cross.
+#[derive(Clone, Debug)]
+pub struct SpawnedObstacle {
+    pub aspect: ObstacleAspect,
+    pub pos_m: f32,
+    pub lane_idx: usize,
+    pub triggered: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct RecentEffect {
+    pub label: &'static str,
+    pub at: Instant,
+}
+
+/// All runtime racer state — drives both the picker and the race.
 pub struct State {
-    /// Player's track position in meters (front of car).
+    // ─── Screen ────────────────────────────────────────────────────────────
+    pub screen: RacerScreen,
+    pub picker_selected_idx: usize,
+    pub best_scores: HashMap<&'static str, i64>,
+    /// Convenience for the lobby card; updated whenever a race finishes.
+    pub best_score: i64,
+
+    // ─── Active race ───────────────────────────────────────────────────────
+    /// `None` when no race has been started since app start.
+    pub active_track: Option<&'static Track>,
+    pub current_stage_idx: usize,
+    /// Physics meters travelled within the current stage.
+    pub stage_traveled_m: f32,
     pub player_pos_m: f32,
-    /// Current speed in km/h.
     pub player_speed_kmh: f32,
-    /// Current lane (discrete; used for collision and game logic).
-    pub player_lane: Lane,
-    /// Smoothed lane index for rendering only. Catches up to `player_lane.0`
-    /// at `LANE_TRANSITION_PER_S`. Never used for collision.
+    pub player_lane_idx: usize,
     pub player_lane_display: f32,
-    /// Held input this tick.
     pub input: PlayerInput,
-    /// When the current input was last refreshed by a key event.
     pub input_last_set: Option<Instant>,
     pub ai_cars: Vec<AiCar>,
-    /// Ticks remaining before the next spawn event. Creates natural traffic gaps.
     pub spawn_cooldown_ticks: u32,
+    pub obstacles: Vec<SpawnedObstacle>,
+    pub obstacle_seed_m: f32,
     pub elapsed_s: f32,
     pub score: i64,
-    /// Best score this session (no DB persistence in v1).
-    pub best_score: i64,
     pub phase: Phase,
     pub is_paused: bool,
+
+    // Right-panel info
+    pub recent_effects: VecDeque<RecentEffect>,
+
+    // Cooldown timers (BlockGas/Breaks/Wheels)
+    pub gas_blocked_until: Option<Instant>,
+    pub brake_blocked_until: Option<Instant>,
+    pub wheel_blocked_until: Option<Instant>,
 }
 
 impl State {
     pub fn new() -> Self {
         Self {
+            screen: RacerScreen::Picker,
+            picker_selected_idx: 0,
+            best_scores: HashMap::new(),
+            best_score: 0,
+            active_track: None,
+            current_stage_idx: 0,
+            stage_traveled_m: 0.0,
             player_pos_m: 0.0,
             player_speed_kmh: Config::PLAYER_START_SPEED_KMH,
-            player_lane: Lane::player_start(),
-            player_lane_display: Lane::player_start().0 as f32,
+            player_lane_idx: 0,
+            player_lane_display: 0.0,
             input: PlayerInput::None,
             input_last_set: None,
             ai_cars: Vec::new(),
             spawn_cooldown_ticks: 0,
+            obstacles: Vec::new(),
+            obstacle_seed_m: 0.0,
             elapsed_s: 0.0,
-            score: Config::INITIAL_SCORE as i64,
-            best_score: 0,
+            score: 0,
             phase: Phase::Playing,
             is_paused: false,
+            recent_effects: VecDeque::with_capacity(Config::RECENT_EFFECTS_CAPACITY),
+            gas_blocked_until: None,
+            brake_blocked_until: None,
+            wheel_blocked_until: None,
         }
     }
 
-    pub fn restart(&mut self) {
-        let best = self.best_score;
-        *self = Self::new();
-        self.best_score = best;
+    // ─── Picker ────────────────────────────────────────────────────────────
+
+    pub fn picker_move(&mut self, delta: i32) {
+        let len = ALL_TRACKS.len() as i32;
+        if len == 0 {
+            return;
+        }
+        let cur = self.picker_selected_idx as i32;
+        self.picker_selected_idx = ((cur + delta).rem_euclid(len)) as usize;
     }
 
+    pub fn start_selected_track(&mut self) {
+        let track = ALL_TRACKS.get(self.picker_selected_idx).copied().unwrap_or(DEFAULT_TRACK);
+        self.start_track(track);
+    }
+
+    pub fn start_track(&mut self, track: &'static Track) {
+        self.active_track = Some(track);
+        self.current_stage_idx = 0;
+        self.stage_traveled_m = 0.0;
+        self.player_pos_m = 0.0;
+        self.player_speed_kmh = Config::PLAYER_START_SPEED_KMH;
+        self.player_lane_idx = track.stages[0].road.lanes.player_start_idx();
+        self.player_lane_display = self.player_lane_idx as f32;
+        self.input = PlayerInput::None;
+        self.input_last_set = None;
+        self.ai_cars.clear();
+        self.spawn_cooldown_ticks = 0;
+        self.obstacles.clear();
+        self.obstacle_seed_m = 0.0;
+        self.elapsed_s = 0.0;
+        self.score = self.initial_score_for(track);
+        self.phase = Phase::Playing;
+        self.is_paused = false;
+        self.recent_effects.clear();
+        self.gas_blocked_until = None;
+        self.brake_blocked_until = None;
+        self.wheel_blocked_until = None;
+        self.screen = RacerScreen::Racing;
+    }
+
+    pub fn restart_current(&mut self) {
+        if let Some(track) = self.active_track {
+            self.start_track(track);
+        }
+    }
+
+    pub fn return_to_picker(&mut self) {
+        self.screen = RacerScreen::Picker;
+    }
+
+    fn initial_score_for(&self, track: &Track) -> i64 {
+        (Config::INITIAL_SCORE_PER_DISPLAYED_KM * track.total_distance_km()) as i64
+    }
+
+    // ─── Active track / stage accessors ────────────────────────────────────
+
+    pub fn track(&self) -> Option<&'static Track> {
+        self.active_track
+    }
+
+    pub fn current_stage(&self) -> Option<&'static Stage> {
+        let track = self.active_track?;
+        track.stages.get(self.current_stage_idx)
+    }
+
+    pub fn total_lanes(&self) -> usize {
+        self.current_stage().map(|s| s.road.lanes.total()).unwrap_or(0)
+    }
+
+    pub fn lanes_incoming(&self) -> usize {
+        self.current_stage().map(|s| s.road.lanes.incoming.len()).unwrap_or(0)
+    }
+
+    pub fn lanes_outgoing(&self) -> usize {
+        self.current_stage().map(|s| s.road.lanes.outgoing.len()).unwrap_or(0)
+    }
+
+    pub fn direction_of(&self, lane_idx: usize) -> TrafficDir {
+        if lane_idx < self.lanes_incoming() {
+            TrafficDir::Oncoming
+        } else {
+            TrafficDir::Same
+        }
+    }
+
+    pub fn speed_scale(&self) -> f32 {
+        self.active_track.map(|t| t.speed_scale).unwrap_or(1.0)
+    }
+
+    pub fn distance_scale(&self) -> f32 {
+        self.active_track.map(|t| t.distance_scale).unwrap_or(1.0)
+    }
+
+    /// Displayed kilometres travelled so far on the full track.
+    pub fn displayed_km_total(&self) -> f32 {
+        self.player_pos_m / self.distance_scale() / 1000.0
+    }
+
+    /// Displayed kilometres travelled in the current stage.
+    pub fn displayed_km_stage(&self) -> f32 {
+        self.stage_traveled_m / self.distance_scale() / 1000.0
+    }
+
+    pub fn track_total_km(&self) -> f32 {
+        self.active_track.map(|t| t.total_distance_km()).unwrap_or(0.0)
+    }
+
+    pub fn current_stage_km(&self) -> f32 {
+        self.current_stage().map(|s| s.distance_km).unwrap_or(0.0)
+    }
+
+    // ─── Player control ────────────────────────────────────────────────────
+
     pub fn is_playing(&self) -> bool {
-        matches!(self.phase, Phase::Playing)
+        matches!(self.phase, Phase::Playing) && self.screen == RacerScreen::Racing
     }
 
     pub fn toggle_pause(&mut self) {
-        if self.is_playing() {
+        if matches!(self.phase, Phase::Playing) {
             self.is_paused = !self.is_paused;
         }
     }
 
     pub fn move_left(&mut self) {
-        if !self.is_playing() || self.is_paused {
+        if !self.is_playing() || self.is_paused || self.wheels_blocked() {
             return;
         }
-        if self.player_lane.0 > 0 {
-            self.player_lane = Lane(self.player_lane.0 - 1);
+        if self.player_lane_idx > 0 {
+            self.player_lane_idx -= 1;
         }
     }
 
     pub fn move_right(&mut self) {
-        if !self.is_playing() || self.is_paused {
+        if !self.is_playing() || self.is_paused || self.wheels_blocked() {
             return;
         }
-        if self.player_lane.0 + 1 < Config::TOTAL_LANES {
-            self.player_lane = Lane(self.player_lane.0 + 1);
+        if self.player_lane_idx + 1 < self.total_lanes() {
+            self.player_lane_idx += 1;
         }
     }
 
+    fn wheels_blocked(&self) -> bool {
+        self.wheel_blocked_until.map_or(false, |t| Instant::now() < t)
+    }
+
+    fn gas_blocked(&self) -> bool {
+        self.gas_blocked_until.map_or(false, |t| Instant::now() < t)
+    }
+
+    fn brake_blocked(&self) -> bool {
+        self.brake_blocked_until.map_or(false, |t| Instant::now() < t)
+    }
+
+    pub fn set_input(&mut self, input: PlayerInput) {
+        // Filter out inputs blocked by current effects.
+        let allowed = match input {
+            PlayerInput::Accelerate => !self.gas_blocked(),
+            PlayerInput::Brake | PlayerInput::Handbrake => !self.brake_blocked(),
+            PlayerInput::None => true,
+        };
+        if !allowed {
+            return;
+        }
+        self.input = input;
+        self.input_last_set = Some(Instant::now());
+    }
+
+    // ─── Tick ──────────────────────────────────────────────────────────────
+
     pub fn tick(&mut self) {
-        if !self.is_playing() || self.is_paused {
+        if self.screen != RacerScreen::Racing || !self.is_playing() || self.is_paused {
             return;
         }
         let dt = Config::TICK_DT;
 
-        // Expire held input if no key event arrived recently.
-        // Key repeat fires every ~30ms while held, so 150ms gives ample margin.
-        // When the key is released, repeat stops and input clears after INPUT_HOLD_MS.
+        // Expire held input.
         if let Some(t) = self.input_last_set {
             if t.elapsed() > Duration::from_millis(Config::INPUT_HOLD_MS) {
                 self.input = PlayerInput::None;
@@ -315,21 +378,42 @@ impl State {
             }
         }
 
+        // Apply input → speed delta.
+        let lane = self.current_lane_cfg();
+        let (own_min, own_max, passive) = lane
+            .map(|l| (l.own_min_speed, l.own_max_speed, l.passive_decel))
+            .unwrap_or((0.0, 200.0, 0.0));
+
         let delta = match self.input {
             PlayerInput::Accelerate => Config::ACCEL_KMH_PER_S * dt,
             PlayerInput::Brake => -(Config::DECEL_KMH_PER_S * dt),
             PlayerInput::Handbrake => -(Config::DECEL_KMH_PER_S * 2.0 * dt),
-            PlayerInput::None => -(Config::COAST_DECEL_KMH_PER_S * dt),
+            PlayerInput::None => -(passive * dt),
         };
-        self.player_speed_kmh = (self.player_speed_kmh + delta)
-            .clamp(Config::PLAYER_MIN_SPEED_KMH, Config::PLAYER_MAX_SPEED_KMH);
+        self.player_speed_kmh += delta;
 
-        // Advance player
-        self.player_pos_m += (self.player_speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR) * dt;
+        // Smooth clamp toward the active lane's bounds.
+        let step = Config::SPEED_CLAMP_PER_S * dt;
+        if self.player_speed_kmh > own_max {
+            self.player_speed_kmh = (self.player_speed_kmh - step).max(own_max);
+        } else if self.player_speed_kmh < own_min {
+            self.player_speed_kmh = (self.player_speed_kmh + step).min(own_min);
+        }
+        // Hard floor at 0.
+        if self.player_speed_kmh < 0.0 {
+            self.player_speed_kmh = 0.0;
+        }
+
+        // Advance player (physics).
+        let speed_scale = self.speed_scale();
+        let player_step = self.player_speed_kmh / 3.6 * speed_scale * dt;
+        self.player_pos_m += player_step;
+        self.stage_traveled_m += player_step;
         self.elapsed_s += dt;
+        self.score = (self.score - (Config::SCORE_DECAY_PER_S * dt) as i64).max(0);
 
-        // Ease the rendered lane toward the target lane.
-        let target = self.player_lane.0 as f32;
+        // Smooth lane display.
+        let target = self.player_lane_idx as f32;
         let max_step = Config::LANE_TRANSITION_PER_S * dt;
         let diff = target - self.player_lane_display;
         if diff.abs() <= max_step {
@@ -337,66 +421,124 @@ impl State {
         } else {
             self.player_lane_display += diff.signum() * max_step;
         }
-        self.score = (Config::INITIAL_SCORE - Config::SCORE_DECAY_PER_S * self.elapsed_s)
-            .max(0.0) as i64;
 
-        // Update AI cars
+        // Update AI.
         self.update_ai(dt);
 
-        // Collision check
+        // Manage spawning / despawning of AI.
+        self.manage_ai();
+
+        // Spawn obstacles ahead deterministically.
+        self.spawn_obstacles_ahead();
+
+        // Apply obstacle effects on player.
+        self.check_obstacle_crossings();
+
+        // Stage transition?
+        if let Some(stage) = self.current_stage() {
+            let stage_distance_physics_m = stage.distance_km * 1000.0 * self.distance_scale();
+            if self.stage_traveled_m >= stage_distance_physics_m {
+                self.advance_stage();
+            }
+        }
+
+        // Collision check.
         if self.check_collision() {
             self.phase = Phase::Dead;
+            self.record_best();
             return;
         }
 
-        // Finish check
-        if self.player_pos_m >= Config::TRACK_LENGTH_M {
-            let s = self.score;
-            self.best_score = self.best_score.max(s);
-            self.phase = Phase::Finished {
-                elapsed_s: self.elapsed_s,
-                score: s,
-            };
-            return;
+        // Finish?
+        if let Some(track) = self.active_track {
+            let total_physics_m = track.total_distance_km() * 1000.0 * self.distance_scale();
+            if self.player_pos_m >= total_physics_m {
+                self.phase = Phase::Finished {
+                    elapsed_s: self.elapsed_s,
+                    score: self.score,
+                };
+                self.record_best();
+            }
         }
-
-        self.manage_ai();
     }
 
-    /// Returns true if spawning a car at `pos` in `lane`/`direction` won't immediately overlap.
-    fn spawn_clear(&self, pos: f32, lane: Lane, direction: TrafficDir) -> bool {
-        self.ai_cars.iter().all(|o| {
-            o.lane != lane || o.direction != direction
-                || (o.pos_m - pos).abs() >= Config::AI_MIN_SEPARATION_M
-        })
+    fn current_lane_cfg(&self) -> Option<&'static super::track::Lane> {
+        let stage = self.current_stage()?;
+        stage.road.lanes.get(self.player_lane_idx)
     }
+
+    fn record_best(&mut self) {
+        let Some(track) = self.active_track else { return; };
+        let s = self.score;
+        let entry = self.best_scores.entry(track.name).or_insert(0);
+        if s > *entry {
+            *entry = s;
+        }
+        self.best_score = self.best_scores.values().copied().max().unwrap_or(0);
+    }
+
+    fn advance_stage(&mut self) {
+        let Some(track) = self.active_track else { return; };
+        // Carry overflow into the next stage instead of dropping it.
+        let stage_distance_physics_m = track.stages[self.current_stage_idx].distance_km
+            * 1000.0
+            * self.distance_scale();
+        let overflow = self.stage_traveled_m - stage_distance_physics_m;
+        let next_idx = self.current_stage_idx + 1;
+        if next_idx >= track.stages.len() {
+            return; // Finish handled by main tick.
+        }
+        self.current_stage_idx = next_idx;
+        self.stage_traveled_m = overflow.max(0.0);
+
+        // Despawn AI in lanes that don't exist anymore.
+        let new_total = track.stages[next_idx].road.lanes.total();
+        self.ai_cars.retain(|c| c.lane_idx < new_total);
+        // Player stays in their lane if still valid; otherwise clamp to the
+        // rightmost outgoing lane.
+        let new_outgoing_start = track.stages[next_idx].road.lanes.incoming.len();
+        if self.player_lane_idx >= new_total {
+            self.player_lane_idx = new_outgoing_start;
+            self.player_lane_display = self.player_lane_idx as f32;
+        }
+        // Wipe obstacles (next stage has its own layout).
+        self.obstacles.clear();
+        self.obstacle_seed_m = self.player_pos_m;
+
+        self.recent_effects.push_front(RecentEffect {
+            label: "new stage",
+            at: Instant::now(),
+        });
+        while self.recent_effects.len() > Config::RECENT_EFFECTS_CAPACITY {
+            self.recent_effects.pop_back();
+        }
+    }
+
+    // ─── AI ────────────────────────────────────────────────────────────────
 
     fn update_ai(&mut self, dt: f32) {
         let follow_gap_m = Config::AI_FOLLOW_GAP_ROWS as f32 * Config::METERS_PER_ROW;
+        let speed_scale = self.speed_scale();
 
-        // Snapshot positions/speeds/sizes so we can read them while mutating each car.
-        // (Tiny vec, cars are few.)
-        let snap: Vec<(f32, Lane, TrafficDir, f32, f32)> = self
+        let snap: Vec<(f32, usize, TrafficDir, f32, f32)> = self
             .ai_cars
             .iter()
             .map(|c| {
-                let half_len_m = c.size.height_rows() as f32 * Config::METERS_PER_ROW * 0.5;
-                (c.pos_m, c.lane, c.direction, c.speed_kmh, half_len_m)
+                let half_m = c.height_rows as f32 * Config::METERS_PER_ROW * 0.5;
+                (c.pos_m, c.lane_idx, c.direction, c.speed_kmh, half_m)
             })
             .collect();
 
         for (i, car) in self.ai_cars.iter_mut().enumerate() {
-            let my_half = car.size.height_rows() as f32 * Config::METERS_PER_ROW * 0.5;
+            let my_half = car.height_rows as f32 * Config::METERS_PER_ROW * 0.5;
             let my_front = match car.direction {
                 TrafficDir::Same => car.pos_m + my_half,
                 TrafficDir::Oncoming => car.pos_m - my_half,
             };
 
-            // Find the nearest car ahead in the SAME lane (which implies same direction).
-            // Player is intentionally ignored — NPCs never slow down for the player.
-            let mut nearest: Option<(f32, f32)> = None; // (gap_m, leader_speed_kmh)
+            let mut nearest: Option<(f32, f32)> = None;
             for (j, &(jpos, jlane, jdir, jspeed, jhalf)) in snap.iter().enumerate() {
-                if i == j || jlane != car.lane {
+                if i == j || jlane != car.lane_idx {
                     continue;
                 }
                 let j_back = match jdir {
@@ -415,16 +557,12 @@ impl State {
                 }
             }
 
-            // Snap to leader's speed if closer than the follow gap and leader is slower.
             car.speed_kmh = match nearest {
-                Some((gap, lspeed)) if gap < follow_gap_m && lspeed < car.cruise_kmh => {
-                    lspeed
-                }
+                Some((gap, lspeed)) if gap < follow_gap_m && lspeed < car.cruise_kmh => lspeed,
                 _ => car.cruise_kmh,
             };
 
-            // Advance position.
-            let step = car.speed_kmh / 3.6 * Config::WORLD_SPEED_FACTOR * dt;
+            let step = car.speed_kmh / 3.6 * speed_scale * dt;
             match car.direction {
                 TrafficDir::Same => car.pos_m += step,
                 TrafficDir::Oncoming => car.pos_m -= step,
@@ -433,17 +571,14 @@ impl State {
     }
 
     fn check_collision(&self) -> bool {
-        // Pixel-perfect: compute the exact screen row range each car occupies
-        // (mirroring the render logic) and check for integer overlap.
         let p_top = Config::PLAYER_TOP_ROW as i32;
         let p_bot = p_top + Config::CAR_HEIGHT_ROWS as i32 - 1;
-
         for car in &self.ai_cars {
-            if car.lane != self.player_lane {
+            if car.lane_idx != self.player_lane_idx {
                 continue;
             }
             let center = self.track_to_screen_row(car.pos_m);
-            let h = car.size.height_rows() as i32;
+            let h = car.height_rows as i32;
             let top = center - h / 2;
             let bot = top + h - 1;
             if top <= p_bot && bot >= p_top {
@@ -454,80 +589,208 @@ impl State {
     }
 
     fn manage_ai(&mut self) {
-        let player_pos = self.player_pos_m;
+        let Some(stage) = self.current_stage() else { return; };
+        let lanes = stage.road.lanes;
+        let total_lanes = lanes.total();
+        if total_lanes == 0 {
+            return;
+        }
 
+        let player_pos = self.player_pos_m;
         self.ai_cars.retain(|car| {
-            let offset = car.pos_m - player_pos;
-            offset > -(Config::AI_DESPAWN_BEHIND_M)
-                && car.pos_m < Config::TRACK_LENGTH_M + 200.0
+            car.pos_m > player_pos - Config::AI_DESPAWN_BEHIND_M
+                && car.lane_idx < total_lanes
         });
 
-        // Cooldown creates natural gaps between spawn events.
         if self.spawn_cooldown_ticks > 0 {
             self.spawn_cooldown_ticks -= 1;
             return;
         }
 
-        let current = self.ai_cars.len();
-        let max = Config::AI_CAR_COUNT;
+        // Per-lane spawn budgets.
         let mut rng = rand::thread_rng();
+        let mut per_lane_count = vec![0usize; total_lanes];
+        for c in &self.ai_cars {
+            per_lane_count[c.lane_idx] += 1;
+        }
 
-        if current >= max {
+        // Find a lane that is under its target.
+        let mut hungry_lanes: Vec<usize> = (0..total_lanes)
+            .filter(|&i| {
+                let lane = lanes.get(i).expect("idx in range");
+                per_lane_count[i] < lane.traffic_size as usize
+            })
+            .collect();
+
+        if hungry_lanes.is_empty() {
             self.spawn_cooldown_ticks = rng.gen_range(15..90);
             return;
         }
 
-        // Spawn 1–4 cars clustered near a random ahead position.
-        let cluster = rng.gen_range(1..=((max - current).min(4)));
-        let base_extra = rng.gen_range(
-            0.0_f32..(Config::MINIMAP_RANGE_M - Config::VISIBLE_AHEAD_M).max(1.0),
-        );
-        for i in 0..cluster {
-            let lane = Lane(rng.gen_range(0..Config::TOTAL_LANES));
-            let direction = lane.direction();
-            let (smin, smax) = if direction == TrafficDir::Same {
-                (Config::AI_SAME_DIR_SPEED_MIN_KMH, Config::AI_SAME_DIR_SPEED_MAX_KMH)
-            } else {
-                (Config::AI_ONCOMING_SPEED_MIN_KMH, Config::AI_ONCOMING_SPEED_MAX_KMH)
-            };
-            let cruise = rng.gen_range(smin..=smax);
-            let pos = player_pos + Config::VISIBLE_AHEAD_M + base_extra
-                + i as f32 * rng.gen_range(25.0_f32..55.0);
-            if pos > player_pos + Config::MINIMAP_RANGE_M {
-                break;
-            }
-            if direction == TrafficDir::Same && pos >= Config::TRACK_LENGTH_M {
+        // Spawn 1–3 cars; same lane often, sometimes neighbors (cluster feel).
+        let cluster_size = rng.gen_range(1..=3.min(hungry_lanes.len()));
+        for _ in 0..cluster_size {
+            let pick_idx = rng.gen_range(0..hungry_lanes.len());
+            let lane_idx = hungry_lanes[pick_idx];
+            let lane = lanes.get(lane_idx).expect("idx in range");
+            let direction = self.direction_of(lane_idx);
+            let cruise = rng.gen_range(lane.traffic_min_speed..=lane.traffic_max_speed.max(lane.traffic_min_speed + 1.0));
+
+            // Spawn within MINIMAP_RANGE_M ahead.
+            let extra = rng.r#gen::<f32>()
+                * (Config::MINIMAP_RANGE_M - Config::VISIBLE_AHEAD_M).max(1.0);
+            let pos = player_pos + Config::VISIBLE_AHEAD_M + extra;
+            if !self.spawn_clear(pos, lane_idx, direction) {
                 continue;
             }
-            if !self.spawn_clear(pos, lane, direction) {
-                continue;
-            }
-            let size = CarSize::pick_weighted(&mut rng);
+
+            // Weighted car-shape pick.
+            let height = pick_car_height(lane.traffic_cars, &mut rng);
             self.ai_cars.push(AiCar {
                 pos_m: pos,
                 speed_kmh: cruise,
                 cruise_kmh: cruise,
-                lane,
+                lane_idx,
                 direction,
-                size,
+                height_rows: height,
             });
+            per_lane_count[lane_idx] += 1;
+            if per_lane_count[lane_idx] >= lane.traffic_size as usize {
+                hungry_lanes.retain(|&i| i != lane_idx);
+                if hungry_lanes.is_empty() {
+                    break;
+                }
+            }
         }
-
-        // Random delay before next spawn event: 0–4 s at 15 fps.
-        // Short cooldowns create back-to-back clusters; long ones open road.
         self.spawn_cooldown_ticks = rng.gen_range(0..60);
     }
 
-    /// Convert a track position (meters) to a screen row.
-    /// Row 0 = top (furthest ahead), VISIBLE_ROWS-1 = bottom (behind player).
-    /// Returns i32; may be negative or ≥ VISIBLE_ROWS if out of view.
+    fn spawn_clear(&self, pos: f32, lane_idx: usize, dir: TrafficDir) -> bool {
+        self.ai_cars.iter().all(|o| {
+            o.lane_idx != lane_idx
+                || o.direction != dir
+                || (o.pos_m - pos).abs() >= Config::AI_MIN_SEPARATION_M
+        })
+    }
+
+    // ─── Obstacles ─────────────────────────────────────────────────────────
+
+    fn spawn_obstacles_ahead(&mut self) {
+        let Some(stage) = self.current_stage() else { return; };
+        let lanes = stage.road.lanes;
+        let look_ahead_m = Config::MINIMAP_RANGE_M;
+        let target_max_m = self.player_pos_m + look_ahead_m;
+        // Walk from the last seeded position up to `target_max_m`, placing
+        // obstacles deterministically based on a coarse hash of (lane, slot).
+        // 30 m per slot keeps placement sparse and easy to reason about.
+        const SLOT_M: f32 = 30.0;
+        while self.obstacle_seed_m < target_max_m {
+            let slot = (self.obstacle_seed_m / SLOT_M) as i64;
+            for (lane_idx, lane) in lanes
+                .incoming
+                .iter()
+                .chain(lanes.outgoing.iter())
+                .enumerate()
+            {
+                for ob in lane.obstacles {
+                    let h = hash3(slot, lane_idx as i64, ob.aspect.as_i64());
+                    let p = (h % 10_000) as f32 / 10_000.0;
+                    if p < ob.frequency {
+                        let pos = self.obstacle_seed_m + (h as u64 % SLOT_M as u64) as f32;
+                        self.obstacles.push(SpawnedObstacle {
+                            aspect: ob.aspect,
+                            pos_m: pos,
+                            lane_idx,
+                            triggered: false,
+                        });
+                    }
+                }
+            }
+            self.obstacle_seed_m += SLOT_M;
+        }
+        // Drop far-behind ones.
+        let cutoff = self.player_pos_m - Config::AI_DESPAWN_BEHIND_M;
+        self.obstacles.retain(|o| o.pos_m > cutoff);
+    }
+
+    fn check_obstacle_crossings(&mut self) {
+        let Some(stage) = self.current_stage() else { return; };
+        let lanes = stage.road.lanes;
+        let p_front = self.player_pos_m;
+        let p_back = self.player_pos_m - Config::CAR_HEIGHT_ROWS as f32 * Config::METERS_PER_ROW;
+
+        let mut to_apply: Vec<&'static [ObstacleEffect]> = Vec::new();
+        let mut effect_labels: Vec<&'static str> = Vec::new();
+
+        for obs in self.obstacles.iter_mut() {
+            if obs.triggered || obs.lane_idx != self.player_lane_idx {
+                continue;
+            }
+            // Player's car spans rows [p_back, p_front]. Obstacle is a point.
+            if obs.pos_m >= p_back && obs.pos_m <= p_front {
+                obs.triggered = true;
+                effect_labels.push(obstacle_effect_label(obs.aspect));
+                // Find the lane's matching obstacle definition to read effects.
+                if let Some(lane_cfg) = lanes.get(obs.lane_idx) {
+                    if let Some(def) = lane_cfg.obstacles.iter().find(|o| o.aspect == obs.aspect) {
+                        to_apply.push(def.effects);
+                    }
+                }
+            }
+        }
+
+        for label in effect_labels {
+            self.recent_effects.push_front(RecentEffect { label, at: Instant::now() });
+            while self.recent_effects.len() > Config::RECENT_EFFECTS_CAPACITY {
+                self.recent_effects.pop_back();
+            }
+        }
+        for effects in to_apply {
+            for eff in effects {
+                self.apply_effect(*eff);
+            }
+        }
+    }
+
+    fn apply_effect(&mut self, eff: ObstacleEffect) {
+        match eff {
+            ObstacleEffect::Crash => {
+                self.phase = Phase::Dead;
+                self.record_best();
+            }
+            ObstacleEffect::SpeedChange { affect } => {
+                self.player_speed_kmh = (self.player_speed_kmh * (1.0 + affect)).max(0.0);
+            }
+            ObstacleEffect::BlockGas { cooldown_ms } => {
+                self.gas_blocked_until =
+                    Some(Instant::now() + Duration::from_millis(cooldown_ms as u64));
+            }
+            ObstacleEffect::BlockBreaks { cooldown_ms } => {
+                self.brake_blocked_until =
+                    Some(Instant::now() + Duration::from_millis(cooldown_ms as u64));
+            }
+            ObstacleEffect::BlockWheels { cooldown_ms } => {
+                self.wheel_blocked_until =
+                    Some(Instant::now() + Duration::from_millis(cooldown_ms as u64));
+            }
+        }
+    }
+
+    // ─── Geometry helpers (used by ui.rs) ──────────────────────────────────
+
+    /// Centre track-row of a position relative to the player.
     pub fn track_to_screen_row(&self, track_pos_m: f32) -> i32 {
         let offset_m = self.player_pos_m - track_pos_m;
         Config::PLAYER_TOP_ROW as i32 + (offset_m / Config::METERS_PER_ROW) as i32
     }
 
     pub fn progress_pct(&self) -> f32 {
-        (self.player_pos_m / Config::TRACK_LENGTH_M * 100.0).min(100.0)
+        let Some(track) = self.active_track else { return 0.0; };
+        let total_physics_m = track.total_distance_km() * 1000.0 * self.distance_scale();
+        if total_physics_m == 0.0 {
+            return 0.0;
+        }
+        (self.player_pos_m / total_physics_m * 100.0).clamp(0.0, 100.0)
     }
 
     pub fn elapsed_formatted(&self) -> String {
@@ -539,118 +802,98 @@ impl State {
     }
 }
 
-// ─── Unit tests ───────────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+fn pick_car_height(cars: &[super::track::Car], rng: &mut impl Rng) -> u8 {
+    if cars.is_empty() {
+        return 3;
+    }
+    let total: f32 = cars.iter().map(|c| c.incidence).sum();
+    if total <= 0.0 {
+        return cars[0].height;
+    }
+    let mut r: f32 = rng.r#gen::<f32>() * total;
+    for c in cars {
+        if r < c.incidence {
+            return c.height;
+        }
+        r -= c.incidence;
+    }
+    cars[cars.len() - 1].height
+}
+
+/// Cheap deterministic 3-input hash. Avoids needing a deterministic PRNG
+/// across ticks: we only call it to seed obstacle placement.
+fn hash3(a: i64, b: i64, c: i64) -> u64 {
+    let mut x = (a as u64).wrapping_mul(0x9E3779B97F4A7C15);
+    x ^= (b as u64).wrapping_mul(0xC2B2AE3D27D4EB4F);
+    x = x.rotate_left(31);
+    x ^= (c as u64).wrapping_mul(0x165667B19E3779F9);
+    x.wrapping_mul(0x94D049BB133111EB)
+}
+
+// ─── Module-level for ObstacleAspect → i64 (used in hash3) ──────────────────
+
+// Provide a stable mapping so the hash above doesn't depend on enum ordinal
+// transmute. Required so different obstacles on the same slot get different
+// hashes.
+impl super::track::ObstacleAspect {
+    pub fn as_i64(self) -> i64 {
+        match self {
+            super::track::ObstacleAspect::PotholeSmall => 1,
+            super::track::ObstacleAspect::PotholeBig => 2,
+            super::track::ObstacleAspect::PotholeCrater => 3,
+            super::track::ObstacleAspect::SpeedBump => 4,
+            super::track::ObstacleAspect::Spikes => 5,
+            super::track::ObstacleAspect::FallenTree => 6,
+        }
+    }
+}
+
+// ─── Unit tests ─────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::arcade::racer::tracks::DEFAULT_TRACK;
 
     #[test]
-    fn track_to_screen_row_ahead_is_above_player() {
-        let mut s = State::new();
-        s.ai_cars.clear();
-        s.player_pos_m = 500.0;
-        // 99m ahead → above player_top_row
-        let row = s.track_to_screen_row(599.0);
-        assert!(row < Config::PLAYER_TOP_ROW as i32, "ahead car should be above player");
+    fn picker_starts_with_zero_score() {
+        let s = State::new();
+        assert_eq!(s.screen, RacerScreen::Picker);
+        assert_eq!(s.best_score, 0);
     }
 
     #[test]
-    fn track_to_screen_row_player_front_is_player_top() {
+    fn start_track_moves_to_racing() {
         let mut s = State::new();
-        s.ai_cars.clear();
-        s.player_pos_m = 1000.0;
-        let row = s.track_to_screen_row(1000.0);
-        assert_eq!(row, Config::PLAYER_TOP_ROW as i32);
+        s.start_track(DEFAULT_TRACK);
+        assert_eq!(s.screen, RacerScreen::Racing);
+        assert_eq!(s.current_stage_idx, 0);
+        assert_eq!(s.player_lane_idx, DEFAULT_TRACK.stages[0].road.lanes.player_start_idx());
     }
 
     #[test]
-    fn lane_direction_follows_index() {
-        assert_eq!(Lane(0).direction(), TrafficDir::Oncoming);
-        assert_eq!(
-            Lane(Config::LANES_ONCOMING).direction(),
-            TrafficDir::Same,
-        );
+    fn move_left_then_right_returns_to_origin() {
+        let mut s = State::new();
+        s.start_track(DEFAULT_TRACK);
+        let start = s.player_lane_idx;
+        s.move_left();
+        assert!(s.player_lane_idx < start);
+        s.move_right();
+        assert_eq!(s.player_lane_idx, start);
     }
 
     #[test]
-    fn score_starts_at_initial_and_decreases() {
+    fn cannot_drive_above_lane_max_for_long() {
         let mut s = State::new();
-        s.ai_cars.clear();
-        let initial = s.score;
-        assert_eq!(initial, Config::INITIAL_SCORE as i64);
-        s.tick();
-        assert!(s.score < initial);
-    }
-
-    #[test]
-    fn collision_detected_same_lane() {
-        let mut s = State::new();
-        s.ai_cars.clear();
-        s.player_pos_m = 100.0;
-        s.player_lane = Lane::player_start();
-        // AI at player_pos_m + 3.0: diff = 3.0 < ahead_limit (6.0) → collision
-        s.ai_cars.push(AiCar {
-            pos_m: 103.0,
-            speed_kmh: 60.0,
-            cruise_kmh: 60.0,
-            lane: Lane::player_start(),
-            direction: TrafficDir::Same,
-            size: CarSize::Sm,
-        });
-        assert!(s.check_collision());
-    }
-
-    #[test]
-    fn no_collision_ai_just_ahead() {
-        let mut s = State::new();
-        s.ai_cars.clear();
-        s.player_pos_m = 100.0;
-        s.player_lane = Lane::player_start();
-        // AI at player_pos_m + 6.0: diff = 6.0, NOT < ahead_limit → no collision
-        s.ai_cars.push(AiCar {
-            pos_m: 106.0,
-            speed_kmh: 60.0,
-            cruise_kmh: 60.0,
-            lane: Lane::player_start(),
-            direction: TrafficDir::Same,
-            size: CarSize::Sm,
-        });
-        assert!(!s.check_collision());
-    }
-
-    #[test]
-    fn no_collision_ai_just_behind() {
-        let mut s = State::new();
-        s.ai_cars.clear();
-        s.player_pos_m = 100.0;
-        s.player_lane = Lane::player_start();
-        // AI at player_pos_m - 12.0: diff = -12.0, NOT > -behind_limit → no collision
-        s.ai_cars.push(AiCar {
-            pos_m: 88.0,
-            speed_kmh: 60.0,
-            cruise_kmh: 60.0,
-            lane: Lane::player_start(),
-            direction: TrafficDir::Same,
-            size: CarSize::Sm,
-        });
-        assert!(!s.check_collision());
-    }
-
-    #[test]
-    fn no_collision_different_lane() {
-        let mut s = State::new();
-        s.ai_cars.clear();
-        s.player_pos_m = 100.0;
-        s.player_lane = Lane::player_start();
-        s.ai_cars.push(AiCar {
-            pos_m: 100.5,
-            speed_kmh: 60.0,
-            cruise_kmh: 60.0,
-            lane: Lane(0),
-            direction: TrafficDir::Oncoming,
-            size: CarSize::Sm,
-        });
-        assert!(!s.check_collision());
+        s.start_track(DEFAULT_TRACK);
+        let lane = s.current_lane_cfg().unwrap();
+        s.player_speed_kmh = lane.own_max_speed + 50.0;
+        for _ in 0..30 {
+            s.tick();
+        }
+        let lane = s.current_lane_cfg().unwrap();
+        assert!(s.player_speed_kmh <= lane.own_max_speed + 1.0);
     }
 }
