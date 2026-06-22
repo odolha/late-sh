@@ -1674,6 +1674,10 @@ fn door_games_allows_global_help(event: &ParsedInput) -> bool {
 }
 
 fn handle_directory_catalog_input(app: &mut App, ctx: InputContext, event: &ParsedInput) -> bool {
+    if app.directory_state.search_mode() {
+        return crate::app::directory::input::handle_search_input(app, event);
+    }
+
     match event {
         ParsedInput::AltEnter => {
             match ctx.directory_tab {
@@ -1704,6 +1708,17 @@ fn handle_directory_catalog_input(app: &mut App, ctx: InputContext, event: &Pars
             if handle_directory_tab_switch_byte(app, ctx.directory_tab, *byte) {
                 return true;
             }
+            if *byte == b's'
+                && matches!(
+                    ctx.directory_tab,
+                    DirectoryTab::Profiles | DirectoryTab::Projects
+                )
+                && !app.chat.work.composing()
+                && !app.chat.showcase.composing()
+            {
+                app.directory_state.enter_search();
+                return true;
+            }
             match ctx.directory_tab {
                 DirectoryTab::Profiles => {
                     if app.chat.work.composing() {
@@ -1725,6 +1740,17 @@ fn handle_directory_catalog_input(app: &mut App, ctx: InputContext, event: &Pars
             }
         }
         ParsedInput::Char(ch) => {
+            if ch.eq_ignore_ascii_case(&'s')
+                && matches!(
+                    ctx.directory_tab,
+                    DirectoryTab::Profiles | DirectoryTab::Projects
+                )
+                && !app.chat.work.composing()
+                && !app.chat.showcase.composing()
+            {
+                app.directory_state.enter_search();
+                return true;
+            }
             if ch.is_ascii() && handle_directory_tab_switch_byte(app, ctx.directory_tab, *ch as u8)
             {
                 return true;
