@@ -187,12 +187,16 @@ pub fn scenery_bg(bg: SceneryBackground, theme: Theme) -> Color {
 
 // ─── Objects (scenery) ─────────────────────────────────────────────────────
 
-/// A small ASCII sprite. Rendered with its bottom-left anchor at the given cell;
-/// extends upward by `glyphs.len() - 1` rows and rightward by `width - 1` cols.
+/// A multi-row scenery sprite. Anchored at its bottom-left cell; extends
+/// `glyphs.len() - 1` rows upward (top-to-bottom ordering) and `width`
+/// columns rightward. Each row is a list of single-cell glyph strings, one
+/// per column (length == width).
 #[derive(Clone, Copy, Debug)]
 pub struct Sprite {
     pub width: u8,
-    pub glyphs: &'static [&'static str],
+    /// Rows ordered top-to-bottom. `glyphs[0]` is the topmost row;
+    /// `glyphs[len-1]` is the anchor (bottom) row.
+    pub glyphs: &'static [&'static [&'static str]],
     pub fg: Color,
 }
 
@@ -207,47 +211,82 @@ const GRASS_BLADE: Color = Color::Rgb(70, 130, 70);
 const BUILDING_GRAY: Color = Color::Rgb(140, 140, 140);
 const STAR_WHITE: Color = Color::Rgb(220, 220, 220);
 
-/// Sprite for the given object. Theme tinting is applied.
+/// Sprite for the given object. Theme tinting is applied to `fg`. Multi-row
+/// tree sprites paint their bottom row in trunk colour via the caller; see
+/// [`object_has_trunk`] and [`trunk_color`].
 pub fn object_sprite(aspect: ObjectAspect, theme: Theme) -> Sprite {
     let raw = match aspect {
-        ObjectAspect::Grass => Sprite { width: 1, glyphs: &["v"], fg: GRASS_BLADE },
-        ObjectAspect::Bush => Sprite { width: 1, glyphs: &["o"], fg: BUSH_GREEN },
+        ObjectAspect::Grass => Sprite {
+            width: 1,
+            glyphs: &[&["ʷ"]],
+            fg: GRASS_BLADE,
+        },
+        ObjectAspect::Bush => Sprite {
+            width: 1,
+            glyphs: &[&["❀"]],
+            fg: BUSH_GREEN,
+        },
+        // Tall conifer: crown stacked twice, trunk at bottom.
         ObjectAspect::TreePine => Sprite {
             width: 1,
-            glyphs: &["|", "A", "A"], // bottom: trunk, mid: lower crown, top: upper crown
+            glyphs: &[&["▲"], &["▲"], &["│"]],
             fg: TREE_PINE_GREEN,
         },
+        // Round canopy + trunk.
         ObjectAspect::TreeOak => Sprite {
             width: 1,
-            glyphs: &["|", "O"],
+            glyphs: &[&["◉"], &["│"]],
             fg: TREE_OAK_GREEN,
         },
+        // Frond + trunk.
         ObjectAspect::TreePalm => Sprite {
             width: 1,
-            glyphs: &["|", "Y"],
+            glyphs: &[&["✤"], &["│"]],
             fg: TREE_PALM_GREEN,
         },
+        // Pitched roof + solid body. 3 wide × 2 tall.
         ObjectAspect::BuildingHouse => Sprite {
             width: 3,
-            glyphs: &["[_]", "/-\\"], // bottom row first
+            glyphs: &[
+                &["╱", "▔", "╲"],
+                &["│", "░", "│"],
+            ],
             fg: BUILDING_GRAY,
         },
+        // Flat-roof block with windows. 3 wide × 4 tall.
         ObjectAspect::BuildingApartments => Sprite {
             width: 3,
-            glyphs: &["[#]", "[#]", "[#]", "/-\\"],
+            glyphs: &[
+                &["│", "▦", "│"],
+                &["│", "▦", "│"],
+                &["│", "░", "│"],
+            ],
             fg: BUILDING_GRAY,
         },
+        // Antenna + tall windowed tower. 3 wide × 6 tall.
         ObjectAspect::Skyscraper => Sprite {
             width: 3,
-            glyphs: &["[#]", "[#]", "[#]", "[#]", "[#]", "/A\\"],
+            glyphs: &[
+                &[" ", "▲", " "],
+                &["│", "▦", "│"],
+                &["│", "▦", "│"],
+                &["│", "▦", "│"],
+                &["│", "▦", "│"],
+                &["│", "░", "│"],
+            ],
             fg: BUILDING_GRAY,
         },
-        ObjectAspect::Flower => Sprite { width: 1, glyphs: &["*"], fg: FLOWER_PINK },
-        ObjectAspect::Star => Sprite { width: 1, glyphs: &["*"], fg: STAR_WHITE },
+        ObjectAspect::Flower => Sprite {
+            width: 1,
+            glyphs: &[&["✿"]],
+            fg: FLOWER_PINK,
+        },
+        ObjectAspect::Star => Sprite {
+            width: 1,
+            glyphs: &[&["✦"]],
+            fg: STAR_WHITE,
+        },
     };
-    // Special case: trunks should stay brown regardless of theme. We accept
-    // a single foreground per sprite — to keep this simple, multi-row tree
-    // sprites use the green fg and the consumer overrides the trunk row.
     Sprite { fg: tint(raw.fg, theme), ..raw }
 }
 
@@ -290,20 +329,17 @@ pub fn shoulder_cell(
         return Cell { sym: " ", fg: fallback_bg, bg: fallback_bg };
     }
     let (sym, fg, bg) = match aspect {
-        ShoulderAspect::Sidewalk => ("=", SIDEWALK_FG, SIDEWALK_BG),
-        ShoulderAspect::HardEdge => ("|", HARDEDGE_FG, fallback_bg),
-        ShoulderAspect::SoftEdge => (":", SOFTEDGE_FG, fallback_bg),
-        ShoulderAspect::ParkedCar => {
-            // Render a 3-row block character so successive rows look like a car.
-            ("#", PARKED_CAR_FG, fallback_bg)
-        }
-        ShoulderAspect::Poles => ("o", POLE_FG, fallback_bg),
-        ShoulderAspect::Railroad => ("=", RAIL_FG, fallback_bg),
-        ShoulderAspect::River => ("~", RIVER_FG, fallback_bg),
-        ShoulderAspect::CountryRoad => (":", COUNTRY_FG, fallback_bg),
-        ShoulderAspect::TreePine => ("A", TREE_PINE_DIM, fallback_bg),
-        ShoulderAspect::TreeOak => ("O", TREE_OAK_GREEN, fallback_bg),
-        ShoulderAspect::TreePalm => ("Y", TREE_PALM_GREEN, fallback_bg),
+        ShoulderAspect::Sidewalk => ("▦", SIDEWALK_FG, SIDEWALK_BG),
+        ShoulderAspect::HardEdge => ("┃", HARDEDGE_FG, fallback_bg),
+        ShoulderAspect::SoftEdge => ("·", SOFTEDGE_FG, fallback_bg),
+        ShoulderAspect::ParkedCar => ("▣", PARKED_CAR_FG, fallback_bg),
+        ShoulderAspect::Poles => ("●", POLE_FG, fallback_bg),
+        ShoulderAspect::Railroad => ("╤", RAIL_FG, fallback_bg),
+        ShoulderAspect::River => ("≈", RIVER_FG, fallback_bg),
+        ShoulderAspect::CountryRoad => ("·", COUNTRY_FG, fallback_bg),
+        ShoulderAspect::TreePine => ("▲", TREE_PINE_DIM, fallback_bg),
+        ShoulderAspect::TreeOak => ("◉", TREE_OAK_GREEN, fallback_bg),
+        ShoulderAspect::TreePalm => ("✤", TREE_PALM_GREEN, fallback_bg),
     };
     Cell { sym, fg: tint(fg, theme), bg: tint(bg, theme) }
 }
@@ -323,7 +359,7 @@ pub fn obstacle_glyph(aspect: ObstacleAspect) -> (&'static str, Color) {
         ObstacleAspect::PotholeCrater => ("###", POTHOLE_FG),
         ObstacleAspect::SpeedBump => ("===", SPEEDBUMP_FG),
         ObstacleAspect::Spikes => ("^^^", SPIKES_FG),
-        ObstacleAspect::FallenTree => ("===", FALLEN_TREE_FG),
+        ObstacleAspect::FallenTree => ("XXX", FALLEN_TREE_FG),
     }
 }
 

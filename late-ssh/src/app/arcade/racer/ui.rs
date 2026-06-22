@@ -547,37 +547,73 @@ fn draw_scenery_side(
     left_side: bool,
 ) {
     if objects.is_empty() { return; }
-    // Trees/objects placed deterministically every TREE_STRIDE columns
-    // starting from the OUTER edge (away from road).
-    const STRIDE: u16 = 3;
+    // Placement layout: scan columns at fixed stride from the OUTER edge of
+    // the grass band (so the wall closest to the road stays open). For each
+    // column we check anchors at track_row down to track_row - MAX_HEIGHT+1
+    // — the closest anchor whose sprite covers this row wins, then breaks.
+    //
+    // (Lower track_row = closer to the player, so a closer-anchored sprite
+    // visually obscures one farther ahead. h=0 means anchor IS this row,
+    // which is what we render first; larger h is sprite peeking above older
+    // anchors below.)
+    const STRIDE: u16 = 4;
+    /// Tallest supported sprite. Skyscraper currently uses 6 rows.
+    const MAX_HEIGHT: i64 = 6;
+    /// Minimum vertical gap (in track rows) between two anchors in the same
+    /// column. Must be > MAX_HEIGHT so no two sprites can ever overlap.
+    const ROW_STRIDE: i64 = 7;
+    /// 1-in-N gate among the eligible anchor rows (those that pass ROW_STRIDE).
+    const PLACEMENT_GATE: u64 = 2;
+
     let band_w = band_width as u16;
     if band_w <= shoulder_width { return; }
-    let inner_count = band_w - shoulder_width; // usable cells
+    let inner_count = band_w - shoulder_width;
+
     for d in 0..inner_count {
-        // Distance from the OUTER edge.
         if d % STRIDE != 1 { continue; }
-        // Pick an object via incidence weights, seeded by (track_row, d, side).
-        let seed = mix3(track_row as i64, d as i64, if left_side { 0 } else { 1 });
-        let obj = pick_object(objects, seed);
-        let sprite = theme::object_sprite(obj.aspect, theme_id);
-        // Only render anchor row's bottom glyph here (no multi-row buildup yet).
-        let glyph = sprite.glyphs.last().copied().unwrap_or(" ");
-        // Determine x position.
-        let x = if left_side {
-            x_range.start + d
-        } else {
-            x_range.end.saturating_sub(d + 1)
-        };
-        if x < x_range.start || x >= x_range.end { continue; }
-        // The seed gates whether we render anything at all (sparse forest feel).
-        if seed % 5 != 0 { continue; }
-        let fg = if theme::object_has_trunk(obj.aspect)
-            && sprite.glyphs.len() >= 1
-        {
-            sprite.fg
-        } else { sprite.fg };
-        if let Some(c) = buf.cell_mut((x, screen_y)) {
-            c.set_symbol(glyph).set_fg(fg).set_bg(fallback_bg);
+        // Forcing a row stride per column prevents two anchors from sitting
+        // within `MAX_HEIGHT` of each other, which would cause one sprite to
+        // occlude another's body or roof at random. With ROW_STRIDE > tallest
+        // sprite there is at most one relevant anchor per (row, column).
+        let col_salt = mix3(0, d as i64, if left_side { 0 } else { 1 }) as i64;
+        for h in 0..MAX_HEIGHT {
+            let anchor_row = track_row as i64 - h;
+            if (anchor_row + col_salt).rem_euclid(ROW_STRIDE) != 0 { continue; }
+            let seed = mix3(anchor_row, d as i64, if left_side { 0 } else { 1 });
+            if seed % PLACEMENT_GATE != 0 { continue; }
+            let obj = pick_object(objects, seed);
+            let sprite = theme::object_sprite(obj.aspect, theme_id);
+            let sprite_h = sprite.glyphs.len() as i64;
+            if h >= sprite_h { break; }
+            let sprite_w = sprite.width as u16;
+            if d + sprite_w > inner_count { break; }
+            let row_idx = (sprite_h - 1 - h) as usize;
+            let row_glyphs = sprite.glyphs[row_idx];
+            let bottom_row = h == 0;
+            let trunk_fg = theme::trunk_color(theme_id);
+            for (w_idx, glyph) in row_glyphs.iter().enumerate() {
+                if *glyph == " " { continue; }
+                // For the right-side band, the sprite must be mirror-placed so
+                // its left-to-right reading order matches the left side.
+                // `w_idx=0` always lands on the leftmost cell of the sprite.
+                let xx = if left_side {
+                    x_range.start.saturating_add(d + w_idx as u16)
+                } else {
+                    x_range
+                        .end
+                        .saturating_sub(d + sprite_w - w_idx as u16)
+                };
+                if xx < x_range.start || xx >= x_range.end { continue; }
+                let fg = if bottom_row && theme::object_has_trunk(obj.aspect) {
+                    trunk_fg
+                } else {
+                    sprite.fg
+                };
+                if let Some(c) = buf.cell_mut((xx, screen_y)) {
+                    c.set_symbol(*glyph).set_fg(fg).set_bg(fallback_bg);
+                }
+            }
+            break;
         }
     }
 }
