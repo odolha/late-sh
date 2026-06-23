@@ -1,15 +1,15 @@
-//! Sample track used as the default. Exercises every stage feature so the
-//! rendering and physics code can be smoke-tested with realistic input.
+//! Sample track — exercises every stage feature so the rendering and physics
+//! code can be smoke-tested with realistic input.
 
 use super::presets::*;
+use crate::app::arcade::racer::theme;
 use crate::app::arcade::racer::track::{
-    Lane, Lanes, Obstacle, ObstacleAspect, ObstacleEffect, Road, RoadAspect,
-    Sceneries, Shoulders, Stage, StageIcon, Theme, Track,
+    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect,
+    Sceneries, Shoulders, Stage, Theme, Track,
 };
 
-// ─── Per-stage road geometries ──────────────────────────────────────────────
+// ─── Per-stage road geometries ───────────────────────────────────────────────
 
-/// City: 2 incoming + 2 outgoing, urban scenery, sidewalks.
 const CITY_ROAD: Road = Road {
     aspect: RoadAspect { dividers: URBAN_DIVIDERS },
     lanes: Lanes {
@@ -20,7 +20,6 @@ const CITY_ROAD: Road = Road {
     shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
 };
 
-/// Highway: 2 incoming + 3 outgoing, premium asphalt, fast.
 const HIGHWAY_ROAD: Road = Road {
     aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
     lanes: Lanes {
@@ -31,16 +30,15 @@ const HIGHWAY_ROAD: Road = Road {
     shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: HIGHWAY_SHOULDERS },
 };
 
-/// Rural with potholes: 1+1, patchy asphalt, some obstacles.
 const RURAL_LANE_BUMPY: Lane = Lane {
     obstacles: &[
         Obstacle {
-            aspect: ObstacleAspect::PotholeSmall,
+            style: theme::OBSTACLE_POTHOLE_SMALL,
             frequency: 0.04,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.10 }],
         },
         Obstacle {
-            aspect: ObstacleAspect::SpeedBump,
+            style: theme::OBSTACLE_SPEED_BUMP,
             frequency: 0.02,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.30 }],
         },
@@ -58,16 +56,15 @@ const RURAL_ROAD: Road = Road {
     shoulders: Shoulders { left: RURAL_SHOULDERS, right: RURAL_SHOULDERS },
 };
 
-/// Forest dirt: 1+1, very slow, fallen-tree hazards.
 const FOREST_LANE_HAZARD: Lane = Lane {
     obstacles: &[
         Obstacle {
-            aspect: ObstacleAspect::FallenTree,
+            style: theme::OBSTACLE_FALLEN_TREE,
             frequency: 0.015,
             effects: &[ObstacleEffect::Crash],
         },
         Obstacle {
-            aspect: ObstacleAspect::PotholeBig,
+            style: theme::OBSTACLE_POTHOLE_BIG,
             frequency: 0.05,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.40 }],
         },
@@ -85,51 +82,48 @@ const FOREST_ROAD: Road = Road {
     shoulders: Shoulders { left: FOREST_SHOULDERS, right: FOREST_SHOULDERS },
 };
 
-// ─── Stages ────────────────────────────────────────────────────────────────
+// ─── Track ───────────────────────────────────────────────────────────────────
 
-const STAGES: &[Stage] = &[
-    Stage {
-        name: "City outskirts",
-        description: "Leaving town — keep an eye out for traffic lights",
-        icon: StageIcon::CityOutskirts,
-        theme: Theme::Standard,
-        distance_km: 8.0,
-        road: CITY_ROAD,
-    },
-    Stage {
-        name: "Open highway",
-        description: "Smooth asphalt — open it up but watch the trucks",
-        icon: StageIcon::Highway,
-        theme: Theme::Standard,
-        distance_km: 30.0,
-        road: HIGHWAY_ROAD,
-    },
-    Stage {
-        name: "Country backroad",
-        description: "Patchy tarmac — potholes and bumps slow you down",
-        icon: StageIcon::WildPlains,
-        theme: Theme::Standard,
-        distance_km: 12.0,
-        road: RURAL_ROAD,
-    },
-    Stage {
-        name: "Snowy forest pass",
-        description: "Slippery dirt and fallen trees — easy does it",
-        icon: StageIcon::WildForest,
-        theme: Theme::Winter,
-        distance_km: 10.0,
-        road: FOREST_ROAD,
-    },
-];
-
-/// The default track.
 pub const TRACK: Track = Track {
     name: "Sample",
     author: "odd",
     description:
         "A 60-km drive through city, highway, country and snowy forest. \
          Touches every stage feature — good for testing.",
-    stages: STAGES,
+    stages: &[
+        Stage {
+            name: "City outskirts",
+            description: "Leaving town — keep an eye out for traffic lights",
+            icon: "🏙",
+            theme: Theme::Standard,
+            distance_km: 8.0,
+            road: CITY_ROAD,
+        },
+        Stage {
+            name: "Open highway",
+            description: "Smooth asphalt — open it up but watch the trucks",
+            icon: "🛣",
+            theme: Theme::Standard,
+            distance_km: 30.0,
+            road: HIGHWAY_ROAD,
+        },
+        Stage {
+            name: "Country backroad",
+            description: "Patchy tarmac — potholes and bumps slow you down",
+            icon: "🌾",
+            theme: Theme::Standard,
+            distance_km: 12.0,
+            road: RURAL_ROAD,
+        },
+        Stage {
+            name: "Snowy forest pass",
+            description: "Slippery dirt and fallen trees — easy does it",
+            icon: "🌲",
+            theme: Theme::Winter,
+            distance_km: 10.0,
+            road: FOREST_ROAD,
+        },
+    ],
     distance_scale: 0.2,
     speed_scale: 2.0,
 };

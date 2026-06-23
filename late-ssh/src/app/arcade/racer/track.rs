@@ -1,98 +1,181 @@
 //! Track data model for the Racer game.
 //!
 //! A **track** is a named, multi-stage course. Each [`Stage`] defines the road
-//! geometry, traffic, scenery, and theme that apply while the player is in
-//! that stage. Stages succeed each other when the player covers their
-//! `distance` budget; the next stage's road can have completely different
-//! lane counts, themes, sceneries, and dividers.
+//! geometry, traffic, scenery, and theme that apply while the player is in that
+//! stage. Stages succeed each other when the player covers their `distance`
+//! budget; the next stage can have completely different lane counts, themes,
+//! sceneries, and dividers.
 //!
-//! Tracks are hard-coded as `&'static` Rust data (no file I/O), so authoring
-//! a new one is a code change. See `tracks/sample.rs` for an end-to-end
-//! example and `tracks/presets.rs` for reusable building blocks.
+//! Tracks are hard-coded as `&'static` Rust data (no file I/O), so authoring a
+//! new one is a code change. See `tracks/sample.rs` for an end-to-end example
+//! and `tracks/presets.rs` for reusable building blocks.
 //!
-//! # How to add a new track
+//! # Extensibility
 //!
-//! 1. Add a new file under `racer/tracks/`, e.g. `mountain.rs`.
-//! 2. Inside, declare a `pub const TRACK: Track = Track { … };` using the
-//!    presets in [`super::presets`] to avoid repetition.
-//! 3. Register it in `racer/tracks/mod.rs::ALL_TRACKS`.
+//! Aspects (lane surfaces, dividers, scenery, shoulders, obstacles, objects) are
+//! **open** — each is a small struct holding fn-pointer(s) for rendering.  The
+//! standard library lives in `theme.rs` as `pub const` instances (e.g.
+//! `theme::LANE_ASPHALT_PREMIUM`).  A new track can define its own instances
+//! inline; no changes to `track.rs` or `theme.rs` are needed.
+//!
+//! [`Theme`] remains a closed enum for now.  Extending it means adding a variant
+//! here and a `tint` branch in `theme.rs`.
 //!
 //! # Coordinate units
 //!
-//! All distance/speed values in this module are in **displayed** units
-//! (the numbers the player sees on the speedometer and odometer).
-//! [`Track::distance_scale`] and [`Track::speed_scale`] convert between
+//! All distance/speed values are in **displayed** units (the numbers the player
+//! sees).  [`Track::distance_scale`] and [`Track::speed_scale`] convert between
 //! these and the internal physics units used by `racer::state`.
 
 #![allow(dead_code)]
+
+use ratatui::style::Color;
+
+// ─── Rendering primitives (used by style descriptors) ───────────────────────
+
+/// One rendered terminal cell: glyph + foreground + background.
+#[derive(Clone, Copy, Debug)]
+pub struct Cell {
+    pub sym: &'static str,
+    pub fg: Color,
+    pub bg: Color,
+}
+
+impl Cell {
+    pub const fn new(sym: &'static str, fg: Color, bg: Color) -> Self {
+        Self { sym, fg, bg }
+    }
+}
+
+/// A multi-row scenery sprite anchored at its bottom-left cell; extends
+/// `glyphs.len() - 1` rows upward.  Each row is a slice of single-cell strings,
+/// one per column (`len == width`).
+#[derive(Clone, Copy, Debug)]
+pub struct Sprite {
+    pub width: u8,
+    /// Rows ordered top-to-bottom; `glyphs[0]` is the topmost row.
+    pub glyphs: &'static [&'static [&'static str]],
+    pub fg: Color,
+}
+
+// ─── Style descriptor types ─────────────────────────────────────────────────
+//
+// Each "aspect" is now a small struct with fn-pointer field(s) rather than an
+// enum variant.  This lets track authors define custom looks inline without
+// touching any shared file.  All standard instances live in `theme.rs`.
+
+/// Rendering descriptor for a lane surface.
+#[derive(Clone, Copy, Debug)]
+pub struct LaneStyle {
+    pub cell: fn(theme: Theme, row: i32, col: u16) -> Cell,
+    pub bg: fn(theme: Theme) -> Color,
+}
+
+/// Rendering descriptor for a lane divider column.  Theme-independent.
+#[derive(Clone, Copy, Debug)]
+pub struct DividerStyle {
+    pub cell: fn(row: i32, bg: Color) -> Cell,
+}
+
+/// Rendering descriptor for a scenery background fill.
+#[derive(Clone, Copy, Debug)]
+pub struct SceneryStyle {
+    pub bg: fn(theme: Theme) -> Color,
+}
+
+/// Rendering and identity descriptor for a stationary obstacle.
+///
+/// `id` **must** be unique among all `ObstacleStyle` instances that can appear
+/// in the same track — it seeds the deterministic placement hash.  Standard
+/// library IDs are 1–6 (`theme::OBSTACLE_*`).  Custom obstacles should start
+/// from 100 or higher to avoid collisions.
+#[derive(Clone, Copy, Debug)]
+pub struct ObstacleStyle {
+    /// Stable integer used in the placement hash.  Never change once deployed.
+    pub id: i64,
+    /// Short label shown in the right-panel effects log on crossing.
+    pub label: &'static str,
+    /// Per-column glyphs (3 columns = car body width) + foreground colour.
+    /// Theme-independent.
+    pub glyphs: ([&'static str; 3], Color),
+}
+
+/// Rendering descriptor for a scenery object (tree, building, etc.).
+#[derive(Clone, Copy, Debug)]
+pub struct ObjectStyle {
+    pub sprite: fn(theme: Theme) -> Sprite,
+    /// When true, the bottom row of the sprite renders with `theme::trunk_color`
+    /// instead of `sprite.fg` to visually separate trunk from canopy.
+    pub has_trunk: bool,
+}
+
+/// Rendering descriptor for one shoulder column.
+#[derive(Clone, Copy, Debug)]
+pub struct ShoulderStyle {
+    /// `repeat` is forwarded from [`Shoulder::repeat`]; the fn is responsible
+    /// for honouring it (blank on off-rows) and for the empty/transparent case.
+    pub cell: fn(theme: Theme, row: i32, repeat: u8, fallback_bg: Color) -> Cell,
+}
 
 // ─── Track / Stage ──────────────────────────────────────────────────────────
 
 /// A complete drivable course composed of one or more [`Stage`]s.
 #[derive(Debug, Clone, Copy)]
 pub struct Track {
-    /// Title shown above the road and in the picker.
+    /// Title shown in the picker and above the road.
     pub name: &'static str,
-    /// Credit shown next to the title.
     pub author: &'static str,
-    /// Long-form description shown in the picker only (multi-line allowed).
+    /// Long-form description shown in the picker only.
     pub description: &'static str,
-    /// Ordered list of stages. Must contain at least one entry.
+    /// Ordered stages.  Must contain at least one entry.
     pub stages: &'static [Stage],
     /// Multiplies displayed distance vs. physics distance.
-    /// `1.0` = 1 displayed km per 1 physics km.
-    /// `0.5` = the player drives only 0.5 physics km to cover 1 displayed km
-    ///         (i.e. distances feel "compressed" — longer-looking course in
-    ///         less play time).
     pub distance_scale: f32,
-    /// Multiplies the displayed speedometer reading vs. the physics speed.
-    /// `1.0` = realistic. `2.0` = the speedometer reads 2× physics speed
-    /// (the car *looks* twice as fast as it really moves).
+    /// Multiplies the displayed speedometer reading vs. physics speed.
     pub speed_scale: f32,
 }
 
 /// A contiguous segment of a [`Track`] with its own road, theme, and scenery.
 #[derive(Debug, Clone, Copy)]
 pub struct Stage {
-    /// Stage name shown beneath the track name during play.
     pub name: &'static str,
-    /// Optional short description shown in the bottom-right of the HUD.
+    /// Short description shown in the bottom-right of the HUD during play.
     pub description: &'static str,
-    /// Environmental icon (e.g. metropolis, forest) shown next to the track name.
-    pub icon: StageIcon,
-    /// Aesthetic theme applied to most rendered cells.
+    /// Environmental icon glyph shown beside the track name (e.g. `"🏙"`).
+    /// Use any single-width emoji or ASCII character.
+    pub icon: &'static str,
     pub theme: Theme,
-    /// Displayed distance the player must travel before advancing to the
-    /// next stage. Stored as displayed kilometres.
+    /// Displayed kilometres the player must travel before the next stage.
     pub distance_km: f32,
-    /// Road geometry, lanes, scenery, and shoulders for this stage.
     pub road: Road,
 }
 
-// ─── Icons / Theme ──────────────────────────────────────────────────────────
+// ─── Theme ──────────────────────────────────────────────────────────────────
 
-/// Environmental icon, shown beside the track title. Theme-independent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StageIcon {
-    Metropolis,
-    City,
-    CityOutskirts,
-    Village,
-    Highway,
-    WildPlains,
-    WildHills,
-    WildForest,
-    SlopeUp,
-    SlopeDown,
-    Special,
-}
-
-/// Visual theme. Applies to lane backgrounds, scenery, objects, shoulders.
+/// Visual theme applied across all themed rendering calls for a stage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Theme {
     Standard,
     Winter,
     Desert,
+}
+
+impl Theme {
+    pub fn name(self) -> &'static str {
+        match self {
+            Theme::Standard => "Normal",
+            Theme::Winter => "Winter",
+            Theme::Desert => "Desert",
+        }
+    }
+
+    pub fn icon(self) -> &'static str {
+        match self {
+            Theme::Standard => "☀",
+            Theme::Winter => "❄",
+            Theme::Desert => "🌵",
+        }
+    }
 }
 
 // ─── Road ───────────────────────────────────────────────────────────────────
@@ -115,88 +198,49 @@ pub struct RoadAspect {
 /// Divider styling between groups (primary) and within a group (lane).
 #[derive(Debug, Clone, Copy)]
 pub struct Divider {
-    /// Divider between the two traffic directions (incoming vs. outgoing).
-    pub primary: DividerAspect,
-    /// Divider between two lanes in the same direction.
-    pub lane: DividerAspect,
-}
-
-/// Visual style of a lane separator column.
-///
-/// Theme-independent. All are rendered in a single column with a glyph and color.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DividerAspect {
-    YellowDouble,
-    YellowSingle,
-    YellowDash,
-    YellowDots,
-    WhiteSingle,
-    WhiteDash,
-    WhiteDots,
-    Faint,
-    None,
+    /// Between the two traffic directions (incoming vs. outgoing).
+    pub primary: DividerStyle,
+    /// Between two lanes in the same direction.
+    pub lane: DividerStyle,
 }
 
 // ─── Lanes ──────────────────────────────────────────────────────────────────
 
 /// Lane configuration for both traffic directions.
 ///
-/// `incoming` lists oncoming-traffic lanes, indexed *from the center divider
-/// outward* (i.e. `incoming[0]` is the lane closest to the player's side).
-/// `outgoing` lists same-direction lanes the player drives in, also indexed
-/// from the center outward.
+/// `incoming` lists oncoming-traffic lanes indexed from the center divider
+/// outward.  `outgoing` lists same-direction lanes from center outward.
 ///
-/// **Invariants:** at least one `outgoing` lane; at least 2 lanes in total.
-/// Left- vs. right-hand driving is a future user setting and does *not* affect
-/// the meaning of these fields — `incoming` always means "the direction the
-/// player is *not* moving in".
+/// **Invariants:** at least one `outgoing` lane; at least 2 lanes total.
 #[derive(Debug, Clone, Copy)]
 pub struct Lanes {
     pub incoming: &'static [Lane],
     pub outgoing: &'static [Lane],
 }
 
-/// One lane: surface, allowed speeds, traffic, and obstacles.
+/// One lane: surface, speed bounds, traffic, and obstacles.
 #[derive(Debug, Clone, Copy)]
 pub struct Lane {
-    pub aspect: LaneAspect,
-    /// Minimum displayed km/h the player may drive at on this lane.
+    pub style: LaneStyle,
+    /// Minimum displayed km/h the player may drive on this lane.
     pub own_min_speed: f32,
-    /// Maximum displayed km/h the player may drive at on this lane.
+    /// Maximum displayed km/h the player may drive on this lane.
     pub own_max_speed: f32,
-    /// Passive deceleration in displayed km/h per second when the player
-    /// is not pressing accelerate. Drives the player toward `own_min_speed`.
+    /// Passive deceleration (displayed km/h per second) when not accelerating.
     pub passive_decel: f32,
-    /// Lower bound (displayed km/h) for AI cars spawning on this lane.
     pub traffic_min_speed: f32,
-    /// Upper bound (displayed km/h) for AI cars spawning on this lane.
     pub traffic_max_speed: f32,
-    /// Approximate total AI car count to maintain on this lane across the
-    /// full spawn area (visible + look-ahead). Not the on-screen count.
+    /// Approximate AI car count to maintain across the full spawn area.
     pub traffic_size: u16,
-    /// Catalogue of AI car body shapes for this lane. Weighted random pick.
     pub traffic_cars: &'static [Car],
-    /// Obstacles randomly sprinkled along this lane.
     pub obstacles: &'static [Obstacle],
 }
 
-/// Lane surface. Themed — see `theme::lane_aspect_cell`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LaneAspect {
-    AsphaltPremium,
-    AsphaltStandard,
-    AsphaltPatchy,
-    GravelRoad,
-    DirtRoad,
-    Grass,
-}
-
-/// AI car body. `height` is in rows; width is always 3 chars.
+/// AI car body shape.  Width is always 3 chars; `height` is in rows.
 #[derive(Debug, Clone, Copy)]
 pub struct Car {
-    /// Height in rendered rows. Common values: 3 (sedan), 4–5 (van), 6+ (truck).
     pub height: u8,
-    /// Relative weight when picking a car shape at spawn time. Higher = more common.
+    /// Relative weight at spawn-time shape selection.  Higher = more common.
     pub incidence: f32,
 }
 
@@ -205,31 +249,17 @@ pub struct Car {
 /// Stationary hazard sprinkled along a lane.
 #[derive(Debug, Clone, Copy)]
 pub struct Obstacle {
-    pub aspect: ObstacleAspect,
-    /// Coverage fraction along this lane in `[0.0, 1.0]`. Roughly: average
-    /// fraction of lane-length occupied by this obstacle type. Placement
-    /// is deterministic-but-pseudo-random along the lane.
+    pub style: ObstacleStyle,
+    /// Average fraction of lane-length occupied by this obstacle type `[0, 1]`.
     pub frequency: f32,
-    /// Effects that fire when the player drives over the obstacle.
-    /// Applied once on crossing — they do not persist across the obstacle.
+    /// Effects that fire once when the player drives over the obstacle.
     pub effects: &'static [ObstacleEffect],
 }
 
 impl Obstacle {
     pub fn has_crash(&self) -> bool {
-        self.effects.iter().filter(|&&e| e == ObstacleEffect::Crash).count() > 0
+        self.effects.iter().any(|&e| e == ObstacleEffect::Crash)
     }
-}
-
-/// Obstacle visual / category. Theme-independent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObstacleAspect {
-    PotholeSmall,
-    PotholeBig,
-    PotholeCrater,
-    SpeedBump,
-    Spikes,
-    FallenTree,
 }
 
 /// One-shot effect triggered when the player crosses an obstacle.
@@ -237,14 +267,12 @@ pub enum ObstacleAspect {
 pub enum ObstacleEffect {
     /// Instant game-over.
     Crash,
-    /// Multiplicative speed change applied to current speed.
-    /// `affect = -1.0` → full stop. `affect = +0.5` → +50%. Always clamped to
-    /// the current lane's min/max bounds afterwards.
+    /// Multiplicative speed change.  `-1.0` = full stop; `+0.5` = +50%.
     SpeedChange { affect: f32 },
     /// Player can't accelerate for `cooldown_ms` milliseconds.
     BlockGas { cooldown_ms: u16 },
     /// Player can't brake for `cooldown_ms` milliseconds.
-    BlockBreaks { cooldown_ms: u16 },
+    BlockBrakes { cooldown_ms: u16 },
     /// Player can't change lanes for `cooldown_ms` milliseconds.
     BlockWheels { cooldown_ms: u16 },
 }
@@ -253,121 +281,63 @@ pub enum ObstacleEffect {
 
 /// Left and right scenery slabs flanking the road.
 ///
-/// "Left" and "right" are absolute screen sides — they do **not** flip when
-/// the user switches to left-hand driving in a future setting.
+/// "Left" / "right" are absolute screen sides.
 #[derive(Debug, Clone, Copy)]
 pub struct Sceneries {
     pub left: Scenery,
     pub right: Scenery,
 }
 
-/// One side's scenery: a band of fixed character width, with a uniform
-/// background and randomly-placed objects on top.
+/// One side's scenery: a band of fixed character width with a background and
+/// randomly-placed objects on top.
 #[derive(Debug, Clone, Copy)]
 pub struct Scenery {
-    /// Width of this scenery band in characters.
     pub width: u8,
-    /// Background fill. Themed.
-    pub background: SceneryBackground,
-    /// Catalogue of objects to scatter on top of the background.
-    /// Objects only spawn in cells *not* covered by a shoulder.
+    pub background: SceneryStyle,
+    /// Objects to scatter.  Only spawn in cells not covered by a shoulder.
     pub objects: &'static [Object],
-}
-
-/// Scenery background. Themed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SceneryBackground {
-    Concrete,
-    Grass,
-    Dirt,
-    Void,
 }
 
 /// One scattered scenery object.
 #[derive(Debug, Clone, Copy)]
 pub struct Object {
-    pub aspect: ObjectAspect,
+    pub style: ObjectStyle,
     /// Relative weight when picking which object to render at a given cell.
     pub incidence: f32,
-}
-
-/// Scenery object. ASCII-rendered. Theme-aware.
-///
-/// Multi-row objects (apartments, skyscraper) extend upward from their anchor
-/// cell. If the scenery band isn't wide enough (or the cell is occupied by a
-/// shoulder), the object is skipped.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectAspect {
-    Grass,
-    Bush,
-    TreePine,
-    TreeOak,
-    TreePalm,
-    BuildingHouse,
-    BuildingApartments,
-    /// Tall city building (the spec's "Pedestrian" variant was a typo for this).
-    Skyscraper,
-    Flower,
-    Star,
 }
 
 // ─── Shoulders ──────────────────────────────────────────────────────────────
 
 /// Shoulder strips on each side of the road, drawn on top of scenery.
-///
-/// Each [`Shoulder`] occupies exactly 1 character column. Total shoulder
-/// width on each side must not exceed that side's scenery width.
 #[derive(Debug, Clone, Copy)]
 pub struct Shoulders {
-    /// Listed from the road edge outward (`left[0]` is adjacent to the road).
-    pub left: &'static [Shoulder],
     /// Listed from the road edge outward.
+    pub left: &'static [Shoulder],
     pub right: &'static [Shoulder],
 }
 
 /// One shoulder column.
 #[derive(Debug, Clone, Copy)]
 pub struct Shoulder {
-    pub aspect: ShoulderAspect,
+    pub style: ShoulderStyle,
     /// Repetition period in rows: `0` = continuous; `n > 0` = every `n` rows.
     pub repeat: u8,
-}
-
-/// Visual content of a shoulder column. Themed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShoulderAspect {
-    Empty,
-    Sidewalk,
-    HardEdge,
-    SoftEdge,
-    ParkedCar,
-    Poles,
-    Railroad,
-    River,
-    CountryRoad,
-    TreePine,
-    TreeOak,
-    TreePalm,
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 impl Track {
-    /// Total displayed track length across all stages.
     pub fn total_distance_km(&self) -> f32 {
         self.stages.iter().map(|s| s.distance_km).sum()
     }
 }
 
 impl Lanes {
-    /// Total number of lanes across both directions.
     pub fn total(&self) -> usize {
         self.incoming.len() + self.outgoing.len()
     }
 
-    /// Look up a lane by its flat index (0-based, incoming first).
-    ///
-    /// Layout: `[incoming[0], …, incoming[n-1], outgoing[0], …, outgoing[m-1]]`.
+    /// Look up a lane by flat index (0-based, incoming first).
     pub fn get(&self, flat_idx: usize) -> Option<&Lane> {
         if flat_idx < self.incoming.len() {
             Some(&self.incoming[flat_idx])
@@ -376,12 +346,11 @@ impl Lanes {
         }
     }
 
-    /// Flat index of the first outgoing lane (player's default starting lane).
+    /// Flat index of the first outgoing lane (the player's default start lane).
     pub fn player_start_idx(&self) -> usize {
         self.incoming.len()
     }
 
-    /// True if the lane at `flat_idx` is an incoming (oncoming) lane.
     pub fn is_incoming(&self, flat_idx: usize) -> bool {
         flat_idx < self.incoming.len()
     }

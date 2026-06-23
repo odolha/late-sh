@@ -1,72 +1,55 @@
 use super::presets::*;
-use crate::app::arcade::racer::track::{Car, Lane, LaneAspect, Lanes, Object, ObjectAspect, Obstacle, ObstacleAspect, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery, SceneryBackground, Shoulder, ShoulderAspect, Shoulders, Stage, StageIcon, Theme, Track};
+use crate::app::arcade::racer::theme;
+use crate::app::arcade::racer::track::{
+    Car, Lane, Lanes, Object, Obstacle, ObstacleEffect,
+    Road, RoadAspect, Sceneries, Scenery, Shoulder, Shoulders, Stage, Theme, Track,
+};
 
-// presets
-pub const TEST_LANE: Lane = Lane {
-    aspect: LaneAspect::AsphaltStandard,
+const TEST_LANE: Lane = Lane {
+    style: theme::LANE_ASPHALT_STANDARD,
     own_min_speed: 0.0,
     own_max_speed: 150.0,
     passive_decel: 0.0,
     traffic_min_speed: 40.0,
     traffic_max_speed: 90.0,
     traffic_size: 12,
+    traffic_cars: &[
+        Car { height: 3,  incidence: 0.4 },
+        Car { height: 5,  incidence: 0.4 },
+        Car { height: 1,  incidence: 0.1 },
+        Car { height: 10, incidence: 0.1 },
+    ],
     obstacles: &[
         Obstacle {
-            aspect: ObstacleAspect::PotholeSmall,
+            style: theme::OBSTACLE_POTHOLE_SMALL,
             frequency: 0.2,
-            effects: &[
-                ObstacleEffect::SpeedChange {
-                    affect: -0.2
-                }
-            ]
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.2 }],
         },
         Obstacle {
-            aspect: ObstacleAspect::PotholeBig,
+            style: theme::OBSTACLE_POTHOLE_BIG,
             frequency: 0.1,
-            effects: &[
-                ObstacleEffect::SpeedChange {
-                    affect: -0.5
-                }
-            ]
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.5 }],
         },
         Obstacle {
-            aspect: ObstacleAspect::SpeedBump,
+            style: theme::OBSTACLE_SPEED_BUMP,
             frequency: 0.01,
-            effects: &[
-                ObstacleEffect::SpeedChange {
-                    affect: -0.5
-                }
-            ]
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.5 }],
         },
         Obstacle {
-            aspect: ObstacleAspect::PotholeCrater,
+            style: theme::OBSTACLE_POTHOLE_CRATER,
             frequency: 0.05,
-            effects: &[
-                ObstacleEffect::SpeedChange {
-                    affect: -0.9
-                }
-            ]
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.9 }],
         },
         Obstacle {
-            aspect: ObstacleAspect::Spikes,
+            style: theme::OBSTACLE_SPIKES,
             frequency: 0.01,
-            effects: &[
-                ObstacleEffect::Crash
-            ]
+            effects: &[ObstacleEffect::Crash],
         },
         Obstacle {
-            aspect: ObstacleAspect::FallenTree,
+            style: theme::OBSTACLE_FALLEN_TREE,
             frequency: 0.01,
-            effects: &[
-                ObstacleEffect::Crash
-            ]
+            effects: &[ObstacleEffect::Crash],
         },
-    ],
-    traffic_cars: &[
-        Car { height: 3, incidence: 0.4 },
-        Car { height: 5, incidence: 0.4 },
-        Car { height: 1, incidence: 0.1 },
-        Car { height: 10, incidence: 0.1 }
     ],
 };
 
@@ -78,7 +61,7 @@ pub const TRACK: Track = Track {
         Stage {
             name: "Stage0",
             description: "This is stage0 test.",
-            icon: StageIcon::City,
+            icon: "🏢",
             theme: Theme::Desert,
             distance_km: 20.0,
             road: Road {
@@ -90,36 +73,32 @@ pub const TRACK: Track = Track {
                 sceneries: Sceneries {
                     left: Scenery {
                         width: 16,
-                        background: SceneryBackground::Concrete,
-                        objects: &[
-                            Object { aspect: ObjectAspect::BuildingHouse, incidence: 1.0 },
-                        ],
+                        background: theme::SCENERY_CONCRETE,
+                        objects: &[Object { style: theme::OBJ_BUILDING_HOUSE, incidence: 1.0 }],
                     },
                     right: Scenery {
                         width: 16,
-                        background: SceneryBackground::Concrete,
-                        objects: &[
-                            Object { aspect: ObjectAspect::BuildingHouse, incidence: 1.0 },
-                        ],
-                    }
+                        background: theme::SCENERY_CONCRETE,
+                        objects: &[Object { style: theme::OBJ_BUILDING_HOUSE, incidence: 1.0 }],
+                    },
                 },
                 shoulders: Shoulders {
                     left: &[
-                        Shoulder { aspect: ShoulderAspect::SoftEdge, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::Empty, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::CountryRoad, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::Empty, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::TreePalm, repeat: 10 },
-                        Shoulder { aspect: ShoulderAspect::Empty, repeat: 0 },
+                        Shoulder { style: theme::SHOULDER_SOFT_EDGE,    repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_EMPTY,        repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_COUNTRY_ROAD, repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_EMPTY,        repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_TREE_PALM,    repeat: 10 },
+                        Shoulder { style: theme::SHOULDER_EMPTY,        repeat: 0  },
                     ],
                     right: &[
-                        Shoulder { aspect: ShoulderAspect::SoftEdge, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::Empty, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::River, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::Empty, repeat: 0 },
-                        Shoulder { aspect: ShoulderAspect::TreePine, repeat: 10 },
-                        Shoulder { aspect: ShoulderAspect::Empty, repeat: 0 },
-                    ]
+                        Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_RIVER,     repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0  },
+                        Shoulder { style: theme::SHOULDER_TREE_PINE, repeat: 10 },
+                        Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0  },
+                    ],
                 },
             },
         },

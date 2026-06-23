@@ -1,18 +1,7 @@
 use super::presets::*;
-use crate::app::arcade::racer::track::{Lane, LaneAspect, Lanes, Obstacle, ObstacleAspect, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulders, Stage, StageIcon, Theme, Track};
+use crate::app::arcade::racer::track::{Lane, Lanes, Road, RoadAspect, Sceneries, Shoulders, Stage, Theme, Track};
 
-// presets
-pub const CLUJ_LANE: Lane = Lane {
-    aspect: LaneAspect::AsphaltStandard,
-    own_min_speed: 0.0,
-    own_max_speed: 150.0,
-    passive_decel: 0.0,
-    traffic_min_speed: 40.0,
-    traffic_max_speed: 90.0,
-    traffic_size: 12,
-    traffic_cars: CITY_CAR_MIX,
-    obstacles: &[],
-};
+const CLUJ_LANE: Lane = Lane { ..CITY_LANE };
 
 pub const TRACK: Track = Track {
     name: "Batin",
@@ -22,7 +11,7 @@ pub const TRACK: Track = Track {
         Stage {
             name: "Cluj-Napoca",
             description: "Got our Dacia 1310 ready to go - washed and filled up. Car is full of bags of things we'll mostly bring back intact. 3 kids in the car. Let's go.",
-            icon: StageIcon::City,
+            icon: "🏢",
             theme: Theme::Standard,
             distance_km: 7.0,
             road: Road {

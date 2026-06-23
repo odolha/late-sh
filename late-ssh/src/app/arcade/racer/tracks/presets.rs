@@ -1,41 +1,37 @@
 //! Reusable building blocks for track authoring.
 //!
 //! Tracks should compose these via struct-update syntax instead of duplicating
-//! field-by-field configurations. Example:
+//! field-by-field configurations.  Example:
 //!
 //! ```ignore
-//! use crate::app::arcade::racer::track::{Lane, LaneAspect};
 //! use crate::app::arcade::racer::tracks::presets;
 //!
 //! const FAST_LANE: Lane = Lane {
-//!     aspect: LaneAspect::AsphaltPremium,
+//!     style: theme::LANE_ASPHALT_PREMIUM,
 //!     own_max_speed: 220.0,
 //!     ..presets::HIGHWAY_LANE
 //! };
 //! ```
 
-use crate::app::arcade::racer::track::{
-    Car, Divider, DividerAspect, Lane, LaneAspect, Object, ObjectAspect, Scenery,
-    SceneryBackground, Shoulder, ShoulderAspect,
-};
+use crate::app::arcade::racer::theme;
+use crate::app::arcade::racer::track::{Car, Divider, Lane, Object, Scenery, Shoulder, Shoulders};
 
-// ─── Car shapes ─────────────────────────────────────────────────────────────
+// ─── Car shapes ──────────────────────────────────────────────────────────────
 
-pub const CAR_SEDAN: Car = Car { height: 3, incidence: 0.45 };
-pub const CAR_HATCHBACK: Car = Car { height: 3, incidence: 0.25 };
-pub const CAR_VAN: Car = Car { height: 5, incidence: 0.20 };
-pub const CAR_TRUCK: Car = Car { height: 7, incidence: 0.08 };
-pub const CAR_SEMI: Car = Car { height: 11, incidence: 0.02 };
+pub const CAR_SEDAN:    Car = Car { height: 3,  incidence: 0.45 };
+pub const CAR_HATCHBACK:Car = Car { height: 3,  incidence: 0.25 };
+pub const CAR_VAN:      Car = Car { height: 5,  incidence: 0.20 };
+pub const CAR_TRUCK:    Car = Car { height: 7,  incidence: 0.08 };
+pub const CAR_SEMI:     Car = Car { height: 11, incidence: 0.02 };
 
-pub const CITY_CAR_MIX: &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN];
+pub const CITY_CAR_MIX:    &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN];
 pub const HIGHWAY_CAR_MIX: &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI];
-pub const RURAL_CAR_MIX: &[Car] = &[CAR_HATCHBACK, CAR_VAN, CAR_TRUCK];
+pub const RURAL_CAR_MIX:   &[Car] = &[CAR_HATCHBACK, CAR_VAN, CAR_TRUCK];
 
-// ─── Lane templates ─────────────────────────────────────────────────────────
+// ─── Lane templates ──────────────────────────────────────────────────────────
 
-/// Standard city street lane — moderate speed, mixed traffic, no obstacles.
 pub const CITY_LANE: Lane = Lane {
-    aspect: LaneAspect::AsphaltStandard,
+    style: theme::LANE_ASPHALT_STANDARD,
     own_min_speed: 0.0,
     own_max_speed: 150.0,
     passive_decel: 0.0,
@@ -46,9 +42,8 @@ pub const CITY_LANE: Lane = Lane {
     obstacles: &[],
 };
 
-/// Highway main lane — high speed, smooth asphalt.
 pub const HIGHWAY_LANE: Lane = Lane {
-    aspect: LaneAspect::AsphaltPremium,
+    style: theme::LANE_ASPHALT_PREMIUM,
     own_min_speed: 50.0,
     own_max_speed: 260.0,
     passive_decel: 0.0,
@@ -59,9 +54,8 @@ pub const HIGHWAY_LANE: Lane = Lane {
     obstacles: &[],
 };
 
-/// Outskirts / rural — patchy asphalt, slower.
 pub const RURAL_LANE: Lane = Lane {
-    aspect: LaneAspect::AsphaltPatchy,
+    style: theme::LANE_ASPHALT_PATCHY,
     own_min_speed: 0.0,
     own_max_speed: 100.0,
     passive_decel: 2.0,
@@ -72,9 +66,8 @@ pub const RURAL_LANE: Lane = Lane {
     obstacles: &[],
 };
 
-/// Forest dirt road — slow, narrow feel.
 pub const FOREST_LANE: Lane = Lane {
-    aspect: LaneAspect::DirtRoad,
+    style: theme::LANE_DIRT,
     own_min_speed: 0.0,
     own_max_speed: 70.0,
     passive_decel: 4.0,
@@ -85,105 +78,107 @@ pub const FOREST_LANE: Lane = Lane {
     obstacles: &[],
 };
 
-// ─── Dividers ───────────────────────────────────────────────────────────────
+// ─── Dividers ────────────────────────────────────────────────────────────────
 
 pub const URBAN_DIVIDERS: Divider = Divider {
-    primary: DividerAspect::YellowDouble,
-    lane: DividerAspect::WhiteDash,
+    primary: theme::DIV_YELLOW_DOUBLE,
+    lane: theme::DIV_WHITE_DASH,
 };
 pub const HIGHWAY_DIVIDERS: Divider = Divider {
-    primary: DividerAspect::YellowDouble,
-    lane: DividerAspect::WhiteDash,
+    primary: theme::DIV_YELLOW_DOUBLE,
+    lane: theme::DIV_WHITE_DASH,
 };
 pub const RURAL_DIVIDERS: Divider = Divider {
-    primary: DividerAspect::YellowDash,
-    lane: DividerAspect::Faint,
+    primary: theme::DIV_YELLOW_DASH,
+    lane: theme::DIV_FAINT,
 };
 pub const FOREST_DIVIDERS: Divider = Divider {
-    primary: DividerAspect::Faint,
-    lane: DividerAspect::None,
+    primary: theme::DIV_FAINT,
+    lane: theme::DIV_NONE,
 };
 
-// ─── Scenery objects ────────────────────────────────────────────────────────
+// ─── Scenery objects ─────────────────────────────────────────────────────────
 
 pub const CITY_OBJECTS: &[Object] = &[
-    Object { aspect: ObjectAspect::BuildingHouse, incidence: 0.35 },
-    Object { aspect: ObjectAspect::BuildingApartments, incidence: 0.25 },
-    Object { aspect: ObjectAspect::Skyscraper, incidence: 0.10 },
-    Object { aspect: ObjectAspect::TreeOak, incidence: 0.20 },
-    Object { aspect: ObjectAspect::Bush, incidence: 0.10 },
+    Object { style: theme::OBJ_BUILDING_HOUSE,       incidence: 0.35 },
+    Object { style: theme::OBJ_BUILDING_APARTMENTS,  incidence: 0.25 },
+    Object { style: theme::OBJ_SKYSCRAPER,           incidence: 0.10 },
+    Object { style: theme::OBJ_TREE_OAK,             incidence: 0.20 },
+    Object { style: theme::OBJ_BUSH,                 incidence: 0.10 },
 ];
 
 pub const HIGHWAY_OBJECTS: &[Object] = &[
-    Object { aspect: ObjectAspect::TreePine, incidence: 0.50 },
-    Object { aspect: ObjectAspect::TreeOak, incidence: 0.25 },
-    Object { aspect: ObjectAspect::Bush, incidence: 0.20 },
-    Object { aspect: ObjectAspect::Flower, incidence: 0.05 },
+    Object { style: theme::OBJ_TREE_PINE,  incidence: 0.50 },
+    Object { style: theme::OBJ_TREE_OAK,  incidence: 0.25 },
+    Object { style: theme::OBJ_BUSH,      incidence: 0.20 },
+    Object { style: theme::OBJ_FLOWER,    incidence: 0.05 },
 ];
 
 pub const RURAL_OBJECTS: &[Object] = &[
-    Object { aspect: ObjectAspect::TreeOak, incidence: 0.45 },
-    Object { aspect: ObjectAspect::Bush, incidence: 0.25 },
-    Object { aspect: ObjectAspect::Grass, incidence: 0.20 },
-    Object { aspect: ObjectAspect::Flower, incidence: 0.10 },
+    Object { style: theme::OBJ_TREE_OAK, incidence: 0.45 },
+    Object { style: theme::OBJ_BUSH,     incidence: 0.25 },
+    Object { style: theme::OBJ_GRASS,    incidence: 0.20 },
+    Object { style: theme::OBJ_FLOWER,   incidence: 0.10 },
 ];
 
 pub const FOREST_OBJECTS: &[Object] = &[
-    Object { aspect: ObjectAspect::TreePine, incidence: 0.80 },
-    Object { aspect: ObjectAspect::Bush, incidence: 0.20 },
+    Object { style: theme::OBJ_TREE_PINE, incidence: 0.80 },
+    Object { style: theme::OBJ_BUSH,      incidence: 0.20 },
 ];
 
 pub const DESERT_OBJECTS: &[Object] = &[
-    Object { aspect: ObjectAspect::Grass, incidence: 0.40 },
-    Object { aspect: ObjectAspect::Bush, incidence: 0.40 },
-    Object { aspect: ObjectAspect::TreePalm, incidence: 0.20 },
+    Object { style: theme::OBJ_GRASS,     incidence: 0.40 },
+    Object { style: theme::OBJ_BUSH,      incidence: 0.40 },
+    Object { style: theme::OBJ_TREE_PALM, incidence: 0.20 },
 ];
 
-// ─── Sceneries ──────────────────────────────────────────────────────────────
+// ─── Sceneries ───────────────────────────────────────────────────────────────
 
 pub const CITY_SCENERY: Scenery = Scenery {
     width: 14,
-    background: SceneryBackground::Concrete,
+    background: theme::SCENERY_CONCRETE,
     objects: CITY_OBJECTS,
 };
 pub const HIGHWAY_SCENERY: Scenery = Scenery {
     width: 12,
-    background: SceneryBackground::Grass,
+    background: theme::SCENERY_GRASS,
     objects: HIGHWAY_OBJECTS,
 };
 pub const RURAL_SCENERY: Scenery = Scenery {
     width: 10,
-    background: SceneryBackground::Grass,
+    background: theme::SCENERY_GRASS,
     objects: RURAL_OBJECTS,
 };
 pub const FOREST_SCENERY: Scenery = Scenery {
     width: 14,
-    background: SceneryBackground::Dirt,
+    background: theme::SCENERY_DIRT,
     objects: FOREST_OBJECTS,
 };
 pub const DESERT_SCENERY: Scenery = Scenery {
     width: 12,
-    background: SceneryBackground::Dirt,
+    background: theme::SCENERY_DIRT,
     objects: DESERT_OBJECTS,
 };
 
-// ─── Shoulders ──────────────────────────────────────────────────────────────
+// ─── Shoulders ───────────────────────────────────────────────────────────────
 
 pub const SIDEWALK_SHOULDERS: &[Shoulder] = &[
-    Shoulder { aspect: ShoulderAspect::HardEdge, repeat: 0 },
-    Shoulder { aspect: ShoulderAspect::Sidewalk, repeat: 0 },
+    Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
+    Shoulder { style: theme::SHOULDER_SIDEWALK,  repeat: 0 },
 ];
 
 pub const HIGHWAY_SHOULDERS: &[Shoulder] = &[
-    Shoulder { aspect: ShoulderAspect::HardEdge, repeat: 0 },
-    Shoulder { aspect: ShoulderAspect::Poles, repeat: 6 },
+    Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
+    Shoulder { style: theme::SHOULDER_POLES,     repeat: 6 },
 ];
 
 pub const RURAL_SHOULDERS: &[Shoulder] = &[
-    Shoulder { aspect: ShoulderAspect::SoftEdge, repeat: 0 },
+    Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
 ];
 
 pub const FOREST_SHOULDERS: &[Shoulder] = &[
-    Shoulder { aspect: ShoulderAspect::SoftEdge, repeat: 0 },
-    Shoulder { aspect: ShoulderAspect::TreePine, repeat: 4 },
+    Shoulder { style: theme::SHOULDER_SOFT_EDGE,  repeat: 0 },
+    Shoulder { style: theme::SHOULDER_TREE_PINE,  repeat: 4 },
 ];
+
+pub const NO_SHOULDERS: Shoulders = Shoulders { left: &[], right: &[] };
