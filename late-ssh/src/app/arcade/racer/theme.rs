@@ -324,6 +324,12 @@ pub fn shoulder_cell(
     repeat: u8,
     fallback_bg: Color,
 ) -> Cell {
+    // `Empty` always renders as transparent grass.
+    if matches!(aspect, ShoulderAspect::Empty) {
+        return Cell { sym: " ", fg: fallback_bg, bg: fallback_bg };
+    }
+    // `repeat == 0` → continuous; otherwise render the glyph only on every
+    // `repeat`-th track row, blank in between.
     let show = repeat == 0 || row.rem_euclid(repeat as i32) == 0;
     if !show {
         return Cell { sym: " ", fg: fallback_bg, bg: fallback_bg };
@@ -334,43 +340,44 @@ pub fn shoulder_cell(
         ShoulderAspect::SoftEdge => ("·", SOFTEDGE_FG, fallback_bg),
         ShoulderAspect::ParkedCar => ("▣", PARKED_CAR_FG, fallback_bg),
         ShoulderAspect::Poles => ("●", POLE_FG, fallback_bg),
-        ShoulderAspect::Railroad => ("╤", RAIL_FG, fallback_bg),
-        ShoulderAspect::River => ("≈", RIVER_FG, fallback_bg),
-        ShoulderAspect::CountryRoad => ("·", COUNTRY_FG, fallback_bg),
+        ShoulderAspect::Railroad => ("╫", RAIL_FG, fallback_bg),
+        ShoulderAspect::River => ("▚", RIVER_FG, fallback_bg),
+        ShoulderAspect::CountryRoad => ("░", COUNTRY_FG, fallback_bg),
         ShoulderAspect::TreePine => ("▲", TREE_PINE_DIM, fallback_bg),
         ShoulderAspect::TreeOak => ("◉", TREE_OAK_GREEN, fallback_bg),
         ShoulderAspect::TreePalm => ("✤", TREE_PALM_GREEN, fallback_bg),
+        ShoulderAspect::Empty => (" ", fallback_bg, fallback_bg),
     };
     Cell { sym, fg: tint(fg, theme), bg: tint(bg, theme) }
 }
 
 // ─── Obstacles ─────────────────────────────────────────────────────────────
 
-const POTHOLE_FG: Color = Color::Rgb(0, 0, 0);
+const POTHOLE_FG: Color = Color::Rgb(50, 50, 50);
 const SPEEDBUMP_FG: Color = Color::Rgb(240, 220, 0);
 const SPIKES_FG: Color = Color::Rgb(220, 40, 40);
-const FALLEN_TREE_FG: Color = Color::Rgb(80, 50, 20);
+const FALLEN_TREE_FG: Color = Color::Rgb(220, 40, 40);
 
 /// 3-wide glyph row for the given obstacle (matches car body width).
 pub fn obstacle_glyph(aspect: ObstacleAspect) -> (&'static str, Color) {
     match aspect {
-        ObstacleAspect::PotholeSmall => ("·O·", POTHOLE_FG),
-        ObstacleAspect::PotholeBig => ("OOO", POTHOLE_FG),
-        ObstacleAspect::PotholeCrater => ("###", POTHOLE_FG),
-        ObstacleAspect::SpeedBump => ("===", SPEEDBUMP_FG),
-        ObstacleAspect::Spikes => ("^^^", SPIKES_FG),
-        ObstacleAspect::FallenTree => ("XXX", FALLEN_TREE_FG),
+        ObstacleAspect::PotholeSmall => ("·◉·", POTHOLE_FG),
+        ObstacleAspect::PotholeBig => ("◉◉◉", POTHOLE_FG),
+        ObstacleAspect::PotholeCrater => ("▓▓▓", POTHOLE_FG),
+        ObstacleAspect::SpeedBump => ("▁▂▁", SPEEDBUMP_FG),
+        ObstacleAspect::Spikes => ("▲▲▲", SPIKES_FG),
+        ObstacleAspect::FallenTree => ("≣≣≣", FALLEN_TREE_FG),
     }
 }
 
 /// Short label for an obstacle effect — shown in the right-panel effects log.
 pub fn obstacle_effect_label(aspect: ObstacleAspect) -> &'static str {
     match aspect {
-        ObstacleAspect::PotholeSmall => "pothole",
+        ObstacleAspect::PotholeSmall => "Pothole",
         ObstacleAspect::PotholeBig => "BIG pothole",
         ObstacleAspect::PotholeCrater => "CRATER",
-        ObstacleAspect::SpeedBump => "speed bump",
+        ObstacleAspect::SpeedBump => "Speed bump",
         ObstacleAspect::Spikes => "SPIKES",
-        ObstacleAspect::FallenTree => "fallen tree",
+        ObstacleAspect::FallenTree => "Fallen tree",
     }
 }

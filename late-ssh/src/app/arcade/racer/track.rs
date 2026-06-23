@@ -215,6 +215,12 @@ pub struct Obstacle {
     pub effects: &'static [ObstacleEffect],
 }
 
+impl Obstacle {
+    pub fn has_crash(&self) -> bool {
+        self.effects.iter().filter(|&&e| e == ObstacleEffect::Crash).count() > 0
+    }
+}
+
 /// Obstacle visual / category. Theme-independent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObstacleAspect {
@@ -330,6 +336,7 @@ pub struct Shoulder {
 /// Visual content of a shoulder column. Themed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShoulderAspect {
+    Empty,
     Sidewalk,
     HardEdge,
     SoftEdge,

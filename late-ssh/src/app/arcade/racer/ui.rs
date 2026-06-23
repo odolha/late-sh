@@ -38,7 +38,8 @@ const MINI_DIVIDER: Color = Color::Rgb(70, 58, 20);
 const MINI_SAME: Color = Color::Rgb(85, 85, 85);
 const MINI_ONCOMING: Color = Color::Rgb(130, 50, 50);
 const MINI_PLAYER: Color = Color::Rgb(0, 100, 100);
-const MINI_OBSTACLE: Color = Color::Rgb(200, 200, 0);
+const MINI_OBSTACLE_SIMPLE: Color = Color::Rgb(200, 200, 0);
+const MINI_OBSTACLE_CRASH: Color = Color::Rgb(200, 0, 0);
 
 // ─── Public entry ───────────────────────────────────────────────────────────
 
@@ -418,7 +419,8 @@ fn draw_minimap(frame: &mut Frame, area: Rect, state: &State, stage: &Stage) {
         let sy = area.y + mr;
         let x = area.x + mini_lane_offset(stage, obs.lane_idx);
         if let Some(c) = buf.cell_mut((x, sy)) {
-            c.set_symbol("!").set_fg(MINI_OBSTACLE).set_bg(MINI_BG);
+            let fg: Color = if obs.crash { MINI_OBSTACLE_CRASH } else { MINI_OBSTACLE_SIMPLE };
+            c.set_symbol("!").set_fg(fg).set_bg(MINI_BG);
         }
     }
 
@@ -488,9 +490,9 @@ fn draw_grass(
             }
         }
 
-        if fade.is_some() {
-            continue;
-        }
+        // Scenery objects and shoulders are rendered in fade zones too, with
+        // the same darken factor applied to their foregrounds so they blend
+        // into the road fade smoothly.
 
         // Scenery objects (left).
         draw_scenery_side(
@@ -504,6 +506,7 @@ fn draw_grass(
             stage.road.sceneries.left.width,
             stage.road.shoulders.left.len() as u16,
             true,
+            fade,
         );
         // Scenery objects (right).
         draw_scenery_side(
@@ -517,10 +520,21 @@ fn draw_grass(
             stage.road.sceneries.right.width,
             stage.road.shoulders.right.len() as u16,
             false,
+            fade,
         );
 
         // Shoulders (overlay).
-        draw_shoulders_side(buf, stage.road.shoulders.left, road_area.x, screen_y, track_row, stage.theme, lbg, true);
+        draw_shoulders_side(
+            buf,
+            stage.road.shoulders.left,
+            road_area.x,
+            screen_y,
+            track_row,
+            stage.theme,
+            lbg,
+            true,
+            fade,
+        );
         draw_shoulders_side(
             buf,
             stage.road.shoulders.right,
@@ -530,6 +544,7 @@ fn draw_grass(
             stage.theme,
             rbg,
             false,
+            fade,
         );
     }
 }
@@ -545,6 +560,7 @@ fn draw_scenery_side(
     band_width: u8,
     shoulder_width: u16,
     left_side: bool,
+    fade: Option<f32>,
 ) {
     if objects.is_empty() { return; }
     // Placement layout: scan columns at fixed stride from the OUTER edge of
@@ -604,11 +620,12 @@ fn draw_scenery_side(
                         .saturating_sub(d + sprite_w - w_idx as u16)
                 };
                 if xx < x_range.start || xx >= x_range.end { continue; }
-                let fg = if bottom_row && theme::object_has_trunk(obj.aspect) {
+                let raw_fg = if bottom_row && theme::object_has_trunk(obj.aspect) {
                     trunk_fg
                 } else {
                     sprite.fg
                 };
+                let fg = fade.map_or(raw_fg, |f| darken(raw_fg, f));
                 if let Some(c) = buf.cell_mut((xx, screen_y)) {
                     c.set_symbol(*glyph).set_fg(fg).set_bg(fallback_bg);
                 }
@@ -627,6 +644,7 @@ fn draw_shoulders_side(
     theme_id: super::track::Theme,
     fallback_bg: Color,
     left_side: bool,
+    fade: Option<f32>,
 ) {
     for (i, sh) in shoulders.iter().enumerate() {
         let x = if left_side {
@@ -635,8 +653,10 @@ fn draw_shoulders_side(
             base_x + i as u16 + 1
         };
         let cell = theme::shoulder_cell(sh.aspect, theme_id, track_row, sh.repeat, fallback_bg);
+        let fg = fade.map_or(cell.fg, |f| darken(cell.fg, f));
+        let bg = fade.map_or(cell.bg, |f| darken(cell.bg, f));
         if let Some(c) = buf.cell_mut((x, screen_y)) {
-            c.set_symbol(cell.sym).set_fg(cell.fg).set_bg(cell.bg);
+            c.set_symbol(cell.sym).set_fg(fg).set_bg(bg);
         }
     }
 }

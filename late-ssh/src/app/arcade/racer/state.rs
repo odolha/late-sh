@@ -113,6 +113,7 @@ pub struct AiCar {
 #[derive(Clone, Debug)]
 pub struct SpawnedObstacle {
     pub aspect: ObstacleAspect,
+    pub crash: bool,
     pub pos_m: f32,
     pub lane_idx: usize,
     pub triggered: bool,
@@ -723,6 +724,7 @@ impl State {
                         let pos = self.obstacle_seed_m + (h as u64 % SLOT_M as u64) as f32;
                         self.obstacles.push(SpawnedObstacle {
                             aspect: ob.aspect,
+                            crash: ob.has_crash(),
                             pos_m: pos,
                             lane_idx,
                             triggered: false,
