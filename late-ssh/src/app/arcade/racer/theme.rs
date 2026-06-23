@@ -47,6 +47,20 @@ pub fn trunk_color(theme: Theme) -> Color {
     tint(TRUNK_BROWN, theme)
 }
 
+// ─── Stage icons ─────────────────────────────────────────────────────────────
+
+pub const STAGE_METROPOLIS: &str = "🏙";
+pub const STAGE_CITY: &str = "🏢";
+pub const STAGE_CITY_OUTSKIRTS: &str = "🏘";
+pub const STAGE_VILLAGE: &str = "🏡";
+pub const STAGE_HIGHWAY: &str = "🛣";
+pub const STAGE_WILD_PLAINS: &str = "🌾";
+pub const STAGE_WILD_HILLS: &str = "⛰";
+pub const STAGE_WILD_FOREST: &str = "🌲";
+pub const STAGE_SLOPE_UP: &str = "↗";
+pub const STAGE_SLOPE_DOWN: &str = "↘";
+pub const STAGE_SPECIAL: &str = "★";
+
 // ─── Lane styles ─────────────────────────────────────────────────────────────
 
 const ASPHALT_BG: Color          = Color::Rgb(18, 18, 18);
