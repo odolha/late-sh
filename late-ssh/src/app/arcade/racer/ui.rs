@@ -759,19 +759,14 @@ fn draw_road(
                         };
                         cell.set_symbol("█").set_fg(fg).set_bg(bg);
                     } else if let Some(obs) = obstacle_hit {
-                        let (glyph, fg) = theme::obstacle_glyph(obs.aspect);
-                        let body_col = (col as i32 - 1).clamp(0, 2) as usize;
-                        let sub = glyph.chars().nth(body_col).map(|c| c.to_string()).unwrap_or_default();
+                        let (glyphs, fg) = theme::obstacle_glyph(obs.aspect);
                         if is_car_col(col) {
-                            // Set symbol from glyph; otherwise leave background.
-                            // Using a leak: we need &'static str. Build a static lookup.
-                            let static_sym = static_glyph_for(obs.aspect, body_col);
-                            cell.set_symbol(static_sym).set_fg(fg).set_bg(bg);
+                            let body_col = (col as i32 - 1).clamp(0, 2) as usize;
+                            cell.set_symbol(glyphs[body_col]).set_fg(fg).set_bg(bg);
                         } else {
                             let cell_v = theme::lane_aspect_cell(lane_cfg.aspect, theme_id, track_row, col);
                             cell.set_symbol(cell_v.sym).set_fg(cell_v.fg).set_bg(cell_v.bg);
                         }
-                        let _ = sub;
                     } else {
                         let cell_v = theme::lane_aspect_cell(lane_cfg.aspect, theme_id, track_row, col);
                         cell.set_symbol(cell_v.sym).set_fg(cell_v.fg).set_bg(cell_v.bg);
@@ -839,22 +834,6 @@ fn draw_road(
 fn car_top_row(state: &State, c: &super::state::AiCar) -> i32 {
     let center = state.track_to_screen_row(c.pos_m);
     center - (c.height_rows as i32) / 2
-}
-
-/// Static per-(aspect, col) glyph because `set_symbol` needs `&'static str`.
-fn static_glyph_for(aspect: super::track::ObstacleAspect, col: usize) -> &'static str {
-    use super::track::ObstacleAspect::*;
-    match (aspect, col) {
-        (PotholeSmall, 0) => "·",
-        (PotholeSmall, 1) => "O",
-        (PotholeSmall, 2) => "·",
-        (PotholeBig, _) => "O",
-        (PotholeCrater, _) => "#",
-        (SpeedBump, _) => "=",
-        (Spikes, _) => "^",
-        (FallenTree, _) => "=",
-        _ => " ",
-    }
 }
 
 // ─── Stats panel ───────────────────────────────────────────────────────────
@@ -978,6 +957,28 @@ fn draw_stats(frame: &mut Frame, area: Rect, state: &State, track: &Track, stage
         format!(" [{}{}] {:.0}%", "█".repeat(filled), "░".repeat(empty), pct),
         Style::default().fg(app_theme::AMBER()),
     )));
+
+    // Stage info.
+    {
+        let km_left = (stage_total_km - stage_km).max(0.0);
+        lines.push(Line::from(vec![
+            Span::styled(" Now  ", Style::default().fg(app_theme::TEXT_DIM())),
+            Span::styled(
+                format!("{} ({:.1} km left)", stage.name, km_left),
+                Style::default().fg(app_theme::TEXT_BRIGHT()),
+            ),
+        ]));
+        let next_stage = track.stages.get(state.current_stage_idx + 1);
+        if let Some(next) = next_stage {
+            lines.push(Line::from(vec![
+                Span::styled(" Next  ", Style::default().fg(app_theme::TEXT_DIM())),
+                Span::styled(
+                    next.name.to_string(),
+                    Style::default().fg(app_theme::TEXT_DIM()),
+                ),
+            ]));
+        }
+    }
 
     // Recent effects.
     if !state.recent_effects.is_empty() {

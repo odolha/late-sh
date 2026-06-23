@@ -358,15 +358,15 @@ const SPEEDBUMP_FG: Color = Color::Rgb(240, 220, 0);
 const SPIKES_FG: Color = Color::Rgb(220, 40, 40);
 const FALLEN_TREE_FG: Color = Color::Rgb(220, 40, 40);
 
-/// 3-wide glyph row for the given obstacle (matches car body width).
-pub fn obstacle_glyph(aspect: ObstacleAspect) -> (&'static str, Color) {
+/// Per-column glyphs for the given obstacle (3 columns, matches car body width).
+pub fn obstacle_glyph(aspect: ObstacleAspect) -> ([&'static str; 3], Color) {
     match aspect {
-        ObstacleAspect::PotholeSmall => ("·◉·", POTHOLE_FG),
-        ObstacleAspect::PotholeBig => ("◉◉◉", POTHOLE_FG),
-        ObstacleAspect::PotholeCrater => ("▓▓▓", POTHOLE_FG),
-        ObstacleAspect::SpeedBump => ("▁▂▁", SPEEDBUMP_FG),
-        ObstacleAspect::Spikes => ("▲▲▲", SPIKES_FG),
-        ObstacleAspect::FallenTree => ("≣≣≣", FALLEN_TREE_FG),
+        ObstacleAspect::PotholeSmall  => (["·", "◉", "·"], POTHOLE_FG),
+        ObstacleAspect::PotholeBig    => (["◉", "◉", "◉"], POTHOLE_FG),
+        ObstacleAspect::PotholeCrater => (["╳", "◉", "╳"], POTHOLE_FG),
+        ObstacleAspect::SpeedBump     => (["▁", "▂", "▁"], SPEEDBUMP_FG),
+        ObstacleAspect::Spikes        => (["▲", "▲", "▲"], SPIKES_FG),
+        ObstacleAspect::FallenTree    => (["≣", "≣", "≣"], FALLEN_TREE_FG),
     }
 }
 
