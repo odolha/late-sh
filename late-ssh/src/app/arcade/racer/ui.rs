@@ -330,7 +330,7 @@ fn draw_race(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: bool
     };
 
     draw_minimap(frame, mini_area, state, stage);
-    draw_grass(frame, road_area, grass_left_x, grass_right_x_end, state, stage);
+    draw_grass(frame, road_area, grass_left_x, grass_right_x_end, state, stage, state.scenery_seed);
     draw_road(frame, road_area, state, stage, &geom);
     draw_stats(frame, stats_area, state, track, stage);
 
@@ -450,6 +450,7 @@ fn draw_grass(
     grass_right_end_x: u16,
     state: &State,
     stage: &Stage,
+    scenery_seed: u64,
 ) {
     let buf = frame.buffer_mut();
     let track_base = (state.player_pos_m / Config::METERS_PER_ROW) as i32;
@@ -507,6 +508,7 @@ fn draw_grass(
             stage.road.shoulders.left.len() as u16,
             true,
             fade,
+            scenery_seed,
         );
         // Scenery objects (right).
         draw_scenery_side(
@@ -521,6 +523,7 @@ fn draw_grass(
             stage.road.shoulders.right.len() as u16,
             false,
             fade,
+            scenery_seed,
         );
 
         // Shoulders (overlay).
@@ -561,6 +564,7 @@ fn draw_scenery_side(
     shoulder_width: u16,
     left_side: bool,
     fade: Option<f32>,
+    run_salt: u64,
 ) {
     if objects.is_empty() { return; }
     // Placement layout: scan columns at fixed stride from the OUTER edge of
@@ -591,11 +595,11 @@ fn draw_scenery_side(
         // within `MAX_HEIGHT` of each other, which would cause one sprite to
         // occlude another's body or roof at random. With ROW_STRIDE > tallest
         // sprite there is at most one relevant anchor per (row, column).
-        let col_salt = mix3(0, d as i64, if left_side { 0 } else { 1 }) as i64;
+        let col_salt = mix3(run_salt as i64, d as i64, if left_side { 0 } else { 1 }) as i64;
         for h in 0..MAX_HEIGHT {
             let anchor_row = track_row as i64 - h;
             if (anchor_row + col_salt).rem_euclid(ROW_STRIDE) != 0 { continue; }
-            let seed = mix3(anchor_row, d as i64, if left_side { 0 } else { 1 });
+            let seed = mix3(anchor_row ^ run_salt as i64, d as i64, if left_side { 0 } else { 1 });
             if seed % PLACEMENT_GATE != 0 { continue; }
             let obj = pick_object(objects, seed);
             let sprite = theme::object_sprite(obj.aspect, theme_id);

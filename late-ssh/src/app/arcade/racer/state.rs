@@ -9,7 +9,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-use rand::Rng;
+use rand::{random, Rng};
 
 use super::theme::obstacle_effect_label;
 use super::track::{
@@ -150,6 +150,7 @@ pub struct State {
     pub spawn_cooldown_ticks: u32,
     pub obstacles: Vec<SpawnedObstacle>,
     pub obstacle_seed_m: f32,
+    pub scenery_seed: u64,
     pub elapsed_s: f32,
     pub score: i64,
     pub phase: Phase,
@@ -184,6 +185,7 @@ impl State {
             spawn_cooldown_ticks: 0,
             obstacles: Vec::new(),
             obstacle_seed_m: 0.0,
+            scenery_seed: 0,
             elapsed_s: 0.0,
             score: 0,
             phase: Phase::Playing,
@@ -225,6 +227,7 @@ impl State {
         self.spawn_cooldown_ticks = 0;
         self.obstacles.clear();
         self.obstacle_seed_m = 0.0;
+        self.scenery_seed = random();
         self.elapsed_s = 0.0;
         self.score = self.initial_score_for(track);
         self.phase = Phase::Playing;
@@ -710,7 +713,7 @@ impl State {
         // 30 m per slot keeps placement sparse and easy to reason about.
         const SLOT_M: f32 = 30.0;
         while self.obstacle_seed_m < target_max_m {
-            let slot = (self.obstacle_seed_m / SLOT_M) as i64;
+            let slot = (self.obstacle_seed_m / SLOT_M) as i64 ^ self.scenery_seed as i64;
             for (lane_idx, lane) in lanes
                 .incoming
                 .iter()
