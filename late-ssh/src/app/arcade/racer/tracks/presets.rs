@@ -37,7 +37,7 @@ pub const CITY_LANE: Lane = Lane {
     passive_decel: 0.0,
     traffic_min_speed: 40.0,
     traffic_max_speed: 90.0,
-    traffic_size: 12,
+    traffic_density: 0.4,
     traffic_cars: CITY_CAR_MIX,
     obstacles: &[],
 };
@@ -49,7 +49,7 @@ pub const HIGHWAY_LANE: Lane = Lane {
     passive_decel: 0.0,
     traffic_min_speed: 60.0,
     traffic_max_speed: 150.0,
-    traffic_size: 7,
+    traffic_density: 0.25,
     traffic_cars: HIGHWAY_CAR_MIX,
     obstacles: &[],
 };
@@ -61,7 +61,7 @@ pub const RURAL_LANE: Lane = Lane {
     passive_decel: 2.0,
     traffic_min_speed: 30.0,
     traffic_max_speed: 80.0,
-    traffic_size: 5,
+    traffic_density: 0.2,
     traffic_cars: RURAL_CAR_MIX,
     obstacles: &[],
 };
@@ -73,7 +73,7 @@ pub const FOREST_LANE: Lane = Lane {
     passive_decel: 4.0,
     traffic_min_speed: 20.0,
     traffic_max_speed: 50.0,
-    traffic_size: 3,
+    traffic_density: 0.1,
     traffic_cars: RURAL_CAR_MIX,
     obstacles: &[],
 };

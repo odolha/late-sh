@@ -230,8 +230,10 @@ pub struct Lane {
     pub passive_decel: f32,
     pub traffic_min_speed: f32,
     pub traffic_max_speed: f32,
-    /// Approximate AI car count to maintain across the full spawn area.
-    pub traffic_size: u16,
+    /// Traffic density `[0.0, 1.0]`.  `0.0` = empty; `1.0` = one car every
+    /// `AI_MIN_SEPARATION_M` across the full spawn horizon (maximum packing
+    /// without overlap).  Values above `1.0` are clamped internally.
+    pub traffic_density: f32,
     pub traffic_cars: &'static [Car],
     pub obstacles: &'static [Obstacle],
 }

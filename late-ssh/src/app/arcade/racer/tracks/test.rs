@@ -12,7 +12,7 @@ const TEST_LANE: Lane = Lane {
     passive_decel: 0.0,
     traffic_min_speed: 40.0,
     traffic_max_speed: 90.0,
-    traffic_size: 12,
+    traffic_density: 0.4,
     traffic_cars: &[
         Car { height: 3,  incidence: 0.4 },
         Car { height: 5,  incidence: 0.4 },

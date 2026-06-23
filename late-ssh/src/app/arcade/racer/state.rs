@@ -31,6 +31,12 @@ impl Config {
     pub const AI_MIN_SEPARATION_M: f32 = 32.0;
     pub const AI_DESPAWN_BEHIND_M: f32 = 200.0;
     pub const AI_FOLLOW_GAP_ROWS: u16 = 5;
+    /// How far ahead the managed traffic zone extends (beyond minimap).
+    /// New cars are seeded here so they scroll naturally into view.
+    pub const SPAWN_AHEAD_M: f32 = Self::MINIMAP_RANGE_M * 1.5;
+    /// Safe gap in front of the player used only during initial fill,
+    /// so the road immediately ahead is clear on race start.
+    pub const INITIAL_SKIP_M: f32 = Self::AI_MIN_SEPARATION_M * 2.5;
 
     pub const PLAYER_START_SPEED_KMH: f32 = 50.0;
     pub const ACCEL_KMH_PER_S: f32 = 88.0;
@@ -122,7 +128,6 @@ pub struct State {
     pub input: PlayerInput,
     pub input_last_set: Option<Instant>,
     pub ai_cars: Vec<AiCar>,
-    pub spawn_cooldown_ticks: u32,
     pub obstacles: Vec<SpawnedObstacle>,
     pub obstacle_seed_m: f32,
     pub scenery_seed: u64,
@@ -155,7 +160,6 @@ impl State {
             input: PlayerInput::None,
             input_last_set: None,
             ai_cars: Vec::new(),
-            spawn_cooldown_ticks: 0,
             obstacles: Vec::new(),
             obstacle_seed_m: 0.0,
             scenery_seed: 0,
@@ -195,7 +199,6 @@ impl State {
         self.input = PlayerInput::None;
         self.input_last_set = None;
         self.ai_cars.clear();
-        self.spawn_cooldown_ticks = 0;
         self.obstacles.clear();
         self.obstacle_seed_m = 0.0;
         self.scenery_seed = random();
@@ -535,66 +538,66 @@ impl State {
         if total_lanes == 0 { return; }
 
         let player_pos = self.player_pos_m;
+
+        // Despawn cars that fell too far behind or are in lanes that no longer exist.
         self.ai_cars.retain(|car| {
             car.pos_m > player_pos - Config::AI_DESPAWN_BEHIND_M
                 && car.lane_idx < total_lanes
         });
 
-        if self.spawn_cooldown_ticks > 0 {
-            self.spawn_cooldown_ticks -= 1;
-            return;
-        }
+        // Initial fill: on the very first tick of a race the car list is empty.
+        // Populate the whole lookahead (skipping a safety gap near the player)
+        // so the road isn't bare at start. Ongoing: spawn only beyond the
+        // minimap so new cars scroll in naturally from ahead.
+        let is_initial_fill = self.ai_cars.is_empty();
+        let spawn_min = player_pos + if is_initial_fill {
+            Config::INITIAL_SKIP_M
+        } else {
+            Config::MINIMAP_RANGE_M
+        };
+        let spawn_max = player_pos + Config::SPAWN_AHEAD_M;
+
+        if spawn_max <= spawn_min { return; }
 
         let mut rng = rand::thread_rng();
-        let mut per_lane_count = vec![0usize; total_lanes];
-        for c in &self.ai_cars {
-            per_lane_count[c.lane_idx] += 1;
-        }
 
-        let mut hungry_lanes: Vec<usize> = (0..total_lanes)
-            .filter(|&i| {
-                let lane = lanes.get(i).expect("idx in range");
-                per_lane_count[i] < lane.traffic_size as usize
-            })
-            .collect();
+        // Count current cars per lane.
+        let mut per_lane = vec![0usize; total_lanes];
+        for c in &self.ai_cars { per_lane[c.lane_idx] += 1; }
 
-        if hungry_lanes.is_empty() {
-            self.spawn_cooldown_ticks = rng.gen_range(15..90);
-            return;
-        }
-
-        let cluster_size = rng.gen_range(1..=3.min(hungry_lanes.len()));
-        for _ in 0..cluster_size {
-            let pick_idx = rng.gen_range(0..hungry_lanes.len());
-            let lane_idx = hungry_lanes[pick_idx];
+        for lane_idx in 0..total_lanes {
             let lane = lanes.get(lane_idx).expect("idx in range");
+            let target = density_to_count(lane.traffic_density);
+            if per_lane[lane_idx] >= target { continue; }
+
             let direction = self.direction_of(lane_idx);
-            let cruise = rng.gen_range(
-                lane.traffic_min_speed
-                    ..=lane.traffic_max_speed.max(lane.traffic_min_speed + 1.0),
-            );
+            let needed = target - per_lane[lane_idx];
 
-            let extra = rng.r#gen::<f32>()
-                * (Config::MINIMAP_RANGE_M - Config::VISIBLE_AHEAD_M).max(1.0);
-            let pos = player_pos + Config::VISIBLE_AHEAD_M + extra;
-            if !self.spawn_clear(pos, lane_idx, direction) { continue; }
+            // Initial fill: place as many as needed (up to MAX_ATTEMPTS tries).
+            // Ongoing: place at most one car per manage_ai call to keep it smooth.
+            let to_place = if is_initial_fill { needed } else { 1 };
+            let max_attempts = to_place * 6;
+            let mut placed = 0;
 
-            let height = pick_car_height(lane.traffic_cars, &mut rng);
-            self.ai_cars.push(AiCar {
-                pos_m: pos,
-                speed_kmh: cruise,
-                cruise_kmh: cruise,
-                lane_idx,
-                direction,
-                height_rows: height,
-            });
-            per_lane_count[lane_idx] += 1;
-            if per_lane_count[lane_idx] >= lane.traffic_size as usize {
-                hungry_lanes.retain(|&i| i != lane_idx);
-                if hungry_lanes.is_empty() { break; }
+            for _ in 0..max_attempts {
+                if placed >= to_place { break; }
+                let pos = spawn_min + rng.r#gen::<f32>() * (spawn_max - spawn_min);
+                if !self.spawn_clear(pos, lane_idx, direction) { continue; }
+                let cruise = rng.gen_range(
+                    lane.traffic_min_speed
+                        ..=lane.traffic_max_speed.max(lane.traffic_min_speed + 1.0),
+                );
+                self.ai_cars.push(AiCar {
+                    pos_m: pos,
+                    speed_kmh: cruise,
+                    cruise_kmh: cruise,
+                    lane_idx,
+                    direction,
+                    height_rows: pick_car_height(lane.traffic_cars, &mut rng),
+                });
+                placed += 1;
             }
         }
-        self.spawn_cooldown_ticks = rng.gen_range(0..60);
     }
 
     fn spawn_clear(&self, pos: f32, lane_idx: usize, dir: TrafficDir) -> bool {
@@ -719,6 +722,11 @@ impl State {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+fn density_to_count(density: f32) -> usize {
+    let d = density.clamp(0.0, 1.0);
+    (d * Config::SPAWN_AHEAD_M / Config::AI_MIN_SEPARATION_M).round() as usize
+}
 
 fn pick_car_height(cars: &[super::track::Car], rng: &mut impl Rng) -> u8 {
     if cars.is_empty() { return 3; }
