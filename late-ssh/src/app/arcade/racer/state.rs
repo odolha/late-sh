@@ -58,7 +58,7 @@ impl Config {
     pub const SCORE_DECAY_PER_S: f32 = 800.0;
 
     pub const MIN_TERMINAL_WIDTH_FLOOR: u16 = 70;
-    pub const MIN_TERMINAL_HEIGHT: u16 = Self::VISIBLE_ROWS + 5;
+    pub const MIN_TERMINAL_HEIGHT: u16 = Self::VISIBLE_ROWS + 3;
 }
 
 // ─── Top-level state machine ─────────────────────────────────────────────────

@@ -221,9 +221,11 @@ fn draw_race(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: bool
     if content_area.height < Config::MIN_TERMINAL_HEIGHT || content_area.width < min_w {
         frame.render_widget(
             Paragraph::new(format!(
-                "Terminal too small — need at least {}×{}",
+                "Terminal too small — need at least {}×{} (currently: {}x{})",
                 min_w,
                 Config::MIN_TERMINAL_HEIGHT,
+                content_area.width,
+                content_area.height,
             ))
             .alignment(Alignment::Center)
             .style(Style::default().fg(app_theme::ERROR())),
