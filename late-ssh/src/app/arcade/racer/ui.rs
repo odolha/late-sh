@@ -263,6 +263,7 @@ fn draw_race(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: bool
     draw_minimap(frame, mini_area, state, stage);
     draw_grass(frame, road_area, grass_left_x, grass_right_x_end, state, stage, state.scenery_seed);
     draw_road(frame, road_area, state, track, stage, &geom);
+    draw_lane_speed_labels(frame, road_area, stage, &geom);
     draw_stats(frame, stats_area, state, track, stage);
 
     match &state.phase {
@@ -871,6 +872,26 @@ fn speed_color(kmh: f32) -> Color {
     else if kmh >= 100.0 { Color::Yellow }
     else if kmh >= 50.0  { app_theme::SUCCESS() }
     else                 { app_theme::TEXT_DIM() }
+}
+
+fn draw_lane_speed_labels(frame: &mut Frame, area: Rect, stage: &Stage, geom: &StageGeom) {
+    let screen_y = area.y + area.height.saturating_sub(1);
+    if screen_y < area.y { return; }
+    let buf = frame.buffer_mut();
+    for lane_idx in 0..geom.total_lanes {
+        let Some(lane) = stage.road.lanes.get(lane_idx) else { continue };
+        let speed = lane.own_max_speed as u16;
+        let label = format!("{:>3}", speed);
+        let lane_x = geom.lane_starts[lane_idx];
+        for (i, ch) in label.chars().enumerate() {
+            if let Some(cell) = buf.cell_mut((lane_x + 1 + i as u16, screen_y)) {
+                let mut tmp = [0u8; 4];
+                cell.set_symbol(ch.encode_utf8(&mut tmp))
+                    .set_fg(Color::Rgb(160, 160, 100))
+                    .set_bg(Color::Rgb(0, 0, 0));
+            }
+        }
+    }
 }
 
 fn draw_finish_overlay(
