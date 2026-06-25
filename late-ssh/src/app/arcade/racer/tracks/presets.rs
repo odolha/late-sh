@@ -81,7 +81,7 @@ pub const FOREST_LANE: Lane = Lane {
 // ─── Dividers ────────────────────────────────────────────────────────────────
 
 pub const URBAN_DIVIDERS: Divider = Divider {
-    primary: theme::DIV_YELLOW_DOUBLE,
+    primary: theme::DIV_YELLOW_SINGLE,
     lane: theme::DIV_WHITE_DASH,
 };
 pub const HIGHWAY_DIVIDERS: Divider = Divider {

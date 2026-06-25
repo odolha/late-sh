@@ -37,6 +37,12 @@ impl Config {
     /// Safe gap in front of the player used only during initial fill,
     /// so the road immediately ahead is clear on race start.
     pub const INITIAL_SKIP_M: f32 = Self::AI_MIN_SEPARATION_M * 2.5;
+    /// How far before the first stage separator the player spawns, so the
+    /// separator scrolls in from the top edge at race start.
+    pub const PRE_STAGE_M: f32 = Self::VISIBLE_AHEAD_M + Self::METERS_PER_ROW * 2.0;
+    /// Clear zone around every stage boundary: no obstacles placed within this
+    /// many metres of a separator in either direction.
+    pub const STAGE_CLEAR_M: f32 = 12.0;
 
     pub const PLAYER_START_SPEED_KMH: f32 = 50.0;
     pub const ACCEL_KMH_PER_S: f32 = 88.0;
@@ -191,8 +197,8 @@ impl State {
     pub fn start_track(&mut self, track: &'static Track) {
         self.active_track = Some(track);
         self.current_stage_idx = 0;
-        self.stage_traveled_m = 0.0;
-        self.player_pos_m = 0.0;
+        self.stage_traveled_m = -Config::PRE_STAGE_M;
+        self.player_pos_m = -Config::PRE_STAGE_M;
         self.player_speed_kmh = Config::PLAYER_START_SPEED_KMH;
         self.player_lane_idx = track.stages[0].road.lanes.player_start_idx();
         self.player_lane_display = self.player_lane_idx as f32;
@@ -200,7 +206,7 @@ impl State {
         self.input_last_set = None;
         self.ai_cars.clear();
         self.obstacles.clear();
-        self.obstacle_seed_m = 0.0;
+        self.obstacle_seed_m = -Config::PRE_STAGE_M;
         self.scenery_seed = random();
         self.elapsed_s = 0.0;
         self.score = self.initial_score_for(track);
@@ -263,11 +269,11 @@ impl State {
     }
 
     pub fn displayed_km_total(&self) -> f32 {
-        self.player_pos_m / self.distance_scale() / 1000.0
+        self.player_pos_m.max(0.0) / self.distance_scale() / 1000.0
     }
 
     pub fn displayed_km_stage(&self) -> f32 {
-        self.stage_traveled_m / self.distance_scale() / 1000.0
+        self.stage_traveled_m.max(0.0) / self.distance_scale() / 1000.0
     }
 
     pub fn track_total_km(&self) -> f32 {
@@ -448,17 +454,49 @@ impl State {
         let next_idx = self.current_stage_idx + 1;
         if next_idx >= track.stages.len() { return; }
 
+        let old_incoming = track.stages[self.current_stage_idx].road.lanes.incoming.len();
+
         self.current_stage_idx = next_idx;
         self.stage_traveled_m = overflow;
 
-        let new_total = track.stages[next_idx].road.lanes.total();
-        self.ai_cars.retain(|c| c.lane_idx < new_total);
+        let new_incoming = track.stages[next_idx].road.lanes.incoming.len();
+        let new_outgoing = track.stages[next_idx].road.lanes.outgoing.len();
+        let new_total = new_incoming + new_outgoing;
 
-        let new_outgoing_start = track.stages[next_idx].road.lanes.incoming.len();
+        // Remap each AI car's lane_idx to the new stage's layout, preserving
+        // direction (incoming stays incoming, outgoing stays outgoing). Cars on
+        // a side that the new stage has no lanes for are dropped.
+        self.ai_cars.retain_mut(|car| {
+            if car.lane_idx < old_incoming {
+                if new_incoming == 0 { return false; }
+                car.lane_idx = car.lane_idx.min(new_incoming - 1);
+                car.direction = TrafficDir::Oncoming;
+            } else {
+                let outgoing_idx = car.lane_idx - old_incoming;
+                if new_outgoing == 0 { return false; }
+                car.lane_idx = new_incoming + outgoing_idx.min(new_outgoing - 1);
+                car.direction = TrafficDir::Same;
+            }
+            true
+        });
+
+        let new_outgoing_start = new_incoming;
         if self.player_lane_idx >= new_total {
             self.player_lane_idx = new_outgoing_start;
             self.player_lane_display = self.player_lane_idx as f32;
         }
+
+        // Drop any car overlapping the player's position after the remap.
+        // Use a meter-based clearance: player spans ~CAR_HEIGHT rows above
+        // player_pos_m; clear a generous window so no instant collision fires.
+        let player_lane = self.player_lane_idx;
+        let player_pos = self.player_pos_m;
+        let clear_half = Config::INITIAL_SKIP_M * 0.5;
+        self.ai_cars.retain(|car| {
+            car.lane_idx != player_lane
+                || (car.pos_m - player_pos).abs() > clear_half
+        });
+
         self.obstacles.clear();
         self.obstacle_seed_m = self.player_pos_m;
 
@@ -618,17 +656,14 @@ impl State {
         const SLOT_M: f32 = 30.0;
         while self.obstacle_seed_m < target_max_m {
             let slot = (self.obstacle_seed_m / SLOT_M) as i64 ^ self.scenery_seed as i64;
-            for (lane_idx, lane) in lanes
-                .incoming
-                .iter()
-                .chain(lanes.outgoing.iter())
-                .enumerate()
-            {
+            for lane_idx in 0..lanes.total() {
+                let lane = match lanes.get(lane_idx) { Some(l) => l, None => continue };
                 for ob in lane.obstacles {
                     let h = hash3(slot, lane_idx as i64, ob.style.id);
                     let p = (h % 10_000) as f32 / 10_000.0;
                     if p < ob.frequency {
                         let pos = self.obstacle_seed_m + (h as u64 % SLOT_M as u64) as f32;
+                        if self.is_near_stage_boundary(pos) { continue; }
                         self.obstacles.push(SpawnedObstacle {
                             style: ob.style,
                             effects: ob.effects,
@@ -709,7 +744,7 @@ impl State {
         let Some(track) = self.active_track else { return 0.0; };
         let total_m = track.total_distance_km() * 1000.0 * self.distance_scale();
         if total_m == 0.0 { return 0.0; }
-        (self.player_pos_m / total_m * 100.0).clamp(0.0, 100.0)
+        (self.player_pos_m.max(0.0) / total_m * 100.0).clamp(0.0, 100.0)
     }
 
     pub fn elapsed_formatted(&self) -> String {
@@ -718,6 +753,25 @@ impl State {
         let secs = total % 60;
         let tenth = ((self.elapsed_s - total as f32) * 10.0) as u32;
         format!("{}:{:02}.{}", mins, secs, tenth)
+    }
+
+    /// Absolute `player_pos_m` value at which stage `idx` begins.
+    /// Stage 0 always starts at 0 (the pre-stage zone is before that).
+    pub fn stage_start_pos_m(&self, idx: usize) -> f32 {
+        let Some(track) = self.active_track else { return 0.0; };
+        let scale = self.distance_scale();
+        track.stages[..idx].iter().map(|s| s.distance_km * 1000.0 * scale).sum()
+    }
+
+    fn is_near_stage_boundary(&self, pos: f32) -> bool {
+        let Some(track) = self.active_track else { return false; };
+        let scale = self.distance_scale();
+        let mut boundary = 0.0f32;
+        for stage in track.stages {
+            if (pos - boundary).abs() < Config::STAGE_CLEAR_M { return true; }
+            boundary += stage.distance_km * 1000.0 * scale;
+        }
+        (pos - boundary).abs() < Config::STAGE_CLEAR_M
     }
 }
 

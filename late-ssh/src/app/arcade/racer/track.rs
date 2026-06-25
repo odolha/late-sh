@@ -208,8 +208,10 @@ pub struct Divider {
 
 /// Lane configuration for both traffic directions.
 ///
-/// `incoming` lists oncoming-traffic lanes indexed from the center divider
-/// outward.  `outgoing` lists same-direction lanes from center outward.
+/// Both slices are ordered **inward → outward** (index 0 = closest to the
+/// center divider, last = outermost/shoulder lane).  A symmetric definition
+/// produces a symmetric road: `incoming: &[FAST, SLOW]` mirrors
+/// `outgoing: &[FAST, SLOW]` with the fast lanes adjacent to the center.
 ///
 /// **Invariants:** at least one `outgoing` lane; at least 2 lanes total.
 #[derive(Debug, Clone, Copy)]
@@ -339,12 +341,20 @@ impl Lanes {
         self.incoming.len() + self.outgoing.len()
     }
 
-    /// Look up a lane by flat index (0-based, incoming first).
+    /// Look up a lane by flat index.
+    ///
+    /// Flat layout (left→right on screen):
+    /// `incoming[last] … incoming[0] ║ outgoing[0] … outgoing[last]`
+    ///
+    /// Incoming lanes are indexed **inward-out** in the slice (index 0 = closest to
+    /// center divider) but rendered outermost-first, so the slice order is reversed
+    /// here. Outgoing lanes render left-to-right matching the slice order.
     pub fn get(&self, flat_idx: usize) -> Option<&Lane> {
-        if flat_idx < self.incoming.len() {
-            Some(&self.incoming[flat_idx])
+        let in_n = self.incoming.len();
+        if flat_idx < in_n {
+            Some(&self.incoming[in_n - 1 - flat_idx])
         } else {
-            self.outgoing.get(flat_idx - self.incoming.len())
+            self.outgoing.get(flat_idx - in_n)
         }
     }
 

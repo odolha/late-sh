@@ -10,15 +10,16 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
+use unicode_width::UnicodeWidthChar;
 
 use super::state::{Config, Phase, RacerScreen, State, TrafficDir, hash3};
 use super::theme;
 use super::track::{Lane, Lanes, Stage, Track};
 use super::tracks::ALL_TRACKS;
 use crate::app::arcade::ui::{
-    GameBottomBar, draw_game_frame, draw_game_overlay, keys_line, status_line,
+    GameBottomBar, centered_rect, draw_game_frame, draw_game_overlay, keys_line, status_line,
 };
 use crate::app::common::theme as app_theme;
 
@@ -261,7 +262,7 @@ fn draw_race(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: bool
 
     draw_minimap(frame, mini_area, state, stage);
     draw_grass(frame, road_area, grass_left_x, grass_right_x_end, state, stage, state.scenery_seed);
-    draw_road(frame, road_area, state, stage, &geom);
+    draw_road(frame, road_area, state, track, stage, &geom);
     draw_stats(frame, stats_area, state, track, stage);
 
     match &state.phase {
@@ -271,13 +272,9 @@ fn draw_race(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: bool
         Phase::Finished { elapsed_s, score } => {
             let mins = (*elapsed_s as u32) / 60;
             let secs = (*elapsed_s as u32) % 60;
-            draw_game_overlay(
-                frame,
-                road_area,
-                "FINISHED!",
-                &format!("{}:{:02}  score {}", mins, secs, format_score(*score)),
-                app_theme::SUCCESS(),
-            );
+            let time_str = format!("{}:{:02}", mins, secs);
+            let score_str = format!("Score  {}", format_score(*score));
+            draw_finish_overlay(frame, road_area, &time_str, &score_str, app_theme::SUCCESS());
         }
         Phase::Playing if state.is_paused => {
             draw_game_overlay(frame, road_area, "PAUSED", "Press p to resume", app_theme::AMBER());
@@ -553,10 +550,15 @@ fn player_body_x_start(geom: &StageGeom, lane_f: f32) -> u16 {
 
 fn is_car_col(col: u16) -> bool { col >= 1 && col <= 3 }
 
+const SEP_LINE_FG: Color = Color::Rgb(160, 160, 160);
+const SEP_LABEL_FG: Color = Color::Rgb(240, 220, 140);
+const SEP_BG: Color = Color::Rgb(10, 10, 10);
+
 fn draw_road(
     frame: &mut Frame,
     area: Rect,
     state: &State,
+    track: &Track,
     stage: &Stage,
     geom: &StageGeom,
 ) {
@@ -564,6 +566,17 @@ fn draw_road(
     let lanes = stage.road.lanes;
     let theme_id = stage.theme;
     let player_track_row = (state.player_pos_m / Config::METERS_PER_ROW) as i32;
+
+    // Pre-compute which screen rows contain a stage separator and which stage
+    // starts there. Stage 0 separator is at track pos 0 (pre-stage is before that).
+    let scale = state.distance_scale();
+    let mut sep_at: Vec<(i32, usize)> = Vec::with_capacity(track.stages.len());
+    let mut sep_pos_m = 0.0f32;
+    for (idx, stg) in track.stages.iter().enumerate() {
+        let sep_row = state.track_to_screen_row(sep_pos_m);
+        sep_at.push((sep_row, idx));
+        sep_pos_m += stg.distance_km * 1000.0 * scale;
+    }
 
     for r in 0..Config::VISIBLE_ROWS {
         let screen_y = area.y + r;
@@ -647,6 +660,49 @@ fn draw_road(
         let right_border_x = area.x + geom.road_width - 1;
         if let Some(cell) = buf.cell_mut((right_border_x, screen_y)) {
             cell.set_symbol("│").set_fg(BORDER_FG).set_bg(Color::Rgb(0, 0, 0));
+        }
+
+        // Stage separator: overwrite this row with a horizontal rule + stage label.
+        if let Some(&(_, sep_stage_idx)) = sep_at.iter().find(|&&(row, _)| row == ri) {
+            let sep_stage = &track.stages[sep_stage_idx];
+            let label: String = format!(" {} {} ", sep_stage.icon, sep_stage.name);
+            let label_w: usize = label.chars().map(|c| UnicodeWidthChar::width(c).unwrap_or(1)).sum();
+            let inner_w = (geom.road_width as usize).saturating_sub(2);
+            let pad_left = inner_w.saturating_sub(label_w) / 2;
+            let mut x_inner = 0usize;
+            let mut label_chars = label.chars();
+            let mut in_label_idx = 0usize;
+            while x_inner < inner_w {
+                let screen_x = area.x + 1 + x_inner as u16;
+                let in_label = x_inner >= pad_left && in_label_idx < label_w;
+                if in_label {
+                    if let Some(ch) = label_chars.next() {
+                        let w = UnicodeWidthChar::width(ch).unwrap_or(1);
+                        let mut tmp = [0u8; 4];
+                        let sym = ch.encode_utf8(&mut tmp);
+                        if let Some(cell) = buf.cell_mut((screen_x, screen_y)) {
+                            cell.set_symbol(sym).set_fg(SEP_LABEL_FG).set_bg(SEP_BG);
+                        }
+                        if w == 2 {
+                            if let Some(cell) = buf.cell_mut((screen_x + 1, screen_y)) {
+                                cell.set_symbol(" ").set_fg(SEP_LABEL_FG).set_bg(SEP_BG);
+                            }
+                        }
+                        in_label_idx += w;
+                        x_inner += w;
+                    } else {
+                        if let Some(cell) = buf.cell_mut((screen_x, screen_y)) {
+                            cell.set_symbol("─").set_fg(SEP_LINE_FG).set_bg(SEP_BG);
+                        }
+                        x_inner += 1;
+                    }
+                } else {
+                    if let Some(cell) = buf.cell_mut((screen_x, screen_y)) {
+                        cell.set_symbol("─").set_fg(SEP_LINE_FG).set_bg(SEP_BG);
+                    }
+                    x_inner += 1;
+                }
+            }
         }
 
         let p_top = Config::PLAYER_TOP_ROW as i32;
@@ -815,6 +871,41 @@ fn speed_color(kmh: f32) -> Color {
     else if kmh >= 100.0 { Color::Yellow }
     else if kmh >= 50.0  { app_theme::SUCCESS() }
     else                 { app_theme::TEXT_DIM() }
+}
+
+fn draw_finish_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    time_str: &str,
+    score_str: &str,
+    color: Color,
+) {
+    let overlay_area = centered_rect(area, 36.min(area.width), 5.min(area.height));
+    let overlay = Paragraph::new(vec![
+        Line::from(Span::styled(
+            " FINISHED! ",
+            Style::default()
+                .bg(color)
+                .fg(ratatui::style::Color::Reset)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            time_str.to_string(),
+            Style::default().fg(app_theme::TEXT_DIM()),
+        )),
+        Line::from(Span::styled(
+            score_str.to_string(),
+            Style::default().fg(app_theme::TEXT_DIM()),
+        )),
+    ])
+    .alignment(Alignment::Center)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(color)),
+    );
+    frame.render_widget(Clear, overlay_area);
+    frame.render_widget(overlay, overlay_area);
 }
 
 fn format_score(s: i64) -> String {
