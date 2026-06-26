@@ -107,6 +107,13 @@ pub const CITY_OBJECTS: &[Object] = &[
     Object { style: theme::OBJ_BUSH,                 incidence: 0.10 },
 ];
 
+pub const TOWN_OBJECTS: &[Object] = &[
+    Object { style: theme::OBJ_BUILDING_HOUSE,       incidence: 0.35 },
+    Object { style: theme::OBJ_TREE_OAK,             incidence: 0.20 },
+    Object { style: theme::OBJ_GRASS,                incidence: 0.20 },
+    Object { style: theme::OBJ_BUSH,                 incidence: 0.10 },
+];
+
 pub const HIGHWAY_OBJECTS: &[Object] = &[
     Object { style: theme::OBJ_TREE_PINE,  incidence: 0.50 },
     Object { style: theme::OBJ_TREE_OAK,  incidence: 0.25 },
@@ -119,6 +126,13 @@ pub const RURAL_OBJECTS: &[Object] = &[
     Object { style: theme::OBJ_BUSH,     incidence: 0.25 },
     Object { style: theme::OBJ_GRASS,    incidence: 0.20 },
     Object { style: theme::OBJ_FLOWER,   incidence: 0.10 },
+];
+
+pub const VILLAGE_OBJECTS: &[Object] = &[
+    Object { style: theme::OBJ_BUSH,     incidence: 0.25 },
+    Object { style: theme::OBJ_GRASS,    incidence: 0.20 },
+    Object { style: theme::OBJ_FLOWER,   incidence: 0.10 },
+    Object { style: theme::OBJ_BUILDING_HOUSE,   incidence: 0.20 },
 ];
 
 pub const FOREST_OBJECTS: &[Object] = &[
@@ -139,6 +153,11 @@ pub const CITY_SCENERY: Scenery = Scenery {
     background: theme::SCENERY_CONCRETE,
     objects: CITY_OBJECTS,
 };
+pub const TOWN_SCENERY: Scenery = Scenery {
+    width: 14,
+    background: theme::SCENERY_CONCRETE,
+    objects: TOWN_OBJECTS,
+};
 pub const HIGHWAY_SCENERY: Scenery = Scenery {
     width: 12,
     background: theme::SCENERY_GRASS,
@@ -148,6 +167,11 @@ pub const RURAL_SCENERY: Scenery = Scenery {
     width: 10,
     background: theme::SCENERY_GRASS,
     objects: RURAL_OBJECTS,
+};
+pub const VILLAGE_SCENERY: Scenery = Scenery {
+    width: 12,
+    background: theme::SCENERY_GRASS,
+    objects: VILLAGE_OBJECTS,
 };
 pub const FOREST_SCENERY: Scenery = Scenery {
     width: 14,
