@@ -1,10 +1,10 @@
-use crate::app::arcade::racer::theme;
 use super::presets::*;
+use crate::app::arcade::racer::theme;
 use crate::app::arcade::racer::track::{Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulder, Shoulders, Stage, Theme, Track};
 
 // PRESETS
 
-const MY_CITY_LANE: Lane = Lane {
+const B_CITY_LANE: Lane = Lane {
     own_max_speed: 120.0,
     obstacles: &[
         Obstacle {
@@ -16,18 +16,18 @@ const MY_CITY_LANE: Lane = Lane {
     ..CITY_LANE
 };
 
-const MY_CITY_LANE_OUT: Lane = Lane {
+const B_CITY_LANE_OUT: Lane = Lane {
     traffic_density: 0.4,
-    ..MY_CITY_LANE
+    ..B_CITY_LANE
 };
 
-const MY_CITY_LANE_IN: Lane = Lane {
+const B_CITY_LANE_IN: Lane = Lane {
     own_max_speed: 150.0,
     traffic_density: 0.2,
-    ..MY_CITY_LANE
+    ..B_CITY_LANE
 };
 
-const MY_TOWN_LANE: Lane = Lane {
+const B_TOWN_LANE: Lane = Lane {
     own_max_speed: 100.0,
     traffic_max_speed: 80.0,
     obstacles: &[
@@ -50,18 +50,18 @@ const MY_TOWN_LANE: Lane = Lane {
     ..CITY_LANE
 };
 
-const MY_TOWN_LANE_OUT: Lane = Lane {
+const B_TOWN_LANE_OUT: Lane = Lane {
     traffic_density: 0.6,
-    ..MY_TOWN_LANE
+    ..B_TOWN_LANE
 };
 
-const MY_TOWN_LANE_IN: Lane = Lane {
+const B_TOWN_LANE_IN: Lane = Lane {
     own_max_speed: 140.0,
     traffic_density: 0.4,
-    ..MY_TOWN_LANE
+    ..B_TOWN_LANE
 };
 
-const OUTSKIRT_LANE: Lane = Lane {
+const B_OUTSKIRT_LANE: Lane = Lane {
     own_max_speed: 100.0,
     obstacles: &[
         Obstacle {
@@ -78,18 +78,18 @@ const OUTSKIRT_LANE: Lane = Lane {
     ..CITY_LANE
 };
 
-const OUTSKIRT_LANE_OUT: Lane = Lane {
+const B_OUTSKIRT_LANE_OUT: Lane = Lane {
     traffic_density: 0.3,
-    ..OUTSKIRT_LANE
+    ..B_OUTSKIRT_LANE
 };
 
-const OUTSKIRT_LANE_IN: Lane = Lane {
+const B_OUTSKIRT_LANE_IN: Lane = Lane {
     own_max_speed: 120.0,
     traffic_density: 0.15,
-    ..OUTSKIRT_LANE
+    ..B_OUTSKIRT_LANE
 };
 
-const OUTSIDE_LANE: Lane = Lane {
+const B_OUTSIDE_LANE: Lane = Lane {
     own_max_speed: 150.0,
     obstacles: &[
         Obstacle {
@@ -106,32 +106,121 @@ const OUTSIDE_LANE: Lane = Lane {
     ..CITY_LANE
 };
 
-const OUTSIDE_LANE_OUT: Lane = Lane {
+const B_OUTSIDE_LANE_OUT: Lane = Lane {
     traffic_density: 0.35,
-    ..OUTSIDE_LANE
+    ..B_OUTSIDE_LANE
 };
 
-const OUTSIDE_LANE_OUT_SLOW: Lane = Lane {
+const B_OUTSIDE_LANE_OUT_SLOW: Lane = Lane {
     traffic_density: 0.15,
     own_max_speed: 100.0,
     traffic_max_speed: 60.0,
     style: theme::LANE_ASPHALT_PATCHY,
-    ..OUTSIDE_LANE
+    ..B_OUTSIDE_LANE
 };
 
-const OUTSIDE_LANE_IN: Lane = Lane {
+const B_OUTSIDE_LANE_IN: Lane = Lane {
     own_max_speed: 200.0,
     traffic_max_speed: 110.0,
     traffic_density: 0.15,
-    ..OUTSIDE_LANE
+    ..B_OUTSIDE_LANE
 };
 
-const OUTSIDE_LANE_IN_SLOW: Lane = Lane {
+const B_OUTSIDE_LANE_IN_SLOW: Lane = Lane {
     own_max_speed: 140.0,
     traffic_max_speed: 100.0,
     traffic_density: 0.15,
     style: theme::LANE_ASPHALT_PATCHY,
-    ..OUTSIDE_LANE
+    ..B_OUTSIDE_LANE
+};
+
+const B_RURAL_LANE: Lane = Lane {
+    style: theme::LANE_GRAVEL,
+    own_min_speed: 20.0,
+    own_max_speed: 100.0,
+    passive_decel: 0.0,
+    traffic_min_speed: 30.0,
+    traffic_max_speed: 60.0,
+    traffic_density: 0.1,
+    traffic_cars: RURAL_CAR_MIX,
+    obstacles: &[
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_CRATER,
+            frequency: 0.01,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.9 }],
+        },
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_BIG,
+            frequency: 0.05,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.6 }],
+        },
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_SMALL,
+            frequency: 0.1,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
+        }
+    ],
+};
+
+const B_RURAL_LANE_OUT: Lane = Lane {
+    traffic_density: 0.2,
+    ..B_RURAL_LANE
+};
+
+const B_RURAL_LANE_OUT_SLOW: Lane = Lane {
+    style: theme::LANE_DIRT,
+    traffic_min_speed: 20.0,
+    traffic_max_speed: 50.0,
+    obstacles: &[
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_CRATER,
+            frequency: 0.02,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.9 }],
+        },
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_BIG,
+            frequency: 0.1,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.6 }],
+        },
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_SMALL,
+            frequency: 0.3,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
+        }
+    ],
+    ..B_RURAL_LANE_OUT
+};
+
+const B_RURAL_LANE_IN: Lane = Lane {
+    own_max_speed: 120.0,
+    traffic_max_speed: 50.0,
+    traffic_density: 0.1,
+    ..B_RURAL_LANE
+};
+
+const B_RURAL_LANE_IN_SLOW: Lane = Lane {
+    style: theme::LANE_DIRT,
+    own_max_speed: 80.0,
+    traffic_min_speed: 15.0,
+    traffic_max_speed: 40.0,
+    obstacles: &[
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_CRATER,
+            frequency: 0.02,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.9 }],
+        },
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_BIG,
+            frequency: 0.1,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.6 }],
+        },
+        Obstacle {
+            style: theme::OBSTACLE_POTHOLE_SMALL,
+            frequency: 0.3,
+            effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
+        }
+    ],
+    ..B_RURAL_LANE_IN
 };
 
 // STAGES
@@ -145,8 +234,8 @@ const S01_CLUJ: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: URBAN_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[MY_CITY_LANE_OUT, MY_CITY_LANE_OUT],
-            incoming: &[MY_CITY_LANE_IN, MY_CITY_LANE_IN],
+            outgoing: &[B_CITY_LANE_OUT, B_CITY_LANE_OUT],
+            incoming: &[B_CITY_LANE_IN, B_CITY_LANE_IN],
         },
         sceneries: Sceneries {
             left: CITY_SCENERY,
@@ -176,8 +265,8 @@ const S02_SANNICOARA: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: URBAN_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSKIRT_LANE_OUT],
-            incoming: &[OUTSKIRT_LANE_IN, OUTSKIRT_LANE_IN],
+            outgoing: &[B_OUTSKIRT_LANE_OUT],
+            incoming: &[B_OUTSKIRT_LANE_IN, B_OUTSKIRT_LANE_IN],
         },
         sceneries: Sceneries { left: CITY_SCENERY, right: HIGHWAY_SCENERY },
         shoulders: Shoulders {
@@ -205,8 +294,8 @@ const S03_APAHIDA: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: URBAN_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSKIRT_LANE_OUT],
-            incoming: &[OUTSKIRT_LANE_IN],
+            outgoing: &[B_OUTSKIRT_LANE_OUT],
+            incoming: &[B_OUTSKIRT_LANE_IN],
         },
         sceneries: Sceneries { left: CITY_SCENERY, right: HIGHWAY_SCENERY },
         shoulders: Shoulders {
@@ -236,8 +325,8 @@ const S04_JUCU: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT, OUTSIDE_LANE_OUT, OUTSIDE_LANE_OUT_SLOW],
-            incoming: &[OUTSIDE_LANE_IN, OUTSIDE_LANE_IN],
+            outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
+            incoming: &[B_OUTSIDE_LANE_IN, B_OUTSIDE_LANE_IN],
         },
         sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
         shoulders: Shoulders {
@@ -264,8 +353,8 @@ const S05_E576_1: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT, OUTSIDE_LANE_OUT_SLOW],
-            incoming: &[OUTSIDE_LANE_IN, OUTSIDE_LANE_IN_SLOW],
+            outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
+            incoming: &[B_OUTSIDE_LANE_IN, B_OUTSIDE_LANE_IN_SLOW],
         },
         sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
         shoulders: Shoulders {
@@ -292,8 +381,8 @@ const S06_RASCRUCI: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: RURAL_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT],
-            incoming: &[OUTSIDE_LANE_IN],
+            outgoing: &[B_OUTSIDE_LANE_OUT],
+            incoming: &[B_OUTSIDE_LANE_IN],
         },
         sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
         shoulders: Shoulders {
@@ -322,8 +411,8 @@ const S07_BONTIDA: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: RURAL_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT],
-            incoming: &[OUTSIDE_LANE_IN],
+            outgoing: &[B_OUTSIDE_LANE_OUT],
+            incoming: &[B_OUTSIDE_LANE_IN],
         },
         sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
         shoulders: Shoulders {
@@ -351,8 +440,8 @@ const S08_FUNDATURA: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: RURAL_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT],
-            incoming: &[OUTSIDE_LANE_IN],
+            outgoing: &[B_OUTSIDE_LANE_OUT],
+            incoming: &[B_OUTSIDE_LANE_IN],
         },
         sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
         shoulders: Shoulders {
@@ -381,8 +470,8 @@ const S09_ICLOD: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: RURAL_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT, OUTSIDE_LANE_OUT_SLOW],
-            incoming: &[OUTSIDE_LANE_IN],
+            outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
+            incoming: &[B_OUTSIDE_LANE_IN],
         },
         sceneries: Sceneries { left: VILLAGE_SCENERY, right: VILLAGE_SCENERY },
         shoulders: Shoulders {
@@ -411,8 +500,8 @@ const S10_LIVADA: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: RURAL_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT, OUTSIDE_LANE_OUT_SLOW],
-            incoming: &[OUTSIDE_LANE_IN],
+            outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
+            incoming: &[B_OUTSIDE_LANE_IN],
         },
         sceneries: Sceneries { left: RURAL_SCENERY, right: VILLAGE_SCENERY },
         shoulders: Shoulders {
@@ -442,8 +531,8 @@ const S11_BAITA: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: RURAL_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[OUTSIDE_LANE_OUT],
-            incoming: &[OUTSIDE_LANE_IN],
+            outgoing: &[B_OUTSIDE_LANE_OUT],
+            incoming: &[B_OUTSIDE_LANE_IN],
         },
         sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
         shoulders: Shoulders {
@@ -474,8 +563,8 @@ const S12_GHERLA: Stage = Stage {
     road: Road {
         aspect: RoadAspect { dividers: URBAN_DIVIDERS },
         lanes: Lanes {
-            outgoing: &[MY_TOWN_LANE_OUT, MY_TOWN_LANE_OUT],
-            incoming: &[MY_TOWN_LANE_IN, MY_TOWN_LANE_IN],
+            outgoing: &[B_TOWN_LANE_OUT, B_TOWN_LANE_OUT],
+            incoming: &[B_TOWN_LANE_IN, B_TOWN_LANE_IN],
         },
         sceneries: Sceneries { left: TOWN_SCENERY, right: TOWN_SCENERY },
         shoulders: Shoulders {
@@ -489,6 +578,239 @@ const S12_GHERLA: Stage = Stage {
                 Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
                 Shoulder { style: theme::SHOULDER_SIDEWALK, repeat: 0 },
                 Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ]
+        },
+    },
+};
+
+const S13_E576_2: Stage = Stage {
+    name: "E576/2",
+    description: "Road in the middle of nowhere. Getting close to a larger town, then it's all countryside.",
+    icon: theme::STAGE_WILD_PLAINS,
+    theme: Theme::Standard,
+    distance_km: 8.0,
+    road: Road {
+        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_OUTSIDE_LANE_OUT],
+            incoming: &[B_OUTSIDE_LANE_IN],
+        },
+        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ],
+            right: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_TREE_OAK, repeat: 3 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ]
+        },
+    },
+};
+
+const S14_DEJ: Stage = Stage {
+    name: "Dej",
+    description: "Quickly touching this larger town before heading deep into countryside. Crossing the railroad here.s",
+    icon: theme::STAGE_CITY_OUTSKIRTS,
+    theme: Theme::Standard,
+    distance_km: 3.0,
+    road: Road {
+        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_OUTSKIRT_LANE_OUT, B_OUTSKIRT_LANE_OUT],
+            incoming: &[B_OUTSKIRT_LANE_IN, B_OUTSKIRT_LANE_IN],
+        },
+        sceneries: Sceneries { left: TOWN_SCENERY, right: RURAL_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_TREE_OAK, repeat: 3 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ],
+            right: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_TREE_OAK, repeat: 3 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ]
+        },
+    },
+};
+
+const S15_MANASTIREA: Stage = Stage {
+    name: "Manastirea",
+    description: "Wild countryside begins.",
+    icon: theme::STAGE_WILD_PLAINS,
+    theme: Theme::Standard,
+    distance_km: 2.0,
+    road: Road {
+        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_OUTSIDE_LANE_OUT],
+            incoming: &[B_OUTSIDE_LANE_IN],
+        },
+        sceneries: Sceneries { left: RURAL_SCENERY, right: FOREST_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_RIVER,  repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ],
+            right: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ]
+        },
+    },
+};
+
+const S16_DJ161D_1: Stage = Stage {
+    name: "DJ161D/1",
+    description: "Wild countryside continues. Next village in 7km",
+    icon: theme::STAGE_WILD_HILLS,
+    theme: Theme::Standard,
+    distance_km: 7.0,
+    road: Road {
+        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_OUTSIDE_LANE_OUT_SLOW],
+            incoming: &[B_OUTSIDE_LANE_IN_SLOW],
+        },
+        sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ],
+            right: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ]
+        },
+    },
+};
+
+const S17_NIRES: Stage = Stage {
+    name: "Nires",
+    description: "A large-ish village close to our destination.",
+    icon: theme::STAGE_VILLAGE,
+    theme: Theme::Standard,
+    distance_km: 2.0,
+    road: Road {
+        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_RURAL_LANE_OUT],
+            incoming: &[B_RURAL_LANE_IN],
+        },
+        sceneries: Sceneries { left: FOREST_SCENERY, right: VILLAGE_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ],
+            right: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ]
+        },
+    },
+};
+
+const S18_DJ161D_2: Stage = Stage {
+    name: "DJ161D/2",
+    description: "Really getting rugged now. Next village is a long boring one, in 5km.",
+    icon: theme::STAGE_WILD_HILLS,
+    theme: Theme::Standard,
+    distance_km: 5.0,
+    road: Road {
+        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_OUTSIDE_LANE_OUT_SLOW],
+            incoming: &[B_OUTSIDE_LANE_IN_SLOW],
+        },
+        sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+            ],
+            right: &[
+            ]
+        },
+    },
+};
+
+
+const S19_UNGURAS: Stage = Stage {
+    name: "Unguras",
+    description: "A long village. Last one before we get there.",
+    icon: theme::STAGE_VILLAGE,
+    theme: Theme::Standard,
+    distance_km: 4.0,
+    road: Road {
+        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_RURAL_LANE_OUT],
+            incoming: &[B_RURAL_LANE_IN],
+        },
+        sceneries: Sceneries { left: VILLAGE_SCENERY, right: VILLAGE_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ],
+            right: &[
+                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
+                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+            ]
+        },
+    },
+};
+
+const S20_DJ161D_3: Stage = Stage {
+    name: "DJ161D/3",
+    description: "Final stretch before destination. I usually was very carsick by this point :D.",
+    icon: theme::STAGE_WILD_HILLS,
+    theme: Theme::Standard,
+    distance_km: 3.0,
+    road: Road {
+        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_RURAL_LANE_OUT_SLOW],
+            incoming: &[B_RURAL_LANE_IN_SLOW],
+        },
+        sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+            ],
+            right: &[
+            ]
+        },
+    },
+};
+
+const S21_BATIN: Stage = Stage {
+    name: "Batin",
+    description: "We're here. Can't wait to play with the cat.",
+    icon: theme::STAGE_SPECIAL,
+    theme: Theme::Standard,
+    distance_km: 2.0,
+    road: Road {
+        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        lanes: Lanes {
+            outgoing: &[B_RURAL_LANE_OUT_SLOW],
+            incoming: &[B_RURAL_LANE_IN_SLOW],
+        },
+        sceneries: Sceneries { left: FOREST_SCENERY, right: VILLAGE_SCENERY },
+        shoulders: Shoulders {
+            left: &[
+            ],
+            right: &[
             ]
         },
     },
@@ -513,7 +835,16 @@ pub const TRACK: Track = Track {
         S10_LIVADA,
         S11_BAITA,
         S12_GHERLA,
+        S13_E576_2,
+        S14_DEJ,
+        S15_MANASTIREA,
+        S16_DJ161D_1,
+        S17_NIRES,
+        S18_DJ161D_2,
+        S19_UNGURAS,
+        S20_DJ161D_3,
+        S21_BATIN,
     ],
-    distance_scale: 0.2,
+    distance_scale: 0.5,
     speed_scale: 2.0,
 };
