@@ -107,10 +107,14 @@ RUN sed -i "s|^/\* #define VAR_PLAYGROUND .*|#define VAR_PLAYGROUND \"${NETHACK_
     && make PREFIX=${NETHACK_PREFIX} HACKDIR=${NETHACK_HACKDIR} VARDIR=${NETHACK_VAR_PLAYGROUND} GAMEUID=root GAMEGRP=games install \
     # Raise the concurrent-game cap. sysconf ships MAXPLAYERS=10; each value is
     # one live getlock slot, and once every slot is taken the whole door wedges
-    # ("Too many hacks running now"), so size it to the host pod's memory budget
-    # (~10-20MB/game in 1Gi) rather than the stock default. Rewritten fail-closed.
-    && sed -i 's/^MAXPLAYERS=.*/MAXPLAYERS=50/' ${NETHACK_HACKDIR}/sysconf \
-    && grep -qx 'MAXPLAYERS=50' ${NETHACK_HACKDIR}/sysconf \
+    # ("Too many hacks running now"), so size it up from the stock default.
+    # NetHack hard-caps MAXPLAYERS at 25 (src/sys.c: values above it are rejected
+    # at startup with "Illegal value in MAXPLAYERS", which sysconf parsing does
+    # NOT fail closed on -- it just ignores the line), so 25 is the ceiling; it
+    # fits the host pod's 1Gi budget (~10-20MB/game) with room to spare. The grep
+    # only asserts the file was rewritten -- the 25 cap itself is upstream's.
+    && sed -i 's/^MAXPLAYERS=.*/MAXPLAYERS=25/' ${NETHACK_HACKDIR}/sysconf \
+    && grep -qx 'MAXPLAYERS=25' ${NETHACK_HACKDIR}/sysconf \
     # `make install` writes sysconf as 0600 root. HACKDIR is read-only at runtime
     # and the host runs as the unprivileged `late` user, which must READ sysconf at
     # startup -- otherwise nethack aborts with "Unable to open SYSCF_FILE." Make it
