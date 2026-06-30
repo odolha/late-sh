@@ -614,7 +614,7 @@ const S13_E576_2: Stage = Stage {
 
 const S14_DEJ: Stage = Stage {
     name: "Dej",
-    description: "Quickly touching this larger town before heading deep into countryside. Crossing the railroad here.s",
+    description: "Quickly touching this larger town before heading deep into countryside. Crossing the railroad here.",
     icon: theme::STAGE_CITY_OUTSKIRTS,
     theme: Theme::Standard,
     distance_km: 3.0,
@@ -736,12 +736,7 @@ const S18_DJ161D_2: Stage = Stage {
             incoming: &[B_OUTSIDE_LANE_IN_SLOW],
         },
         sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
-        shoulders: Shoulders {
-            left: &[
-            ],
-            right: &[
-            ]
-        },
+        shoulders: NO_SHOULDERS,
     },
 };
 
@@ -785,12 +780,7 @@ const S20_DJ161D_3: Stage = Stage {
             incoming: &[B_RURAL_LANE_IN_SLOW],
         },
         sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
-        shoulders: Shoulders {
-            left: &[
-            ],
-            right: &[
-            ]
-        },
+        shoulders: NO_SHOULDERS,
     },
 };
 
@@ -807,12 +797,7 @@ const S21_BATIN: Stage = Stage {
             incoming: &[B_RURAL_LANE_IN_SLOW],
         },
         sceneries: Sceneries { left: FOREST_SCENERY, right: VILLAGE_SCENERY },
-        shoulders: Shoulders {
-            left: &[
-            ],
-            right: &[
-            ]
-        },
+        shoulders: NO_SHOULDERS,
     },
 };
 
