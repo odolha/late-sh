@@ -25,10 +25,11 @@ use crate::{
     app::audio::{client_state::ClientAudioState, viz::Visualizer},
     app::files::inline_image::InlineImageSymbolMode,
     app::files::terminal_image::{
-        TerminalImageProtocol, TerminalImageRenderState, da1_probe, iterm2_capabilities_probe,
-        kitty_cleanup_commands, protocol_from_device_attributes, protocol_from_env_hint,
-        protocol_from_term, protocol_from_terminal_features, protocol_from_xtversion,
-        term_disables_terminal_images, terminal_image_cleanup_commands, terminal_string_terminator,
+        TerminalImageProtocol, TerminalImageRenderState, da1_probe, identity_is_kitty,
+        iterm2_capabilities_probe, kitty_cleanup_commands, protocol_from_device_attributes,
+        protocol_from_env_hint, protocol_from_term, protocol_from_terminal_features,
+        protocol_from_xtversion, term_disables_terminal_images, terminal_image_cleanup_commands,
+        terminal_string_terminator,
     },
     app::{
         chat,
@@ -220,6 +221,7 @@ pub struct SessionConfig {
     pub minesweeper_service: crate::app::arcade::minesweeper::svc::MinesweeperService,
     pub initial_minesweeper_games: Vec<late_core::models::minesweeper::Game>,
     pub lateania_service: crate::app::door::lateania::svc::LateaniaService,
+    pub greendragon_service: crate::app::door::greendragon::svc::GreenDragonService,
     pub rooms_service: crate::app::rooms::svc::RoomsService,
     pub room_game_registry: crate::app::rooms::registry::RoomGameRegistry,
     /// Shared in-proc dartboard server handle. Each session only connects — consuming a
@@ -253,6 +255,19 @@ pub struct SessionConfig {
     pub rebels_host: String,
     pub rebels_port: u16,
     pub rebels_secret: String,
+    /// NetHack door-game host (late-nethack) connection config (from the global Config).
+    pub nethack_enabled: bool,
+    pub nethack_host: String,
+    pub nethack_port: u16,
+    pub nethack_secret: String,
+    /// Chip/badge grant sink for NetHack milestones (Amulet, ascension). `None`
+    /// on headless/test paths, which disables milestone awards.
+    pub nethack_awards: Option<crate::app::door::nethack::award::NethackAwards>,
+    /// dopewars door game: reached over SSH like nethack (host `late-dopewars`).
+    pub dopewars_enabled: bool,
+    pub dopewars_host: String,
+    pub dopewars_port: u16,
+    pub dopewars_secret: String,
     pub session_token: String,
     pub session_registry: Option<SessionRegistry>,
     pub paired_client_registry: Option<PairedClientRegistry>,
@@ -264,6 +279,9 @@ pub struct SessionConfig {
             std::collections::HashMap<String, crate::app::audio::radio_meta::svc::ArtistTitle>,
         >,
     >,
+    /// Process-global World Cup service handle (clone), used to subscribe to
+    /// the snapshot and to mint a viewer guard while on the screen.
+    pub worldcup_service: Option<crate::app::worldcup::svc::WorldCupService>,
     pub active_users: Option<ActiveUsers>,
     pub afk_users: crate::state::AfkUsers,
     pub username_directory: Option<crate::usernames::UsernameDirectory>,
@@ -308,6 +326,9 @@ pub struct App {
     pub(crate) show_settings: bool,
     pub(crate) show_splash: bool,
     pub(crate) splash_ticks: usize,
+    /// Free-running frame counter (advances every world tick) used to animate
+    /// the bumped-room marquee in the room rail.
+    pub(crate) marquee_tick: usize,
     pub(crate) splash_hint: String,
     pub(crate) show_quit_confirm: bool,
     pub(crate) show_help: bool,
@@ -349,6 +370,16 @@ pub struct App {
             std::collections::HashMap<String, crate::app::audio::radio_meta::svc::ArtistTitle>,
         >,
     >,
+    /// Live World Cup snapshot feed (process-global service, demand-gated).
+    pub(super) worldcup_rx: Option<
+        tokio::sync::watch::Receiver<std::sync::Arc<crate::app::worldcup::model::WorldCupSnapshot>>,
+    >,
+    /// Handle used to mint the viewer guard while on the World Cup screen.
+    pub(super) worldcup_service: Option<crate::app::worldcup::svc::WorldCupService>,
+    /// Present only while this session is on the World Cup screen; dropping it
+    /// releases the poll gate.
+    pub(crate) worldcup_viewer: Option<crate::app::worldcup::svc::WorldCupViewer>,
+    pub(crate) worldcup: crate::app::worldcup::state::State,
     pub(super) active_users: Option<ActiveUsers>,
     pub(super) afk_users: crate::state::AfkUsers,
     pub(super) username_directory: Option<crate::usernames::UsernameDirectory>,
@@ -439,7 +470,11 @@ pub struct App {
     pub(crate) dashboard_game_toggle_target: Option<DashboardGameToggleTarget>,
     pub(crate) door_delete_confirm: bool,
     pub(crate) lateania_service: crate::app::door::lateania::svc::LateaniaService,
+    pub(crate) greendragon_service: crate::app::door::greendragon::svc::GreenDragonService,
+    /// Games hub (Screen::Games): the dedicated landing for the door games.
+    pub(crate) games_hub_state: crate::app::door::hub::state::State,
     pub(crate) lateania_state: Option<crate::app::door::lateania::state::State>,
+    pub(crate) greendragon_state: Option<crate::app::door::greendragon::state::State>,
     pub(crate) rebels_state: Option<crate::app::door::rebels::state::State>,
     /// Per-session TERM string (from the PTY request), used to size the rebels
     /// PTY.
@@ -449,6 +484,26 @@ pub struct App {
     pub(crate) rebels_host: String,
     pub(crate) rebels_port: u16,
     pub(crate) rebels_secret: String,
+    pub(crate) nethack_state: Option<crate::app::door::nethack::state::State>,
+    /// Per-session TERM string (from the PTY request), used to size the nethack
+    /// PTY.
+    pub(crate) nethack_term: String,
+    /// NetHack host (late-nethack) connection config (from the global Config).
+    pub(crate) nethack_enabled: bool,
+    pub(crate) nethack_host: String,
+    pub(crate) nethack_port: u16,
+    pub(crate) nethack_secret: String,
+    /// Chip/badge grant sink threaded into the per-session NetHack door state.
+    pub(crate) nethack_awards: Option<crate::app::door::nethack::award::NethackAwards>,
+    pub(crate) dopewars_state: Option<crate::app::door::dopewars::state::State>,
+    /// Per-session TERM string (from the PTY request), forwarded to the dopewars
+    /// host so curses gets a real terminfo entry.
+    pub(crate) dopewars_term: String,
+    /// dopewars door game: enable flag + host connection details (global Config).
+    pub(crate) dopewars_enabled: bool,
+    pub(crate) dopewars_host: String,
+    pub(crate) dopewars_port: u16,
+    pub(crate) dopewars_secret: String,
     /// Render-loop wakeup, set by the active transport. Threaded into the rebels
     /// proxy so new remote output repaints promptly. `None` in headless/test
     /// paths (no render loop).
@@ -541,6 +596,12 @@ pub struct App {
     pub(crate) terminal_images_disabled: bool,
     pub(crate) inline_image_symbol_mode: InlineImageSymbolMode,
     pub(crate) terminal_image_render_state: TerminalImageRenderState,
+
+    /// True when the client is kitty specifically. kitty desyncs its cursor from
+    /// ratatui's cell-width model on regional-indicator flags, which splits the
+    /// flags in the World Cup overview's rightmost column; that one column drops
+    /// flags for kitty. Seeded from TERM, refined by the XTVERSION reply.
+    pub(crate) terminal_is_kitty: bool,
 
     /// Desktop-notification domain: producers push through cloned
     /// `notifier` handles; render drains `notify_outbox` into OSC bytes.
@@ -671,6 +732,7 @@ impl App {
             protocol_from_term(&config.term)
         };
         let inline_image_symbol_mode = InlineImageSymbolMode::from_identity(&config.term);
+        let terminal_is_kitty = identity_is_kitty(&config.term);
         let pending_terminal_commands = Vec::new();
         let (notifier, notify_outbox) = crate::app::notify::channel();
 
@@ -921,6 +983,7 @@ impl App {
             show_settings: true,
             show_splash: true,
             splash_ticks: 0,
+            marquee_tick: 0,
             splash_hint,
             show_quit_confirm: false,
             show_help: false,
@@ -953,6 +1016,13 @@ impl App {
             session_rx: config.session_rx,
             now_playing_rx: config.now_playing_rx,
             radio_meta_rx: config.radio_meta_rx,
+            worldcup_rx: config
+                .worldcup_service
+                .as_ref()
+                .map(|svc| svc.subscribe_state()),
+            worldcup_service: config.worldcup_service,
+            worldcup_viewer: None,
+            worldcup: crate::app::worldcup::state::State::default(),
             active_users: active_users.clone(),
             afk_users: afk_users.clone(),
             username_directory: config.username_directory,
@@ -1033,14 +1103,30 @@ impl App {
             is_playing_game: false,
             dashboard_game_toggle_target: None,
             door_delete_confirm: false,
+            games_hub_state: crate::app::door::hub::state::State::default(),
             lateania_service: config.lateania_service,
+            greendragon_service: config.greendragon_service,
             lateania_state: None,
+            greendragon_state: None,
             rebels_state: None,
             rebels_term: config.term.clone(),
             rebels_enabled: config.rebels_enabled,
             rebels_host: config.rebels_host,
             rebels_port: config.rebels_port,
             rebels_secret: config.rebels_secret,
+            nethack_state: None,
+            nethack_term: config.term.clone(),
+            nethack_enabled: config.nethack_enabled,
+            nethack_host: config.nethack_host,
+            nethack_port: config.nethack_port,
+            nethack_secret: config.nethack_secret,
+            nethack_awards: config.nethack_awards,
+            dopewars_state: None,
+            dopewars_term: config.term.clone(),
+            dopewars_enabled: config.dopewars_enabled,
+            dopewars_host: config.dopewars_host,
+            dopewars_port: config.dopewars_port,
+            dopewars_secret: config.dopewars_secret,
             repaint_signal: None,
             rooms_service: config.rooms_service,
             room_game_registry: config.room_game_registry,
@@ -1093,6 +1179,7 @@ impl App {
             terminal_images_disabled,
             inline_image_symbol_mode,
             terminal_image_render_state: TerminalImageRenderState::default(),
+            terminal_is_kitty,
             notifier,
             notify_outbox,
             is_draining: config.is_draining,
@@ -1109,8 +1196,6 @@ impl App {
         }
         app.chat
             .set_favorite_room_ids(app.profile_state.profile().favorite_room_ids.clone());
-        app.chat
-            .set_active_bumped_join_room_ids(app.shop_state.active_bumped_join_room_ids());
         app.chat.sync_selection();
         app.sync_visible_chat_room();
         Ok(app)
@@ -1163,6 +1248,21 @@ impl App {
         self.lateania_state = None;
     }
 
+    pub(crate) fn enter_greendragon(&mut self) {
+        if self.greendragon_state.is_some() {
+            return;
+        }
+        self.greendragon_state = Some(crate::app::door::greendragon::state::State::new(
+            self.greendragon_service.clone(),
+            self.user_id,
+            self.username.clone(),
+        ));
+    }
+
+    pub(crate) fn leave_greendragon(&mut self) {
+        self.greendragon_state = None;
+    }
+
     /// Store the active transport's render-loop wakeup so the rebels proxy can
     /// repaint promptly on new remote output.
     pub(crate) fn set_repaint_signal(
@@ -1190,6 +1290,47 @@ impl App {
     fn leave_rebels(&mut self) {
         // Dropping the State drops the proxy, which closes the outbound channel.
         self.rebels_state = None;
+    }
+
+    pub(crate) fn enter_nethack(&mut self) {
+        if self.nethack_state.is_some() {
+            return;
+        }
+        self.nethack_state = Some(crate::app::door::nethack::state::State::new(
+            self.user_id,
+            self.nethack_host.clone(),
+            self.nethack_port,
+            self.nethack_secret.clone(),
+            self.nethack_term.clone(),
+            self.nethack_enabled,
+            self.repaint_signal.clone(),
+            self.nethack_awards.clone(),
+        ));
+    }
+
+    fn leave_nethack(&mut self) {
+        // Dropping the State drops the process, which kills the child nethack.
+        self.nethack_state = None;
+    }
+
+    pub(crate) fn enter_dopewars(&mut self) {
+        if self.dopewars_state.is_some() {
+            return;
+        }
+        self.dopewars_state = Some(crate::app::door::dopewars::state::State::new(
+            self.user_id,
+            self.dopewars_host.clone(),
+            self.dopewars_port,
+            self.dopewars_secret.clone(),
+            self.dopewars_term.clone(),
+            self.dopewars_enabled,
+            self.repaint_signal.clone(),
+        ));
+    }
+
+    fn leave_dopewars(&mut self) {
+        // Dropping the State drops the process, which kills the child dopewars.
+        self.dopewars_state = None;
     }
 
     pub(crate) fn activate_artboard_interaction(&mut self) -> bool {
@@ -1387,6 +1528,12 @@ impl App {
             if screen == Screen::Rebels {
                 self.enter_rebels();
             }
+            if screen == Screen::Nethack {
+                self.enter_nethack();
+            }
+            if screen == Screen::Dopewars {
+                self.enter_dopewars();
+            }
             if screen == Screen::Artboard {
                 self.enter_dartboard();
             }
@@ -1424,6 +1571,16 @@ impl App {
             self.force_full_repaint();
         }
 
+        if self.screen == Screen::Nethack {
+            self.leave_nethack();
+            self.force_full_repaint();
+        }
+
+        if self.screen == Screen::Dopewars {
+            self.leave_dopewars();
+            self.force_full_repaint();
+        }
+
         if self.screen == Screen::Pinstar {
             self.leave_pinstar();
             self.force_full_repaint();
@@ -1442,6 +1599,12 @@ impl App {
         if self.screen == Screen::Rebels {
             self.enter_rebels();
         }
+        if self.screen == Screen::Nethack {
+            self.enter_nethack();
+        }
+        if self.screen == Screen::Dopewars {
+            self.enter_dopewars();
+        }
         if self.screen == Screen::Pinstar {
             self.enter_directory();
         }
@@ -1451,6 +1614,14 @@ impl App {
         {
             self.nes_cabinet_state.activate();
         }
+        // Hold a viewer guard only while on the World Cup screen; this both
+        // wakes the demand-gated poller on entry and (by dropping the prior
+        // guard) releases it on exit.
+        self.worldcup_viewer = if self.screen == Screen::WorldCup {
+            self.worldcup_service.as_ref().map(|svc| svc.viewer())
+        } else {
+            None
+        };
         self.sync_visible_chat_room();
     }
 
@@ -1476,6 +1647,11 @@ impl App {
             "terminal xtversion reply"
         );
         self.apply_inline_image_symbol_mode(InlineImageSymbolMode::from_identity(value));
+        // The XTVERSION payload identifies the terminal precisely (kitty vs the
+        // rest of the kitty-graphics family), refining the TERM-based seed.
+        if identity_is_kitty(value) {
+            self.terminal_is_kitty = true;
+        }
         if self.terminal_images_disabled {
             return;
         }
@@ -1550,6 +1726,45 @@ impl App {
             && state.is_running()
         {
             state.forward_input(data);
+            return;
+        }
+        // Same passthrough for the locally-hosted nethack process, except F1,
+        // which late.sh remaps to nethack's own `?` help (so the raw F1 escape
+        // never leaks into the game as stray commands).
+        if self.screen == crate::app::common::primitives::Screen::Nethack
+            && let Some(state) = self.nethack_state.as_mut()
+            && state.is_running()
+        {
+            if !state.intercept_input(data) {
+                state.forward_input(data);
+            }
+            return;
+        }
+        // A game just exited: swallow the player's trailing keystrokes (from
+        // clearing nethack's end-of-game --More--/disclosure prompts) for a
+        // short grace so a stray `q` can't fall through to the launcher's
+        // global quit and drop the whole SSH session.
+        if self.screen == crate::app::common::primitives::Screen::Nethack
+            && let Some(state) = self.nethack_state.as_ref()
+            && state.in_exit_grace()
+        {
+            return;
+        }
+        // dopewars: same raw passthrough as nethack (both are network doors to a
+        // remote curses child). Every byte goes straight to the child while it
+        // runs; Ctrl-C ends the game (it traps no SIGINT) and drops back to the
+        // launcher.
+        if self.screen == crate::app::common::primitives::Screen::Dopewars
+            && let Some(state) = self.dopewars_state.as_ref()
+            && state.is_running()
+        {
+            state.forward_input(data);
+            return;
+        }
+        if self.screen == crate::app::common::primitives::Screen::Dopewars
+            && let Some(state) = self.dopewars_state.as_ref()
+            && state.in_exit_grace()
+        {
             return;
         }
         crate::app::input::handle(self, data)

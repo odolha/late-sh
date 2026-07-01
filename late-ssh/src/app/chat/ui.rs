@@ -64,6 +64,7 @@ pub struct DashboardChatView<'a> {
     pub friend_user_ids: &'a HashSet<Uuid>,
     pub afk_user_ids: &'a HashSet<Uuid>,
     pub message_reactions: &'a HashMap<Uuid, Vec<ChatMessageReactionSummary>>,
+    pub unread_marker: Option<DateTime<Utc>>,
     pub current_user_id: Uuid,
     pub voice_channel_id: Option<Uuid>,
     pub voice_snapshot: &'a crate::app::voice::svc::VoiceSnapshot,
@@ -1004,6 +1005,7 @@ pub fn draw_dashboard_chat_card(
                 bot_username_color_active: view.bot_username_color_active,
                 message_reactions: view.message_reactions,
                 inline_images: view.inline_images,
+                unread_marker: view.unread_marker,
             },
         );
         let visible = visible_chat_rows(
@@ -1084,6 +1086,7 @@ struct ChatRowsContext<'a> {
     bot_username_color_active: bool,
     message_reactions: &'a HashMap<Uuid, Vec<ChatMessageReactionSummary>>,
     inline_images: &'a HashMap<Uuid, InlineImagePreview>,
+    unread_marker: Option<DateTime<Utc>>,
 }
 
 // ── Mouse hit-test types ────────────────────────────────────
@@ -1199,6 +1202,7 @@ fn chat_rows_fingerprint(
     ctx.current_user_id.hash(&mut hasher);
     ctx.show_flag_fallback.hash(&mut hasher);
     ctx.bot_username_color_active.hash(&mut hasher);
+    ctx.unread_marker.hash(&mut hasher);
     theme::current_kind().hash(&mut hasher);
     // Include current minute so relative timestamps ("5 mins ago") stay fresh.
     (chrono::Utc::now().timestamp() / 60).hash(&mut hasher);
@@ -1232,6 +1236,34 @@ fn chat_rows_fingerprint(
     hasher.finish()
 }
 
+fn push_new_messages_divider(
+    rows: &mut Vec<Line<'static>>,
+    row_message: &mut Vec<Option<Uuid>>,
+    row_kind: &mut Vec<RowKindLite>,
+    width: usize,
+) {
+    let label = " new messages ";
+    let rule_width = width.saturating_sub(label.len()).max(2);
+    let left = rule_width / 2;
+    let right = rule_width.saturating_sub(left);
+    let style = Style::default().fg(theme::TEXT_DIM());
+    rows.push(Line::from(vec![
+        Span::styled("─".repeat(left), style),
+        Span::styled(label, style.add_modifier(Modifier::BOLD)),
+        Span::styled("─".repeat(right), style),
+    ]));
+    row_message.push(None);
+    row_kind.push(RowKindLite::Blank);
+}
+
+fn is_unread_boundary_message(
+    marker: Option<DateTime<Utc>>,
+    message: &ChatMessage,
+    current_user_id: Uuid,
+) -> bool {
+    marker.is_some_and(|marker| message.created > marker && message.user_id != current_user_id)
+}
+
 fn ensure_chat_rows_cache(
     cache: &mut ChatRowsCache,
     messages: Vec<&ChatMessage>,
@@ -1256,6 +1288,7 @@ fn ensure_chat_rows_cache(
     let mut first = true;
     let mut prev_user_id: Option<Uuid> = None;
     let mut prev_created: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut unread_divider_inserted = false;
 
     for msg in messages.into_iter().rev() {
         let is_own = msg.user_id == ctx.current_user_id;
@@ -1347,6 +1380,13 @@ fn ensure_chat_rows_cache(
             row_kind.push(RowKindLite::Blank);
         }
         first = false;
+
+        if !unread_divider_inserted
+            && is_unread_boundary_message(ctx.unread_marker, msg, ctx.current_user_id)
+        {
+            push_new_messages_divider(&mut all_rows, &mut row_message, &mut row_kind, width);
+            unread_divider_inserted = true;
+        }
 
         let row_start = all_rows.len();
         let image_lines = ctx.inline_images.get(&msg.id).map(Vec::as_slice);
@@ -2165,6 +2205,7 @@ pub struct ChatRenderInput<'a> {
     pub friend_user_ids: &'a HashSet<Uuid>,
     pub message_reactions: &'a HashMap<Uuid, Vec<ChatMessageReactionSummary>>,
     pub inline_images: &'a HashMap<Uuid, InlineImagePreview>,
+    pub room_unread_markers: &'a HashMap<Uuid, Option<DateTime<Utc>>>,
     pub unread_counts: &'a HashMap<Uuid, i64>,
     pub room_last_message_at: &'a HashMap<Uuid, Option<DateTime<Utc>>>,
     pub favorite_room_ids: &'a [Uuid],
@@ -2172,7 +2213,6 @@ pub struct ChatRenderInput<'a> {
     pub active_poll: Option<&'a ActiveChatPoll>,
     pub collapsed_sections: &'a HashSet<RoomSection>,
     pub selected_room_id: Option<Uuid>,
-    pub selected_bumped_join_room_id: Option<Uuid>,
     pub room_jump_active: bool,
     pub room_section_prefix_armed: bool,
     pub selected_message_id: Option<Uuid>,
@@ -2184,6 +2224,7 @@ pub struct ChatRenderInput<'a> {
     pub composing: bool,
     pub current_user_id: Uuid,
     pub afk_user_ids: &'a HashSet<Uuid>,
+    pub ignored_user_ids: &'a HashSet<Uuid>,
     pub show_flag_fallback: bool,
     pub cursor_visible: bool,
     pub mention_matches: &'a [MentionMatch],
@@ -2253,10 +2294,10 @@ pub(crate) struct ChatRoomListView<'a> {
     pub active_room_effects: &'a HashMap<Uuid, Vec<ActiveChatRoomEffect>>,
     pub collapsed_sections: &'a HashSet<RoomSection>,
     pub selected_room_id: Option<Uuid>,
-    pub selected_bumped_join_room_id: Option<Uuid>,
     pub room_jump_active: bool,
     pub room_section_prefix_armed: bool,
     pub current_user_id: Uuid,
+    pub ignored_user_ids: &'a HashSet<Uuid>,
     pub feeds_available: bool,
     pub feeds_selected: bool,
     pub feeds_unread_count: i64,
@@ -2283,6 +2324,7 @@ pub struct EmbeddedRoomChatView<'a> {
     pub afk_user_ids: &'a HashSet<Uuid>,
     pub message_reactions: &'a HashMap<Uuid, Vec<ChatMessageReactionSummary>>,
     pub inline_images: &'a HashMap<Uuid, InlineImagePreview>,
+    pub unread_marker: Option<DateTime<Utc>>,
     pub current_user_id: Uuid,
     /// Voice channel for this view, drawn as a strip at the top when present.
     pub voice_channel_id: Option<Uuid>,
@@ -2387,6 +2429,7 @@ pub fn draw_embedded_room_chat(
             bot_username_color_active: false,
             message_reactions: view.message_reactions,
             inline_images: view.inline_images,
+            unread_marker: view.unread_marker,
         },
     );
     let visible = visible_chat_rows(
@@ -2573,10 +2616,10 @@ fn room_list_view_from_render_input<'a>(view: &'a ChatRenderInput<'a>) -> ChatRo
         active_room_effects: view.active_room_effects,
         collapsed_sections: view.collapsed_sections,
         selected_room_id: view.selected_room_id,
-        selected_bumped_join_room_id: view.selected_bumped_join_room_id,
         room_jump_active: view.room_jump_active,
         room_section_prefix_armed: view.room_section_prefix_armed,
         current_user_id: view.current_user_id,
+        ignored_user_ids: view.ignored_user_ids,
         feeds_available: view.feeds_view.has_feeds,
         feeds_selected: view.feeds_selected,
         feeds_unread_count: view.feeds_unread_count,
@@ -3152,7 +3195,7 @@ fn build_cozy_room_rail_rows(view: &ChatRoomListView<'_>, width: u16) -> RoomLis
     let mut hit_slots: Vec<Option<RoomSlot>> = Vec::new();
     let mut selected_row_index = None;
     let inner_width = width.saturating_sub(3) as usize; // 2 left gutter + 1 right margin
-    let mut order = visual_order_for_rooms(RoomVisualOrderInput {
+    let order = visual_order_for_rooms(RoomVisualOrderInput {
         rooms: view.chat_rooms,
         user_id: view.current_user_id,
         usernames: view.usernames,
@@ -3161,11 +3204,12 @@ fn build_cozy_room_rail_rows(view: &ChatRoomListView<'_>, width: u16) -> RoomLis
         feeds_available: view.feeds_available,
         favorite_room_ids: view.favorite_room_ids,
         collapsed_sections: view.collapsed_sections,
+        ignored_user_ids: view.ignored_user_ids,
     });
-    let bumped_slots = bumped_join_room_slots(view.active_room_effects);
-    let mut promoted_order = bumped_slots.clone();
-    promoted_order.extend(order);
-    order = promoted_order;
+    // Bumped rooms are advertised as read-only text at the top of the rail;
+    // they are not part of `order`, so they take no jump key and never
+    // participate in selection or navigation.
+    let bumped_slugs = bumped_join_room_slugs(view.active_room_effects);
     let jump_targets: HashMap<RoomSlot, u8> = order
         .iter()
         .copied()
@@ -3215,7 +3259,6 @@ fn build_cozy_room_rail_rows(view: &ChatRoomListView<'_>, width: u16) -> RoomLis
     };
 
     let item_row = |label: String,
-                    slot: RoomSlot,
                     unread: i64,
                     active: bool,
                     jump_key: Option<u8>,
@@ -3262,8 +3305,6 @@ fn build_cozy_room_rail_rows(view: &ChatRoomListView<'_>, width: u16) -> RoomLis
         }
         let name_color = if active {
             theme::AMBER()
-        } else if matches!(slot, RoomSlot::BumpedJoin(_)) {
-            theme::TEXT()
         } else if has_room_effect(effects, "pinned_vibe") {
             theme::AMBER_GLOW()
         } else if unread > 0 {
@@ -3305,7 +3346,6 @@ fn build_cozy_room_rail_rows(view: &ChatRoomListView<'_>, width: u16) -> RoomLis
             push_row(
                 item_row(
                     label,
-                    slot,
                     unread,
                     active,
                     jump_targets.get(&slot).copied(),
@@ -3337,10 +3377,17 @@ fn build_cozy_room_rail_rows(view: &ChatRoomListView<'_>, width: u16) -> RoomLis
                 .any(|(r, _)| r.id == *id && is_chat_list_room(r))
         })
         .collect();
-    if !bumped_slots.is_empty() {
+    if !bumped_slugs.is_empty() {
         push_row(effect_section_header("bumped"), None, false);
-        for slot in bumped_slots.iter().copied() {
-            push_slot(slot, &mut push_row);
+        for slug in &bumped_slugs {
+            push_row(
+                Line::from(Span::styled(
+                    format!("#{slug}"),
+                    Style::default().fg(theme::AMBER_DIM()),
+                )),
+                None,
+                false,
+            );
         }
         push_row(blank(), None, false);
     }
@@ -3440,16 +3487,6 @@ fn room_slot_label_and_unread(view: &ChatRoomListView<'_>, slot: RoomSlot) -> (S
             let unread = view.unread_counts.get(&room.id).copied().unwrap_or(0);
             (label, unread)
         }
-        RoomSlot::BumpedJoin(room_id) => {
-            let label = view
-                .active_room_effects
-                .get(&room_id)
-                .and_then(|effects| effects.first())
-                .and_then(|effect| effect.room_slug.as_deref())
-                .map(|slug| format!("join #{slug}"))
-                .unwrap_or_else(|| "join room".to_string());
-            (label, 0)
-        }
         RoomSlot::Feeds => ("rss".to_string(), view.feeds_unread_count),
         RoomSlot::News => ("news".to_string(), view.news_unread_count),
         RoomSlot::Notifications => ("mentions".to_string(), view.notifications_unread_count),
@@ -3459,12 +3496,15 @@ fn room_slot_label_and_unread(view: &ChatRoomListView<'_>, slot: RoomSlot) -> (S
     }
 }
 
-fn bumped_join_room_slots(
+/// Slugs of public topic rooms currently carrying a `room_bump` effect,
+/// sorted alphabetically. These are advertised as read-only text at the top
+/// of the rail (no slot, no selection, no jump key).
+fn bumped_join_room_slugs(
     active_room_effects: &HashMap<Uuid, Vec<ActiveChatRoomEffect>>,
-) -> Vec<RoomSlot> {
-    let mut rooms = active_room_effects
-        .iter()
-        .filter_map(|(room_id, effects)| {
+) -> Vec<String> {
+    let mut slugs = active_room_effects
+        .values()
+        .filter_map(|effects| {
             let first = effects.first()?;
             (has_room_effect(effects, "room_bump")
                 && first.room_kind == "topic"
@@ -3474,14 +3514,11 @@ fn bumped_join_room_slots(
                     .room_slug
                     .as_deref()
                     .is_some_and(|slug| !slug.is_empty()))
-            .then_some((
-                first.room_slug.clone().unwrap_or_default(),
-                RoomSlot::BumpedJoin(*room_id),
-            ))
+            .then(|| first.room_slug.clone().unwrap_or_default())
         })
         .collect::<Vec<_>>();
-    rooms.sort_by(|(a, _), (b, _)| a.cmp(b));
-    rooms.into_iter().map(|(_, slot)| slot).collect()
+    slugs.sort();
+    slugs
 }
 
 fn room_slot_effects<'a>(
@@ -3494,7 +3531,6 @@ fn room_slot_effects<'a>(
             .get(&room_id)
             .map(Vec::as_slice)
             .unwrap_or(&[]),
-        RoomSlot::BumpedJoin(_) => &[],
         _ => &[],
     }
 }
@@ -3555,7 +3591,7 @@ fn build_rail_nav_hint_lines() -> Vec<Line<'static>> {
         Line::from(vec![key("h l space"), hint(" jump room")]),
         Line::from(vec![key("f"), hint("         favorite")]),
         Line::from(vec![key("[ ]/z"), hint("     sort/fold")]),
-        Line::from(vec![key("ctrl+/"), hint("    find room")]),
+        Line::from(vec![key("ctrl+/"), hint("    room picker")]),
     ]
 }
 
@@ -3564,7 +3600,6 @@ fn cozy_slot_selected(view: &ChatRoomListView<'_>, slot: RoomSlot) -> bool {
         slot,
         SelectedRoomSlotState {
             selected_room_id: view.selected_room_id,
-            selected_bumped_join_room_id: view.selected_bumped_join_room_id,
             feeds_selected: view.feeds_selected,
             news_selected: view.news_selected,
             notifications_selected: view.notifications_selected,
@@ -3644,18 +3679,14 @@ fn draw_selected_content(
     } else if news_selected {
         super::news::ui::draw_article_list(frame, messages_area, &view.news_view);
     } else {
-        let selected_room = if view.selected_bumped_join_room_id.is_some() {
-            None
-        } else {
-            selected_room_id
-                .and_then(|id| view.chat_rooms.iter().find(|(room, _)| room.id == id))
-                .filter(|(room, _)| is_chat_list_room(room))
-                .or_else(|| {
-                    view.chat_rooms
-                        .iter()
-                        .find(|(room, _)| is_chat_list_room(room))
-                })
-        };
+        let selected_room = selected_room_id
+            .and_then(|id| view.chat_rooms.iter().find(|(room, _)| room.id == id))
+            .filter(|(room, _)| is_chat_list_room(room))
+            .or_else(|| {
+                view.chat_rooms
+                    .iter()
+                    .find(|(room, _)| is_chat_list_room(room))
+            });
 
         // A voice channel shows a compact voice strip pinned at the very top;
         // text-only rooms render unchanged with the messages at full height.
@@ -3719,6 +3750,7 @@ fn draw_selected_content(
                     bot_username_color_active: view.bot_username_color_active,
                     message_reactions: view.message_reactions,
                     inline_images: view.inline_images,
+                    unread_marker: view.room_unread_markers.get(&room.id).copied().flatten(),
                 },
             );
             let visible = visible_chat_rows(
@@ -3737,20 +3769,6 @@ fn draw_selected_content(
             } else {
                 visible.lines
             }
-        } else if let Some(room_id) = view.selected_bumped_join_room_id {
-            let label = view
-                .active_room_effects
-                .get(&room_id)
-                .and_then(|effects| effects.first())
-                .and_then(|effect| effect.room_slug.as_deref())
-                .map(|slug| format!("join #{slug}"))
-                .unwrap_or_else(|| "join room".to_string());
-            vec![Line::from(Span::styled(
-                label,
-                Style::default()
-                    .fg(theme::AMBER())
-                    .add_modifier(Modifier::BOLD),
-            ))]
         } else {
             vec![Line::from(Span::styled(
                 "Select a room.",
@@ -4010,6 +4028,7 @@ mod tests {
             updated: Utc::now(),
             pinned: false,
             reply_to_message_id: None,
+            reply_to_user_id: None,
             room_id,
             user_id,
             body: "hello".to_string(),
@@ -4039,6 +4058,7 @@ mod tests {
             bot_username_color_active: false,
             message_reactions: &message_reactions,
             inline_images: &inline_images,
+            unread_marker: None,
         };
 
         theme::set_current_by_id("late");
@@ -4060,6 +4080,7 @@ mod tests {
             updated: Utc::now(),
             pinned: false,
             reply_to_message_id: None,
+            reply_to_user_id: None,
             room_id,
             user_id: author_id,
             body: "hello".to_string(),
@@ -4093,6 +4114,7 @@ mod tests {
             bot_username_color_active: false,
             message_reactions: &message_reactions,
             inline_images: &inline_images,
+            unread_marker: None,
         };
         let inactive_ctx = ChatRowsContext {
             current_user_id,
@@ -4107,12 +4129,53 @@ mod tests {
             bot_username_color_active: false,
             message_reactions: &message_reactions,
             inline_images: &inline_images,
+            unread_marker: None,
         };
 
         assert_ne!(
             chat_rows_fingerprint(&messages, &active_ctx, 80),
             chat_rows_fingerprint(&messages, &inactive_ctx, 80)
         );
+    }
+
+    #[test]
+    fn unread_boundary_ignores_read_and_own_messages() {
+        let room_id = Uuid::from_u128(1);
+        let current_user_id = Uuid::from_u128(2);
+        let other_user_id = Uuid::from_u128(3);
+        let marker = Utc::now();
+        let make_message = |user_id, created| ChatMessage {
+            id: Uuid::now_v7(),
+            created,
+            updated: created,
+            pinned: false,
+            reply_to_message_id: None,
+            reply_to_user_id: None,
+            room_id,
+            user_id,
+            body: "hello".to_string(),
+        };
+
+        assert!(is_unread_boundary_message(
+            Some(marker),
+            &make_message(other_user_id, marker + chrono::Duration::seconds(1)),
+            current_user_id
+        ));
+        assert!(!is_unread_boundary_message(
+            Some(marker),
+            &make_message(current_user_id, marker + chrono::Duration::seconds(1)),
+            current_user_id
+        ));
+        assert!(!is_unread_boundary_message(
+            Some(marker),
+            &make_message(other_user_id, marker - chrono::Duration::seconds(1)),
+            current_user_id
+        ));
+        assert!(!is_unread_boundary_message(
+            None,
+            &make_message(other_user_id, marker + chrono::Duration::seconds(1)),
+            current_user_id
+        ));
     }
 
     fn composer_view<'a>(textarea: &'a TextArea<'static>) -> ComposerBlockView<'a> {
@@ -4150,6 +4213,7 @@ mod tests {
         static INLINE_IMAGES: OnceLock<HashMap<Uuid, InlineImagePreview>> = OnceLock::new();
         static FRIEND_USER_IDS: OnceLock<HashSet<Uuid>> = OnceLock::new();
         static AFK_USER_IDS: OnceLock<HashSet<Uuid>> = OnceLock::new();
+        static IGNORED_USER_IDS: OnceLock<HashSet<Uuid>> = OnceLock::new();
         static VOICE_SNAPSHOT: OnceLock<crate::app::voice::svc::VoiceSnapshot> = OnceLock::new();
         static VOICE_CHANNELS: OnceLock<
             HashMap<Uuid, late_core::models::voice_channel::VoiceChannel>,
@@ -4158,6 +4222,8 @@ mod tests {
         static ACTIVE_ROOM_EFFECTS: OnceLock<HashMap<Uuid, Vec<ActiveChatRoomEffect>>> =
             OnceLock::new();
         static ROOM_LAST_MESSAGE_AT: OnceLock<HashMap<Uuid, Option<DateTime<Utc>>>> =
+            OnceLock::new();
+        static ROOM_UNREAD_MARKERS: OnceLock<HashMap<Uuid, Option<DateTime<Utc>>>> =
             OnceLock::new();
 
         ChatRenderInput {
@@ -4193,6 +4259,7 @@ mod tests {
             friend_user_ids: FRIEND_USER_IDS.get_or_init(HashSet::new),
             message_reactions,
             inline_images: INLINE_IMAGES.get_or_init(HashMap::new),
+            room_unread_markers: ROOM_UNREAD_MARKERS.get_or_init(HashMap::new),
             unread_counts,
             room_last_message_at: ROOM_LAST_MESSAGE_AT.get_or_init(HashMap::new),
             favorite_room_ids: &[],
@@ -4200,7 +4267,6 @@ mod tests {
             active_poll: None,
             collapsed_sections: COLLAPSED_SECTIONS.get_or_init(HashSet::new),
             selected_room_id,
-            selected_bumped_join_room_id: None,
             room_jump_active: false,
             room_section_prefix_armed: false,
             selected_message_id: None,
@@ -4212,6 +4278,7 @@ mod tests {
             composing: false,
             current_user_id: Uuid::nil(),
             afk_user_ids: AFK_USER_IDS.get_or_init(HashSet::new),
+            ignored_user_ids: IGNORED_USER_IDS.get_or_init(HashSet::new),
             show_flag_fallback: false,
             cursor_visible: false,
             mention_matches: &[],

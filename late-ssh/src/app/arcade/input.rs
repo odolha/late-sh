@@ -127,7 +127,10 @@ pub fn handle_key(app: &mut App, byte: u8) -> bool {
                 open_global_help(app);
                 return true;
             }
-            if (byte == 0x1B || byte == b'q' || byte == b'Q') && !app.le_word_state.show_rules {
+            // Le Word is a text-entry game where `q`/`Q` are valid letters, so
+            // only `Esc` exits to the lobby; `q`/`Q` fall through to the
+            // letter handler below.
+            if byte == 0x1B && !app.le_word_state.show_rules {
                 app.is_playing_game = false;
                 return true;
             }
@@ -316,17 +319,12 @@ fn right_sidebar_visible(app: &App) -> bool {
         let draft = app.settings_modal_state.draft();
         return crate::app::render::resolve_right_sidebar_enabled(
             draft.right_sidebar_mode,
-            &draft.right_sidebar_screens,
             Screen::Arcade,
         );
     }
 
     let profile = app.profile_state.profile();
-    crate::app::render::resolve_right_sidebar_enabled(
-        profile.right_sidebar_mode,
-        &profile.right_sidebar_screens,
-        Screen::Arcade,
-    )
+    crate::app::render::resolve_right_sidebar_enabled(profile.right_sidebar_mode, Screen::Arcade)
 }
 
 #[cfg(test)]

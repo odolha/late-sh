@@ -3,6 +3,7 @@ use getrandom::SysRng;
 use late_core::MutexRecover;
 use late_core::models::{
     artboard_ban::ArtboardBan,
+    article_feed_read::ArticleFeedRead,
     server_ban::ServerBan,
     user::{User, UserParams, extract_theme_id},
 };
@@ -42,6 +43,13 @@ const PROXY_HEADER_TIMEOUT: Duration = Duration::from_millis(250);
 const CLI_MODE_ENV: &str = "LATE_CLI_MODE";
 const CLI_TOKEN_PREFIX: &str = "LATE_SESSION_TOKEN=";
 const CLI_TOKEN_REQUEST: &str = "late-cli-token-v1";
+const AUTH_SETUP_BANNER: &str = "\r\nlate.sh requires SSH public-key auth.\r\n\
+New here? Install the companion CLI:\r\n\
+  curl -fsSL https://cli.late.sh/install.sh | bash\r\n\
+  late\r\n\
+Or create a key manually with:\r\n\
+  ssh-keygen -t ed25519 -C late.sh\r\n\
+  ssh late.sh\r\n";
 const EXIT_MESSAGE: &str = "\r\nStay late. Code safe. ✨\r\n";
 const INPUT_QUEUE_CAP: usize = 256;
 
@@ -491,6 +499,10 @@ impl ClientHandler {
 impl russh::server::Handler for ClientHandler {
     type Error = anyhow::Error;
 
+    async fn authentication_banner(&mut self) -> Result<Option<String>, Self::Error> {
+        Ok(Some(AUTH_SETUP_BANNER.to_string()))
+    }
+
     #[tracing::instrument(skip(self, key), fields(peer = ?self.peer_addr, transport = ?self.transport_peer_addr))]
     async fn auth_publickey(
         &mut self,
@@ -849,6 +861,7 @@ impl russh::server::Handler for ClientHandler {
             minesweeper_service: self.state.minesweeper_service.clone(),
             initial_minesweeper_games,
             lateania_service: self.state.lateania_service.clone(),
+            greendragon_service: self.state.greendragon_service.clone(),
             rooms_service: self.state.rooms_service.clone(),
             room_game_registry: self.state.room_game_registry.clone(),
             dartboard_server: self.state.dartboard_server.clone(),
@@ -880,12 +893,30 @@ impl russh::server::Handler for ClientHandler {
             rebels_host: self.state.config.rebels_host.clone(),
             rebels_port: self.state.config.rebels_port,
             rebels_secret: self.state.config.rebels_secret.clone(),
+            nethack_enabled: self.state.config.nethack_enabled,
+            nethack_host: self.state.config.nethack_host.clone(),
+            nethack_port: self.state.config.nethack_port,
+            nethack_secret: self.state.config.nethack_secret.clone(),
+            nethack_awards: Some(crate::app::door::nethack::award::NethackAwards::new(
+                self.state.chip_service.clone(),
+                self.state.db.clone(),
+                crate::app::activity::publisher::ActivityPublisher::new(
+                    self.state.db.clone(),
+                    self.state.activity_feed.clone(),
+                )
+                .with_username_directory(self.state.username_directory.clone()),
+            )),
+            dopewars_enabled: self.state.config.dopewars_enabled,
+            dopewars_host: self.state.config.dopewars_host.clone(),
+            dopewars_port: self.state.config.dopewars_port,
+            dopewars_secret: self.state.config.dopewars_secret.clone(),
             session_token,
             session_registry: Some(self.state.session_registry.clone()),
             paired_client_registry: Some(self.state.paired_client_registry.clone()),
             session_rx: Some(session_rx),
             now_playing_rx: Some(self.state.now_playing_rx.clone()),
             radio_meta_rx: Some(self.state.radio_meta_rx.clone()),
+            worldcup_service: Some(self.state.worldcup_service.clone()),
             active_users: Some(self.state.active_users.clone()),
             afk_users: self.state.afk_users.clone(),
             username_directory: Some(self.state.username_directory.clone()),
@@ -1403,6 +1434,13 @@ async fn ensure_user(state: &State, username: &str, fingerprint: &str) -> Result
                         "failed to seed auto-join chat rooms for newly created user"
                     );
                 }
+            }
+            if let Err(e) = ArticleFeedRead::seed_read_for_new_user(&client, user.id).await {
+                tracing::warn!(
+                    user_id = %user.id,
+                    error = ?e,
+                    "failed to seed news read cursor for newly created user"
+                );
             }
             (user, true)
         }
