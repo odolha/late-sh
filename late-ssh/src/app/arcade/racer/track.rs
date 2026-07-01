@@ -331,8 +331,55 @@ pub struct Shoulder {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 impl Track {
+    /// Highest normalized finish score any track can award.
+    pub const SCORE_MAX: i64 = 1000;
+
     pub fn total_distance_km(&self) -> f32 {
         self.stages.iter().map(|s| s.distance_km).sum()
+    }
+
+    /// Theoretical `(fastest, slowest)` completion times in seconds, derived
+    /// purely from the track definition: per stage, driving at the highest
+    /// (fastest) or lowest (slowest) lane speed the whole way. These bounds are
+    /// what make every track's finish score comparable regardless of its
+    /// distance or speed definition.
+    pub fn theoretical_times_s(&self) -> (f32, f32) {
+        let mut fastest = 0.0f32;
+        let mut slowest = 0.0f32;
+        for stage in self.stages {
+            let dist_m = stage.distance_km * 1000.0 * self.distance_scale;
+            let total = stage.road.lanes.total();
+            let mut lane_max = f32::MIN;
+            let mut lane_min = f32::MAX;
+            for i in 0..total {
+                if let Some(lane) = stage.road.lanes.get(i) {
+                    lane_max = lane_max.max(lane.own_max_speed);
+                    lane_min = lane_min.min(lane.own_min_speed);
+                }
+            }
+            if !lane_max.is_finite() || lane_max <= 0.0 {
+                continue;
+            }
+            if !lane_min.is_finite() || lane_min <= 0.0 {
+                lane_min = lane_max;
+            }
+            let v_max = lane_max / 3.6 * self.speed_scale;
+            let v_min = lane_min / 3.6 * self.speed_scale;
+            fastest += dist_m / v_max;
+            slowest += dist_m / v_min;
+        }
+        (fastest, slowest)
+    }
+
+    /// Grade a completion time to `0..=SCORE_MAX`. Finishing at the theoretical
+    /// max speed scores `SCORE_MAX`; finishing at the min speed scores `0`.
+    pub fn grade_time(&self, elapsed_s: f32) -> i64 {
+        let (fastest, slowest) = self.theoretical_times_s();
+        if slowest <= fastest {
+            return Self::SCORE_MAX;
+        }
+        let frac = (slowest - elapsed_s) / (slowest - fastest);
+        (frac.clamp(0.0, 1.0) * Self::SCORE_MAX as f32).round() as i64
     }
 }
 

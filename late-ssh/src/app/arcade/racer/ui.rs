@@ -16,7 +16,7 @@ use unicode_width::UnicodeWidthChar;
 
 use super::state::{Config, Phase, RacerScreen, State, TrafficDir, hash3};
 use super::theme;
-use super::track::{Lane, Lanes, Stage, Track};
+use super::track::{Lanes, Stage, Track};
 use super::tracks::ALL_TRACKS;
 use crate::app::arcade::ui::{
     GameBottomBar, centered_rect, draw_game_frame, draw_game_overlay, keys_line, status_line,

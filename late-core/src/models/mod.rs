@@ -40,6 +40,7 @@ pub mod pinstar_invite;
 pub mod profile;
 pub mod profile_award;
 pub mod quest;
+pub mod racer;
 pub mod reward;
 pub mod room_ban;
 pub mod rss_entry;

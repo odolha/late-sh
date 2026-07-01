@@ -54,9 +54,6 @@ impl Config {
 
     pub const RECENT_EFFECTS_CAPACITY: usize = 5;
 
-    pub const INITIAL_SCORE_PER_DISPLAYED_KM: f32 = 100_000.0;
-    pub const SCORE_DECAY_PER_S: f32 = 800.0;
-
     pub const MIN_TERMINAL_WIDTH_FLOOR: u16 = 70;
     pub const MIN_TERMINAL_HEIGHT: u16 = Self::VISIBLE_ROWS + 3;
 }
@@ -124,6 +121,10 @@ pub struct State {
     pub best_scores: HashMap<&'static str, i64>,
     pub best_score: i64,
 
+    /// Persistence handle + owner; `None` in unit tests.
+    svc: Option<super::svc::RacerService>,
+    user_id: uuid::Uuid,
+
     pub active_track: Option<&'static Track>,
     pub current_stage_idx: usize,
     pub stage_traveled_m: f32,
@@ -156,6 +157,8 @@ impl State {
             picker_selected_idx: 0,
             best_scores: HashMap::new(),
             best_score: 0,
+            svc: None,
+            user_id: uuid::Uuid::nil(),
             active_track: None,
             current_stage_idx: 0,
             stage_traveled_m: 0.0,
@@ -178,6 +181,28 @@ impl State {
             brake_blocked_until: None,
             wheel_blocked_until: None,
         }
+    }
+
+    /// Attach persistence and seed per-track bests loaded from the DB. Called
+    /// once at session start. `track_scores` is keyed by `Track::name`.
+    pub fn hydrate(
+        &mut self,
+        user_id: uuid::Uuid,
+        svc: super::svc::RacerService,
+        track_scores: Vec<late_core::models::racer::TrackScore>,
+        high_score: Option<late_core::models::racer::HighScore>,
+    ) {
+        self.user_id = user_id;
+        self.svc = Some(svc);
+        for ts in track_scores {
+            if let Some(track) = ALL_TRACKS.iter().find(|t| t.name == ts.track_key) {
+                self.best_scores.insert(track.name, ts.score as i64);
+            }
+        }
+        self.best_score = match high_score {
+            Some(hs) => hs.score as i64,
+            None => self.best_scores.values().copied().sum(),
+        };
     }
 
     // ─── Picker ──────────────────────────────────────────────────────────────
@@ -209,7 +234,7 @@ impl State {
         self.obstacle_seed_m = -Config::PRE_STAGE_M;
         self.scenery_seed = random();
         self.elapsed_s = 0.0;
-        self.score = self.initial_score_for(track);
+        self.score = Track::SCORE_MAX;
         self.phase = Phase::Playing;
         self.is_paused = false;
         self.recent_effects.clear();
@@ -229,8 +254,23 @@ impl State {
         self.screen = RacerScreen::Picker;
     }
 
-    fn initial_score_for(&self, track: &Track) -> i64 {
-        (Config::INITIAL_SCORE_PER_DISPLAYED_KM * track.total_distance_km()) as i64
+    /// Live 0..=SCORE_MAX grade: extrapolate the current average pace to the
+    /// full track and grade that projected completion time. Converges to the
+    /// real finish score as the run completes.
+    fn projected_grade(&self) -> i64 {
+        let Some(track) = self.active_track else {
+            return 0;
+        };
+        let covered = self.player_pos_m;
+        if covered <= 0.0 || self.elapsed_s <= 0.0 {
+            return Track::SCORE_MAX;
+        }
+        let total_m = track.total_distance_km() * 1000.0 * self.distance_scale();
+        if total_m <= 0.0 {
+            return 0;
+        }
+        let projected_time = self.elapsed_s * (total_m / covered);
+        track.grade_time(projected_time)
     }
 
     // ─── Active track / stage accessors ──────────────────────────────────────
@@ -394,7 +434,7 @@ impl State {
         self.player_pos_m += player_step;
         self.stage_traveled_m += player_step;
         self.elapsed_s += dt;
-        self.score = (self.score - (Config::SCORE_DECAY_PER_S * dt) as i64).max(0);
+        self.score = self.projected_grade();
 
         let target = self.player_lane_idx as f32;
         let max_step = Config::LANE_TRANSITION_PER_S * dt;
@@ -426,7 +466,9 @@ impl State {
         if let Some(track) = self.active_track {
             let total_m = track.total_distance_km() * 1000.0 * self.distance_scale();
             if self.player_pos_m >= total_m {
-                self.phase = Phase::Finished { elapsed_s: self.elapsed_s, score: self.score };
+                let score = track.grade_time(self.elapsed_s);
+                self.score = score;
+                self.phase = Phase::Finished { elapsed_s: self.elapsed_s, score };
                 self.record_best();
             }
         }
@@ -437,12 +479,20 @@ impl State {
         stage.road.lanes.get(self.player_lane_idx)
     }
 
+    /// Record a finished run. Only completed tracks earn a per-track score;
+    /// crashing/dying yields nothing. The Racer high score is the sum of all
+    /// per-track bests.
     fn record_best(&mut self) {
         let Some(track) = self.active_track else { return; };
-        let s = self.score;
+        let Phase::Finished { score, .. } = self.phase else { return; };
         let entry = self.best_scores.entry(track.name).or_insert(0);
-        if s > *entry { *entry = s; }
-        self.best_score = self.best_scores.values().copied().max().unwrap_or(0);
+        if score > *entry {
+            *entry = score;
+            if let Some(svc) = &self.svc {
+                svc.submit_track_score_task(self.user_id, track.name.to_string(), score as i32);
+            }
+        }
+        self.best_score = self.best_scores.values().copied().sum();
     }
 
     fn advance_stage(&mut self) {
