@@ -3,6 +3,7 @@ use getrandom::SysRng;
 use late_core::MutexRecover;
 use late_core::models::{
     artboard_ban::ArtboardBan,
+    article_feed_read::ArticleFeedRead,
     server_ban::ServerBan,
     user::{User, UserParams, extract_theme_id},
 };
@@ -1428,6 +1429,13 @@ async fn ensure_user(state: &State, username: &str, fingerprint: &str) -> Result
                         "failed to seed auto-join chat rooms for newly created user"
                     );
                 }
+            }
+            if let Err(e) = ArticleFeedRead::seed_read_for_new_user(&client, user.id).await {
+                tracing::warn!(
+                    user_id = %user.id,
+                    error = ?e,
+                    "failed to seed news read cursor for newly created user"
+                );
             }
             (user, true)
         }
