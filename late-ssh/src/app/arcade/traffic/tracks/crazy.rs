@@ -8,14 +8,14 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
 use crate::app::arcade::traffic::track::{
-    Car, Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery,
-    Shoulders, Stage, Theme, Track,
+    Car, Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery, Shoulders,
+    Stage, Theme, Track,
 };
 
 // ─── Local car mixes ─────────────────────────────────────────────────────────
 
 const MONSTER_MIX: &[Car] = &[CAR_SEMI, CAR_TRUCK, CAR_RV, CAR_MONSTER];
-const MICRO_MIX:   &[Car] = &[CAR_MICRO, CAR_HATCHBACK];
+const MICRO_MIX: &[Car] = &[CAR_MICRO, CAR_HATCHBACK];
 
 // ─── Lane variants ────────────────────────────────────────────────────────────
 
@@ -140,13 +140,21 @@ const S01_TOKYO: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 10.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[TOKYO_OUT, TOKYO_OUT, TOKYO_OUT, TOKYO_OUT, TOKYO_OUT],
             incoming: &[TOKYO_IN, TOKYO_IN, TOKYO_IN, TOKYO_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: CITY_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: CITY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -157,13 +165,21 @@ const S02_TURBO_STRIP: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 15.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[TURBO_LANE, TURBO_LANE, TURBO_LANE],
             incoming: &[TURBO_LANE, TURBO_LANE],
         },
-        sceneries: Sceneries { left: NEON_VOID, right: NEON_VOID },
-        shoulders: Shoulders { left: NEON_BARRIER_SHOULDERS, right: NEON_BARRIER_SHOULDERS },
+        sceneries: Sceneries {
+            left: NEON_VOID,
+            right: NEON_VOID,
+        },
+        shoulders: Shoulders {
+            left: NEON_BARRIER_SHOULDERS,
+            right: NEON_BARRIER_SHOULDERS,
+        },
     },
 };
 
@@ -174,13 +190,21 @@ const S03_MONSTER_ALLEY: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[MONSTER_LANE, MONSTER_LANE],
             incoming: &[MONSTER_LANE, MONSTER_LANE],
         },
-        sceneries: Sceneries { left: PLAINS_SCENERY, right: PLAINS_SCENERY },
-        shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: HIGHWAY_SHOULDERS },
+        sceneries: Sceneries {
+            left: PLAINS_SCENERY,
+            right: PLAINS_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: HIGHWAY_SHOULDERS,
+            right: HIGHWAY_SHOULDERS,
+        },
     },
 };
 
@@ -191,13 +215,21 @@ const S04_GRIDLOCK: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 3.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[GRIDLOCK],
             incoming: &[GRIDLOCK],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: TOWN_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: TOWN_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -208,13 +240,21 @@ const S05_OBSTACLE_GARDEN: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[OBSTACLE_GARDEN_LANE, OBSTACLE_GARDEN_LANE],
             incoming: &[OBSTACLE_GARDEN_LANE, OBSTACLE_GARDEN_LANE],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
-        shoulders: Shoulders { left: GUARDRAIL_SHOULDERS, right: GUARDRAIL_SHOULDERS },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: GUARDRAIL_SHOULDERS,
+            right: GUARDRAIL_SHOULDERS,
+        },
     },
 };
 
@@ -225,13 +265,21 @@ const S06_MICRO_CITY: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 5.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[MICRO_LANE],
             incoming: &[MICRO_LANE],
         },
-        sceneries: Sceneries { left: EURO_VILLAGE_SCENERY, right: EURO_VILLAGE_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: EURO_VILLAGE_SCENERY,
+            right: EURO_VILLAGE_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -242,15 +290,34 @@ const S07_IMPOSSIBLE_HIGHWAY: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 12.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
-        lanes: Lanes {
-            outgoing: &[IMPOSSIBLE_LANE, IMPOSSIBLE_LANE, IMPOSSIBLE_LANE,
-                        IMPOSSIBLE_LANE, IMPOSSIBLE_LANE, IMPOSSIBLE_LANE],
-            incoming: &[IMPOSSIBLE_LANE, IMPOSSIBLE_LANE, IMPOSSIBLE_LANE,
-                        IMPOSSIBLE_LANE, IMPOSSIBLE_LANE],
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
         },
-        sceneries: Sceneries { left: STARFIELD_SCENERY, right: STARFIELD_SCENERY },
-        shoulders: Shoulders { left: NEON_BARRIER_SHOULDERS, right: NEON_BARRIER_SHOULDERS },
+        lanes: Lanes {
+            outgoing: &[
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+            ],
+            incoming: &[
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+                IMPOSSIBLE_LANE,
+            ],
+        },
+        sceneries: Sceneries {
+            left: STARFIELD_SCENERY,
+            right: STARFIELD_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: NEON_BARRIER_SHOULDERS,
+            right: NEON_BARRIER_SHOULDERS,
+        },
     },
 };
 
@@ -261,13 +328,21 @@ const S08_FINAL_SPRINT: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[SPRINT_LANE],
             incoming: &[SPRINT_LANE],
         },
-        sceneries: Sceneries { left: NEON_VOID, right: NEON_VOID },
-        shoulders: Shoulders { left: CRASH_BARRIER_SHOULDERS, right: CRASH_BARRIER_SHOULDERS },
+        sceneries: Sceneries {
+            left: NEON_VOID,
+            right: NEON_VOID,
+        },
+        shoulders: Shoulders {
+            left: CRASH_BARRIER_SHOULDERS,
+            right: CRASH_BARRIER_SHOULDERS,
+        },
     },
 };
 

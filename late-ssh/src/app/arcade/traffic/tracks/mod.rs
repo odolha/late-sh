@@ -2,18 +2,18 @@
 //!
 //! Tracks live in their own files in this directory and are registered here.
 
-pub mod presets;
 pub mod batin;
-pub mod route66;
+pub mod crazy;
 pub mod eurotrip;
 pub mod fantasy;
+pub mod presets;
+pub mod route66;
 pub mod solar_system;
-pub mod crazy;
 
 #[cfg(debug_assertions)]
-pub mod test;
-#[cfg(debug_assertions)]
 pub mod sample;
+#[cfg(debug_assertions)]
+pub mod test;
 
 use super::track::Track;
 

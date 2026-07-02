@@ -20,29 +20,73 @@ use crate::app::arcade::traffic::track::{
 
 // ─── Car shapes ──────────────────────────────────────────────────────────────
 
-pub const CAR_SEDAN:    Car = Car { height: 3,  incidence: 0.45 };
-pub const CAR_HATCHBACK:Car = Car { height: 3,  incidence: 0.25 };
-pub const CAR_VAN:      Car = Car { height: 5,  incidence: 0.20 };
-pub const CAR_TRUCK:    Car = Car { height: 7,  incidence: 0.08 };
-pub const CAR_SEMI:     Car = Car { height: 11, incidence: 0.02 };
-pub const CAR_PICKUP:    Car = Car { height: 3,  incidence: 0.35 };
-pub const CAR_RV:        Car = Car { height: 7,  incidence: 0.08 };
-pub const CAR_MICRO:     Car = Car { height: 2,  incidence: 0.40 };
-pub const CAR_CART:      Car = Car { height: 4,  incidence: 0.30 };
-pub const CAR_MONSTER:   Car = Car { height: 14, incidence: 0.05 };
-pub const CAR_FIGHTER:   Car = Car { height: 2,  incidence: 0.45 };
-pub const CAR_FREIGHTER: Car = Car { height: 9,  incidence: 0.20 };
+pub const CAR_SEDAN: Car = Car {
+    height: 3,
+    incidence: 0.45,
+};
+pub const CAR_HATCHBACK: Car = Car {
+    height: 3,
+    incidence: 0.25,
+};
+pub const CAR_VAN: Car = Car {
+    height: 5,
+    incidence: 0.20,
+};
+pub const CAR_TRUCK: Car = Car {
+    height: 7,
+    incidence: 0.08,
+};
+pub const CAR_SEMI: Car = Car {
+    height: 11,
+    incidence: 0.02,
+};
+pub const CAR_PICKUP: Car = Car {
+    height: 3,
+    incidence: 0.35,
+};
+pub const CAR_RV: Car = Car {
+    height: 7,
+    incidence: 0.08,
+};
+pub const CAR_MICRO: Car = Car {
+    height: 2,
+    incidence: 0.40,
+};
+pub const CAR_CART: Car = Car {
+    height: 4,
+    incidence: 0.30,
+};
+pub const CAR_MONSTER: Car = Car {
+    height: 14,
+    incidence: 0.05,
+};
+pub const CAR_FIGHTER: Car = Car {
+    height: 2,
+    incidence: 0.45,
+};
+pub const CAR_FREIGHTER: Car = Car {
+    height: 9,
+    incidence: 0.20,
+};
 
-pub const CITY_CAR_MIX:        &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN];
-pub const HIGHWAY_CAR_MIX:     &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI];
-pub const RURAL_CAR_MIX:       &[Car] = &[CAR_HATCHBACK, CAR_VAN, CAR_TRUCK];
-pub const AMERICAN_CAR_MIX:    &[Car] = &[CAR_SEDAN, CAR_PICKUP, CAR_VAN, CAR_RV, CAR_TRUCK];
-pub const INTERSTATE_CAR_MIX:  &[Car] = &[CAR_SEDAN, CAR_PICKUP, CAR_VAN, CAR_TRUCK, CAR_SEMI, CAR_RV];
-pub const EURO_CITY_MIX:       &[Car] = &[CAR_MICRO, CAR_HATCHBACK, CAR_SEDAN, CAR_VAN];
-pub const EURO_HIGHWAY_MIX:    &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI];
-pub const FANTASY_MIX:         &[Car] = &[CAR_HATCHBACK, CAR_SEDAN, CAR_CART, CAR_VAN];
-pub const SPACE_SHIP_MIX:      &[Car] = &[CAR_FIGHTER, CAR_SEDAN, CAR_VAN, CAR_FREIGHTER];
-pub const CRAZY_MIX:           &[Car] = &[CAR_MICRO, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI, CAR_MONSTER];
+pub const CITY_CAR_MIX: &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN];
+pub const HIGHWAY_CAR_MIX: &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI];
+pub const RURAL_CAR_MIX: &[Car] = &[CAR_HATCHBACK, CAR_VAN, CAR_TRUCK];
+pub const AMERICAN_CAR_MIX: &[Car] = &[CAR_SEDAN, CAR_PICKUP, CAR_VAN, CAR_RV, CAR_TRUCK];
+pub const INTERSTATE_CAR_MIX: &[Car] =
+    &[CAR_SEDAN, CAR_PICKUP, CAR_VAN, CAR_TRUCK, CAR_SEMI, CAR_RV];
+pub const EURO_CITY_MIX: &[Car] = &[CAR_MICRO, CAR_HATCHBACK, CAR_SEDAN, CAR_VAN];
+pub const EURO_HIGHWAY_MIX: &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI];
+pub const FANTASY_MIX: &[Car] = &[CAR_HATCHBACK, CAR_SEDAN, CAR_CART, CAR_VAN];
+pub const SPACE_SHIP_MIX: &[Car] = &[CAR_FIGHTER, CAR_SEDAN, CAR_VAN, CAR_FREIGHTER];
+pub const CRAZY_MIX: &[Car] = &[
+    CAR_MICRO,
+    CAR_HATCHBACK,
+    CAR_VAN,
+    CAR_TRUCK,
+    CAR_SEMI,
+    CAR_MONSTER,
+];
 
 // ─── Lane templates ──────────────────────────────────────────────────────────
 
@@ -248,123 +292,321 @@ pub const FOREST_DIVIDERS: Divider = Divider {
 // ─── Scenery objects ─────────────────────────────────────────────────────────
 
 pub const CITY_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_BUILDING_HOUSE,       incidence: 0.35 },
-    Object { style: theme::OBJ_BUILDING_APARTMENTS,  incidence: 0.25 },
-    Object { style: theme::OBJ_SKYSCRAPER,           incidence: 0.10 },
-    Object { style: theme::OBJ_TREE_OAK,             incidence: 0.20 },
-    Object { style: theme::OBJ_BUSH,                 incidence: 0.10 },
+    Object {
+        style: theme::OBJ_BUILDING_HOUSE,
+        incidence: 0.35,
+    },
+    Object {
+        style: theme::OBJ_BUILDING_APARTMENTS,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_SKYSCRAPER,
+        incidence: 0.10,
+    },
+    Object {
+        style: theme::OBJ_TREE_OAK,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.10,
+    },
 ];
 
 pub const TOWN_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_BUILDING_HOUSE,       incidence: 0.35 },
-    Object { style: theme::OBJ_TREE_OAK,             incidence: 0.20 },
-    Object { style: theme::OBJ_GRASS,                incidence: 0.20 },
-    Object { style: theme::OBJ_BUSH,                 incidence: 0.10 },
+    Object {
+        style: theme::OBJ_BUILDING_HOUSE,
+        incidence: 0.35,
+    },
+    Object {
+        style: theme::OBJ_TREE_OAK,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_GRASS,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.10,
+    },
 ];
 
 pub const HIGHWAY_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_TREE_PINE,  incidence: 0.50 },
-    Object { style: theme::OBJ_TREE_OAK,  incidence: 0.25 },
-    Object { style: theme::OBJ_BUSH,      incidence: 0.20 },
-    Object { style: theme::OBJ_FLOWER,    incidence: 0.05 },
+    Object {
+        style: theme::OBJ_TREE_PINE,
+        incidence: 0.50,
+    },
+    Object {
+        style: theme::OBJ_TREE_OAK,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_FLOWER,
+        incidence: 0.05,
+    },
 ];
 
 pub const RURAL_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_TREE_OAK, incidence: 0.45 },
-    Object { style: theme::OBJ_BUSH,     incidence: 0.25 },
-    Object { style: theme::OBJ_GRASS,    incidence: 0.20 },
-    Object { style: theme::OBJ_FLOWER,   incidence: 0.10 },
+    Object {
+        style: theme::OBJ_TREE_OAK,
+        incidence: 0.45,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_GRASS,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_FLOWER,
+        incidence: 0.10,
+    },
 ];
 
 pub const VILLAGE_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_BUSH,     incidence: 0.25 },
-    Object { style: theme::OBJ_GRASS,    incidence: 0.20 },
-    Object { style: theme::OBJ_FLOWER,   incidence: 0.10 },
-    Object { style: theme::OBJ_BUILDING_HOUSE,   incidence: 0.20 },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_GRASS,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_FLOWER,
+        incidence: 0.10,
+    },
+    Object {
+        style: theme::OBJ_BUILDING_HOUSE,
+        incidence: 0.20,
+    },
 ];
 
 pub const FOREST_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_TREE_PINE, incidence: 0.80 },
-    Object { style: theme::OBJ_BUSH,      incidence: 0.20 },
+    Object {
+        style: theme::OBJ_TREE_PINE,
+        incidence: 0.80,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.20,
+    },
 ];
 
 pub const DESERT_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_GRASS,     incidence: 0.40 },
-    Object { style: theme::OBJ_BUSH,      incidence: 0.40 },
-    Object { style: theme::OBJ_TREE_PALM, incidence: 0.20 },
+    Object {
+        style: theme::OBJ_GRASS,
+        incidence: 0.40,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.40,
+    },
+    Object {
+        style: theme::OBJ_TREE_PALM,
+        incidence: 0.20,
+    },
 ];
 
 pub const PLAINS_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_GRASS,     incidence: 0.45 },
-    Object { style: theme::OBJ_WINDMILL,  incidence: 0.20 },
-    Object { style: theme::OBJ_BARN,      incidence: 0.15 },
-    Object { style: theme::OBJ_BILLBOARD, incidence: 0.10 },
-    Object { style: theme::OBJ_BUSH,      incidence: 0.10 },
+    Object {
+        style: theme::OBJ_GRASS,
+        incidence: 0.45,
+    },
+    Object {
+        style: theme::OBJ_WINDMILL,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_BARN,
+        incidence: 0.15,
+    },
+    Object {
+        style: theme::OBJ_BILLBOARD,
+        incidence: 0.10,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.10,
+    },
 ];
 
 pub const SOUTHWESTERN_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_CACTUS,   incidence: 0.45 },
-    Object { style: theme::OBJ_ROCK,     incidence: 0.30 },
-    Object { style: theme::OBJ_BUSH,     incidence: 0.20 },
-    Object { style: theme::OBJ_GRASS,    incidence: 0.05 },
+    Object {
+        style: theme::OBJ_CACTUS,
+        incidence: 0.45,
+    },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.30,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_GRASS,
+        incidence: 0.05,
+    },
 ];
 
 pub const MOUNTAIN_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_ROCK,      incidence: 0.55 },
-    Object { style: theme::OBJ_TREE_PINE, incidence: 0.30 },
-    Object { style: theme::OBJ_BUSH,      incidence: 0.15 },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.55,
+    },
+    Object {
+        style: theme::OBJ_TREE_PINE,
+        incidence: 0.30,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.15,
+    },
 ];
 
 pub const ALPINE_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_ROCK,      incidence: 0.65 },
-    Object { style: theme::OBJ_TREE_PINE, incidence: 0.25 },
-    Object { style: theme::OBJ_BUSH,      incidence: 0.10 },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.65,
+    },
+    Object {
+        style: theme::OBJ_TREE_PINE,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.10,
+    },
 ];
 
 pub const COASTAL_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_TREE_PALM, incidence: 0.40 },
-    Object { style: theme::OBJ_FLOWER,    incidence: 0.35 },
-    Object { style: theme::OBJ_BUSH,      incidence: 0.25 },
+    Object {
+        style: theme::OBJ_TREE_PALM,
+        incidence: 0.40,
+    },
+    Object {
+        style: theme::OBJ_FLOWER,
+        incidence: 0.35,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.25,
+    },
 ];
 
 pub const EURO_VILLAGE_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_BUILDING_HOUSE, incidence: 0.30 },
-    Object { style: theme::OBJ_CHURCH,         incidence: 0.15 },
-    Object { style: theme::OBJ_VINEYARD,        incidence: 0.25 },
-    Object { style: theme::OBJ_TREE_OAK,       incidence: 0.20 },
-    Object { style: theme::OBJ_BUSH,            incidence: 0.10 },
+    Object {
+        style: theme::OBJ_BUILDING_HOUSE,
+        incidence: 0.30,
+    },
+    Object {
+        style: theme::OBJ_CHURCH,
+        incidence: 0.15,
+    },
+    Object {
+        style: theme::OBJ_VINEYARD,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_TREE_OAK,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.10,
+    },
 ];
 
 pub const MAGIC_FOREST_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_MUSHROOM,       incidence: 0.28 },
-    Object { style: theme::OBJ_TREE_OAK,       incidence: 0.30 },
-    Object { style: theme::OBJ_CRYSTAL_SPIKE,  incidence: 0.22 },
-    Object { style: theme::OBJ_BUSH,           incidence: 0.20 },
+    Object {
+        style: theme::OBJ_MUSHROOM,
+        incidence: 0.28,
+    },
+    Object {
+        style: theme::OBJ_TREE_OAK,
+        incidence: 0.30,
+    },
+    Object {
+        style: theme::OBJ_CRYSTAL_SPIKE,
+        incidence: 0.22,
+    },
+    Object {
+        style: theme::OBJ_BUSH,
+        incidence: 0.20,
+    },
 ];
 
 pub const DARK_REALM_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_DARK_TOWER,    incidence: 0.22 },
-    Object { style: theme::OBJ_CRYSTAL_SPIKE, incidence: 0.35 },
-    Object { style: theme::OBJ_ROCK,          incidence: 0.25 },
-    Object { style: theme::OBJ_STAR,          incidence: 0.18 },
+    Object {
+        style: theme::OBJ_DARK_TOWER,
+        incidence: 0.22,
+    },
+    Object {
+        style: theme::OBJ_CRYSTAL_SPIKE,
+        incidence: 0.35,
+    },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_STAR,
+        incidence: 0.18,
+    },
 ];
 
 pub const CRYSTAL_CAVE_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_CRYSTAL_SPIKE, incidence: 0.65 },
-    Object { style: theme::OBJ_STAR,          incidence: 0.25 },
-    Object { style: theme::OBJ_ROCK,          incidence: 0.10 },
+    Object {
+        style: theme::OBJ_CRYSTAL_SPIKE,
+        incidence: 0.65,
+    },
+    Object {
+        style: theme::OBJ_STAR,
+        incidence: 0.25,
+    },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.10,
+    },
 ];
 
 pub const LAVA_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_ROCK,          incidence: 0.70 },
-    Object { style: theme::OBJ_CRYSTAL_SPIKE, incidence: 0.30 },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.70,
+    },
+    Object {
+        style: theme::OBJ_CRYSTAL_SPIKE,
+        incidence: 0.30,
+    },
 ];
 
 pub const SPACE_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_STAR,          incidence: 0.55 },
-    Object { style: theme::OBJ_NEBULA,        incidence: 0.20 },
-    Object { style: theme::OBJ_PLANET_SMALL,  incidence: 0.12 },
-    Object { style: theme::OBJ_COMET,         incidence: 0.13 },
+    Object {
+        style: theme::OBJ_STAR,
+        incidence: 0.55,
+    },
+    Object {
+        style: theme::OBJ_NEBULA,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_PLANET_SMALL,
+        incidence: 0.12,
+    },
+    Object {
+        style: theme::OBJ_COMET,
+        incidence: 0.13,
+    },
 ];
 
 // ─── Sceneries ───────────────────────────────────────────────────────────────
@@ -468,47 +710,84 @@ pub const STARFIELD_SCENERY: Scenery = Scenery {
 // ─── Shoulders ───────────────────────────────────────────────────────────────
 
 pub const SIDEWALK_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
-    Shoulder { style: theme::SHOULDER_SIDEWALK,  repeat: 0 },
+    Shoulder {
+        style: theme::SHOULDER_HARD_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_SIDEWALK,
+        repeat: 0,
+    },
 ];
 
 pub const HIGHWAY_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
-    Shoulder { style: theme::SHOULDER_POLES,     repeat: 6 },
+    Shoulder {
+        style: theme::SHOULDER_HARD_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_POLES,
+        repeat: 6,
+    },
 ];
 
-pub const RURAL_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-];
+pub const RURAL_SHOULDERS: &[Shoulder] = &[Shoulder {
+    style: theme::SHOULDER_SOFT_EDGE,
+    repeat: 0,
+}];
 
 pub const FOREST_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_SOFT_EDGE,  repeat: 0 },
-    Shoulder { style: theme::SHOULDER_TREE_PINE,  repeat: 4 },
+    Shoulder {
+        style: theme::SHOULDER_SOFT_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_TREE_PINE,
+        repeat: 4,
+    },
 ];
 
-pub const NO_SHOULDERS: Shoulders = Shoulders { left: &[], right: &[] };
+pub const NO_SHOULDERS: Shoulders = Shoulders {
+    left: &[],
+    right: &[],
+};
 
-pub const GUARDRAIL_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_GUARDRAIL, repeat: 0 },
-];
+pub const GUARDRAIL_SHOULDERS: &[Shoulder] = &[Shoulder {
+    style: theme::SHOULDER_GUARDRAIL,
+    repeat: 0,
+}];
 
 pub const CRASH_BARRIER_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_CRASH_BARRIER, repeat: 0 },
-    Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+    Shoulder {
+        style: theme::SHOULDER_CRASH_BARRIER,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
 ];
 
 pub const MAGIC_RUNE_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_MAGIC_RUNE, repeat: 10 },
-    Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+    Shoulder {
+        style: theme::SHOULDER_MAGIC_RUNE,
+        repeat: 10,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
 ];
 
-pub const SPACE_BEACON_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_SPACE_BEACON, repeat: 0 },
-];
+pub const SPACE_BEACON_SHOULDERS: &[Shoulder] = &[Shoulder {
+    style: theme::SHOULDER_SPACE_BEACON,
+    repeat: 0,
+}];
 
-pub const NEON_BARRIER_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_NEON_BARRIER, repeat: 0 },
-];
+pub const NEON_BARRIER_SHOULDERS: &[Shoulder] = &[Shoulder {
+    style: theme::SHOULDER_NEON_BARRIER,
+    repeat: 0,
+}];
 
 // ─── Pre-built Road configurations (builder framework) ──────────────────────
 //
@@ -521,33 +800,57 @@ pub const NEON_BARRIER_SHOULDERS: &[Shoulder] = &[
 //   }
 
 pub const ROAD_CITY_2X2: Road = Road {
-    aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: URBAN_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[CITY_LANE, CITY_LANE],
         outgoing: &[CITY_LANE, CITY_LANE],
     },
-    sceneries: Sceneries { left: CITY_SCENERY, right: CITY_SCENERY },
-    shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+    sceneries: Sceneries {
+        left: CITY_SCENERY,
+        right: CITY_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: SIDEWALK_SHOULDERS,
+        right: SIDEWALK_SHOULDERS,
+    },
 };
 
 pub const ROAD_TOWN_2X2: Road = Road {
-    aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: URBAN_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[CITY_LANE, CITY_LANE],
         outgoing: &[CITY_LANE, CITY_LANE],
     },
-    sceneries: Sceneries { left: TOWN_SCENERY, right: TOWN_SCENERY },
-    shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+    sceneries: Sceneries {
+        left: TOWN_SCENERY,
+        right: TOWN_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: SIDEWALK_SHOULDERS,
+        right: SIDEWALK_SHOULDERS,
+    },
 };
 
 pub const ROAD_HIGHWAY_2X2: Road = Road {
-    aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: HIGHWAY_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[HIGHWAY_LANE, HIGHWAY_LANE],
         outgoing: &[HIGHWAY_LANE, HIGHWAY_LANE],
     },
-    sceneries: Sceneries { left: HIGHWAY_SCENERY, right: HIGHWAY_SCENERY },
-    shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: HIGHWAY_SHOULDERS },
+    sceneries: Sceneries {
+        left: HIGHWAY_SCENERY,
+        right: HIGHWAY_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: HIGHWAY_SHOULDERS,
+        right: HIGHWAY_SHOULDERS,
+    },
 };
 
 pub const ROAD_HIGHWAY_3X2: Road = Road {
@@ -559,33 +862,57 @@ pub const ROAD_HIGHWAY_3X2: Road = Road {
 };
 
 pub const ROAD_RURAL_1X1: Road = Road {
-    aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: RURAL_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[RURAL_LANE],
         outgoing: &[RURAL_LANE],
     },
-    sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
-    shoulders: Shoulders { left: RURAL_SHOULDERS, right: RURAL_SHOULDERS },
+    sceneries: Sceneries {
+        left: RURAL_SCENERY,
+        right: RURAL_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: RURAL_SHOULDERS,
+        right: RURAL_SHOULDERS,
+    },
 };
 
 pub const ROAD_FOREST_1X1: Road = Road {
-    aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: FOREST_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[FOREST_LANE],
         outgoing: &[FOREST_LANE],
     },
-    sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
-    shoulders: Shoulders { left: FOREST_SHOULDERS, right: FOREST_SHOULDERS },
+    sceneries: Sceneries {
+        left: FOREST_SCENERY,
+        right: FOREST_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: FOREST_SHOULDERS,
+        right: FOREST_SHOULDERS,
+    },
 };
 
 pub const ROAD_MOTORWAY_2X2: Road = Road {
-    aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: HIGHWAY_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[MOTORWAY_LANE, MOTORWAY_LANE],
         outgoing: &[MOTORWAY_LANE, MOTORWAY_LANE],
     },
-    sceneries: Sceneries { left: HIGHWAY_SCENERY, right: HIGHWAY_SCENERY },
-    shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: HIGHWAY_SHOULDERS },
+    sceneries: Sceneries {
+        left: HIGHWAY_SCENERY,
+        right: HIGHWAY_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: HIGHWAY_SHOULDERS,
+        right: HIGHWAY_SHOULDERS,
+    },
 };
 
 pub const ROAD_MOTORWAY_3X2: Road = Road {
@@ -597,43 +924,75 @@ pub const ROAD_MOTORWAY_3X2: Road = Road {
 };
 
 pub const ROAD_INTERSTATE_2X2: Road = Road {
-    aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: HIGHWAY_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[INTERSTATE_LANE, INTERSTATE_LANE],
         outgoing: &[INTERSTATE_LANE, INTERSTATE_LANE],
     },
-    sceneries: Sceneries { left: PLAINS_SCENERY, right: PLAINS_SCENERY },
-    shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: HIGHWAY_SHOULDERS },
+    sceneries: Sceneries {
+        left: PLAINS_SCENERY,
+        right: PLAINS_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: HIGHWAY_SHOULDERS,
+        right: HIGHWAY_SHOULDERS,
+    },
 };
 
 pub const ROAD_MOUNTAIN_1X1: Road = Road {
-    aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: RURAL_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[MOUNTAIN_LANE],
         outgoing: &[MOUNTAIN_LANE],
     },
-    sceneries: Sceneries { left: MOUNTAIN_SCENERY, right: MOUNTAIN_SCENERY },
-    shoulders: Shoulders { left: GUARDRAIL_SHOULDERS, right: GUARDRAIL_SHOULDERS },
+    sceneries: Sceneries {
+        left: MOUNTAIN_SCENERY,
+        right: MOUNTAIN_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: GUARDRAIL_SHOULDERS,
+        right: GUARDRAIL_SHOULDERS,
+    },
 };
 
 pub const ROAD_CRYSTAL_1X1: Road = Road {
-    aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: FOREST_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[CRYSTAL_LANE],
         outgoing: &[CRYSTAL_LANE],
     },
-    sceneries: Sceneries { left: CRYSTAL_CAVE_SCENERY, right: CRYSTAL_CAVE_SCENERY },
-    shoulders: Shoulders { left: MAGIC_RUNE_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+    sceneries: Sceneries {
+        left: CRYSTAL_CAVE_SCENERY,
+        right: CRYSTAL_CAVE_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: MAGIC_RUNE_SHOULDERS,
+        right: MAGIC_RUNE_SHOULDERS,
+    },
 };
 
 pub const ROAD_SPACE_2X2: Road = Road {
-    aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: FOREST_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[SPACE_LANE, SPACE_LANE],
         outgoing: &[SPACE_LANE, SPACE_LANE],
     },
-    sceneries: Sceneries { left: STARFIELD_SCENERY, right: STARFIELD_SCENERY },
-    shoulders: Shoulders { left: SPACE_BEACON_SHOULDERS, right: SPACE_BEACON_SHOULDERS },
+    sceneries: Sceneries {
+        left: STARFIELD_SCENERY,
+        right: STARFIELD_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: SPACE_BEACON_SHOULDERS,
+        right: SPACE_BEACON_SHOULDERS,
+    },
 };
 
 pub const ROAD_SPACE_3X2: Road = Road {

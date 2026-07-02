@@ -7,8 +7,8 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
 use crate::app::arcade::traffic::track::{
-    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulder, Shoulders,
-    Stage, Theme, Track,
+    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulder, Shoulders, Stage,
+    Theme, Track,
 };
 
 // ─── Lane variants ───────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ const INTERSTATE_OUT: Lane = Lane {
     ..INTERSTATE_LANE
 };
 const INTERSTATE_IN: Lane = Lane {
-    own_max_speed: 250.0,  // wrong-side speed bonus: 200 → 230
+    own_max_speed: 250.0, // wrong-side speed bonus: 200 → 230
     traffic_density: 0.1,
     ..INTERSTATE_LANE
 };
@@ -63,7 +63,7 @@ const PLAINS_OUT: Lane = Lane {
     ..PLAINS_LANE
 };
 const PLAINS_IN: Lane = Lane {
-    own_max_speed: 240.0,  // wrong-side speed bonus
+    own_max_speed: 240.0, // wrong-side speed bonus
     traffic_density: 0.1,
     ..PLAINS_LANE
 };
@@ -116,7 +116,7 @@ const DESERT_OUT: Lane = Lane {
     ..DESERT_LANE
 };
 const DESERT_IN: Lane = Lane {
-    own_max_speed: 205.0,  // wrong-side speed bonus
+    own_max_speed: 205.0, // wrong-side speed bonus
     traffic_density: 0.1,
     ..DESERT_OUT
 };
@@ -145,27 +145,57 @@ const MOJAVE_LANE: Lane = Lane {
 };
 
 const MOJAVE_LANE_IN: Lane = Lane {
-    own_max_speed: 180.0,  // wrong-side speed bonus
+    own_max_speed: 180.0, // wrong-side speed bonus
     ..MOJAVE_LANE
 };
 
 // ─── Shoulder strips ─────────────────────────────────────────────────────────
 
 const PLAINS_SHOULDERS_L: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_SOFT_EDGE,  repeat: 0 },
-    Shoulder { style: theme::SHOULDER_EMPTY,      repeat: 0 },
-    Shoulder { style: theme::SHOULDER_WIRE_FENCE, repeat: 8 },
-    Shoulder { style: theme::SHOULDER_EMPTY,      repeat: 0 },
+    Shoulder {
+        style: theme::SHOULDER_SOFT_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_WIRE_FENCE,
+        repeat: 8,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
 ];
 const PLAINS_SHOULDERS_R: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-    Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0 },
-    Shoulder { style: theme::SHOULDER_POLES,     repeat: 12 },
-    Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0 },
+    Shoulder {
+        style: theme::SHOULDER_SOFT_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_POLES,
+        repeat: 12,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
 ];
 const DESERT_SHOULDERS_BOTH: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_SAND_EDGE, repeat: 0 },
-    Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0 },
+    Shoulder {
+        style: theme::SHOULDER_SAND_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
 ];
 
 // ─── Stages ──────────────────────────────────────────────────────────────────
@@ -177,13 +207,21 @@ const S01_CHICAGO: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 80.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[CHICAGO_LANE_OUT, CHICAGO_LANE_OUT],
             incoming: &[CHICAGO_LANE_IN, CHICAGO_LANE_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: CITY_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: CITY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -194,13 +232,21 @@ const S02_ILLINOIS: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 480.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[INTERSTATE_OUT, INTERSTATE_OUT],
             incoming: &[INTERSTATE_IN, INTERSTATE_IN],
         },
-        sceneries: Sceneries { left: PLAINS_SCENERY, right: PLAINS_SCENERY },
-        shoulders: Shoulders { left: PLAINS_SHOULDERS_L, right: PLAINS_SHOULDERS_R },
+        sceneries: Sceneries {
+            left: PLAINS_SCENERY,
+            right: PLAINS_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: PLAINS_SHOULDERS_L,
+            right: PLAINS_SHOULDERS_R,
+        },
     },
 };
 
@@ -211,13 +257,21 @@ const S03_ST_LOUIS: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 60.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[CHICAGO_LANE_OUT],
             incoming: &[CHICAGO_LANE_IN],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: CITY_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: CITY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -228,12 +282,17 @@ const S04_MISSOURI: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 250.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[R66_BLACKTOP],
             incoming: &[R66_BLACKTOP],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: FOREST_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: FOREST_SCENERY,
+        },
         shoulders: Shoulders {
             left: RURAL_SHOULDERS,
             right: RURAL_SHOULDERS,
@@ -248,13 +307,21 @@ const S05_OKLAHOMA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 540.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[PLAINS_OUT],
             incoming: &[PLAINS_IN],
         },
-        sceneries: Sceneries { left: PLAINS_SCENERY, right: PLAINS_SCENERY },
-        shoulders: Shoulders { left: PLAINS_SHOULDERS_L, right: PLAINS_SHOULDERS_R },
+        sceneries: Sceneries {
+            left: PLAINS_SCENERY,
+            right: PLAINS_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: PLAINS_SHOULDERS_L,
+            right: PLAINS_SHOULDERS_R,
+        },
     },
 };
 
@@ -265,13 +332,21 @@ const S06_TEXAS: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 320.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[INTERSTATE_OUT, INTERSTATE_OUT],
             incoming: &[INTERSTATE_IN, INTERSTATE_IN],
         },
-        sceneries: Sceneries { left: PLAINS_SCENERY, right: PLAINS_SCENERY },
-        shoulders: Shoulders { left: PLAINS_SHOULDERS_L, right: PLAINS_SHOULDERS_R },
+        sceneries: Sceneries {
+            left: PLAINS_SCENERY,
+            right: PLAINS_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: PLAINS_SHOULDERS_L,
+            right: PLAINS_SHOULDERS_R,
+        },
     },
 };
 
@@ -282,13 +357,21 @@ const S07_AMARILLO: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 60.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[TOWN_LANE, TOWN_LANE],
             incoming: &[TOWN_LANE],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: RURAL_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: RURAL_SHOULDERS },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: RURAL_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: RURAL_SHOULDERS,
+        },
     },
 };
 
@@ -299,13 +382,21 @@ const S08_NEW_MEXICO: Stage = Stage {
     theme: Theme::Desert,
     distance_km: 510.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[DESERT_OUT],
             incoming: &[DESERT_IN],
         },
-        sceneries: Sceneries { left: SOUTHWESTERN_SCENERY, right: SOUTHWESTERN_SCENERY },
-        shoulders: Shoulders { left: DESERT_SHOULDERS_BOTH, right: DESERT_SHOULDERS_BOTH },
+        sceneries: Sceneries {
+            left: SOUTHWESTERN_SCENERY,
+            right: SOUTHWESTERN_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: DESERT_SHOULDERS_BOTH,
+            right: DESERT_SHOULDERS_BOTH,
+        },
     },
 };
 
@@ -316,13 +407,21 @@ const S09_ALBUQUERQUE: Stage = Stage {
     theme: Theme::Desert,
     distance_km: 60.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[TOWN_LANE],
             incoming: &[TOWN_LANE],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: SOUTHWESTERN_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: DESERT_SHOULDERS_BOTH },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: SOUTHWESTERN_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: DESERT_SHOULDERS_BOTH,
+        },
     },
 };
 
@@ -333,13 +432,21 @@ const S10_ARIZONA: Stage = Stage {
     theme: Theme::Desert,
     distance_km: 530.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[DESERT_OUT],
             incoming: &[DESERT_IN],
         },
-        sceneries: Sceneries { left: SOUTHWESTERN_SCENERY, right: SOUTHWESTERN_SCENERY },
-        shoulders: Shoulders { left: DESERT_SHOULDERS_BOTH, right: DESERT_SHOULDERS_BOTH },
+        sceneries: Sceneries {
+            left: SOUTHWESTERN_SCENERY,
+            right: SOUTHWESTERN_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: DESERT_SHOULDERS_BOTH,
+            right: DESERT_SHOULDERS_BOTH,
+        },
     },
 };
 
@@ -350,13 +457,21 @@ const S11_MOJAVE: Stage = Stage {
     theme: Theme::Desert,
     distance_km: 270.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[MOJAVE_LANE],
             incoming: &[MOJAVE_LANE_IN],
         },
-        sceneries: Sceneries { left: DESERT_SCENERY, right: SOUTHWESTERN_SCENERY },
-        shoulders: Shoulders { left: DESERT_SHOULDERS_BOTH, right: DESERT_SHOULDERS_BOTH },
+        sceneries: Sceneries {
+            left: DESERT_SCENERY,
+            right: SOUTHWESTERN_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: DESERT_SHOULDERS_BOTH,
+            right: DESERT_SHOULDERS_BOTH,
+        },
     },
 };
 
@@ -371,7 +486,10 @@ const S12_SAN_BERNARDINO: Stage = Stage {
             outgoing: &[LA_LANE_OUT, LA_LANE_OUT],
             incoming: &[LA_LANE_IN, LA_LANE_IN],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: TOWN_SCENERY },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: TOWN_SCENERY,
+        },
         ..ROAD_CITY_2X2
     },
 };
@@ -387,7 +505,10 @@ const S13_SANTA_MONICA: Stage = Stage {
             outgoing: &[LA_LANE_OUT, LA_LANE_OUT],
             incoming: &[LA_LANE_IN, LA_LANE_IN],
         },
-        sceneries: Sceneries { left: COASTAL_SCENERY, right: CITY_SCENERY },
+        sceneries: Sceneries {
+            left: COASTAL_SCENERY,
+            right: CITY_SCENERY,
+        },
         ..ROAD_CITY_2X2
     },
 };

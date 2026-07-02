@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use super::state::{App, GAME_SELECTION_TRAFFIC, GAME_SELECTION_SNAKE, GAME_SELECTION_TETRIS};
+use super::state::{App, GAME_SELECTION_SNAKE, GAME_SELECTION_TETRIS, GAME_SELECTION_TRAFFIC};
 use crate::app::activity::channel::ACTIVITY_HISTORY_MAX_EVENTS;
 use crate::app::activity::event::ActivityKind;
 use crate::app::activity::filter::ActivityFilter;

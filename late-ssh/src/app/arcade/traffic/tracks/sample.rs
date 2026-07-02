@@ -4,30 +4,46 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
 use crate::app::arcade::traffic::track::{
-    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect,
-    Sceneries, Shoulders, Stage, Theme, Track,
+    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulders, Stage, Theme,
+    Track,
 };
 
 // ─── Per-stage road geometries ───────────────────────────────────────────────
 
 const CITY_ROAD: Road = Road {
-    aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: URBAN_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[CITY_LANE, CITY_LANE],
         outgoing: &[CITY_LANE, CITY_LANE],
     },
-    sceneries: Sceneries { left: CITY_SCENERY, right: CITY_SCENERY },
-    shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+    sceneries: Sceneries {
+        left: CITY_SCENERY,
+        right: CITY_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: SIDEWALK_SHOULDERS,
+        right: SIDEWALK_SHOULDERS,
+    },
 };
 
 const HIGHWAY_ROAD: Road = Road {
-    aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: HIGHWAY_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[HIGHWAY_LANE, HIGHWAY_LANE],
         outgoing: &[HIGHWAY_LANE, HIGHWAY_LANE, HIGHWAY_LANE],
     },
-    sceneries: Sceneries { left: HIGHWAY_SCENERY, right: HIGHWAY_SCENERY },
-    shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: HIGHWAY_SHOULDERS },
+    sceneries: Sceneries {
+        left: HIGHWAY_SCENERY,
+        right: HIGHWAY_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: HIGHWAY_SHOULDERS,
+        right: HIGHWAY_SHOULDERS,
+    },
 };
 
 const RURAL_LANE_BUMPY: Lane = Lane {
@@ -47,13 +63,21 @@ const RURAL_LANE_BUMPY: Lane = Lane {
 };
 
 const RURAL_ROAD: Road = Road {
-    aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: RURAL_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[RURAL_LANE_BUMPY],
         outgoing: &[RURAL_LANE_BUMPY],
     },
-    sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
-    shoulders: Shoulders { left: RURAL_SHOULDERS, right: RURAL_SHOULDERS },
+    sceneries: Sceneries {
+        left: RURAL_SCENERY,
+        right: RURAL_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: RURAL_SHOULDERS,
+        right: RURAL_SHOULDERS,
+    },
 };
 
 const FOREST_LANE_HAZARD: Lane = Lane {
@@ -73,13 +97,21 @@ const FOREST_LANE_HAZARD: Lane = Lane {
 };
 
 const FOREST_ROAD: Road = Road {
-    aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+    aspect: RoadAspect {
+        dividers: FOREST_DIVIDERS,
+    },
     lanes: Lanes {
         incoming: &[FOREST_LANE_HAZARD],
         outgoing: &[FOREST_LANE_HAZARD],
     },
-    sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
-    shoulders: Shoulders { left: FOREST_SHOULDERS, right: FOREST_SHOULDERS },
+    sceneries: Sceneries {
+        left: FOREST_SCENERY,
+        right: FOREST_SCENERY,
+    },
+    shoulders: Shoulders {
+        left: FOREST_SHOULDERS,
+        right: FOREST_SHOULDERS,
+    },
 };
 
 // ─── Track ───────────────────────────────────────────────────────────────────
@@ -87,8 +119,7 @@ const FOREST_ROAD: Road = Road {
 pub const TRACK: Track = Track {
     name: "Sample",
     author: "odd",
-    description:
-        "A 60-km drive through city, highway, country and snowy forest. \
+    description: "A 60-km drive through city, highway, country and snowy forest. \
          Touches every stage feature — good for testing.",
     stages: &[
         Stage {

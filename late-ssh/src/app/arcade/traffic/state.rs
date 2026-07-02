@@ -117,7 +117,10 @@ pub enum Phase {
     /// Survived a crash with lives remaining: frozen behind a popup until the
     /// player dismisses it (any key), then resumes into a brief recovery flash.
     Crashed,
-    Finished { elapsed_s: f32, score: i64 },
+    Finished {
+        elapsed_s: f32,
+        score: i64,
+    },
     Dead,
 }
 
@@ -249,13 +252,18 @@ impl State {
 
     pub fn picker_move(&mut self, delta: i32) {
         let len = ALL_TRACKS.len() as i32;
-        if len == 0 { return; }
+        if len == 0 {
+            return;
+        }
         let cur = self.picker_selected_idx as i32;
         self.picker_selected_idx = ((cur + delta).rem_euclid(len)) as usize;
     }
 
     pub fn start_selected_track(&mut self) {
-        let track = ALL_TRACKS.get(self.picker_selected_idx).copied().unwrap_or(DEFAULT_TRACK);
+        let track = ALL_TRACKS
+            .get(self.picker_selected_idx)
+            .copied()
+            .unwrap_or(DEFAULT_TRACK);
         self.start_track(track);
     }
 
@@ -327,11 +335,15 @@ impl State {
     }
 
     pub fn total_lanes(&self) -> usize {
-        self.current_stage().map(|s| s.road.lanes.total()).unwrap_or(0)
+        self.current_stage()
+            .map(|s| s.road.lanes.total())
+            .unwrap_or(0)
     }
 
     pub fn lanes_incoming(&self) -> usize {
-        self.current_stage().map(|s| s.road.lanes.incoming.len()).unwrap_or(0)
+        self.current_stage()
+            .map(|s| s.road.lanes.incoming.len())
+            .unwrap_or(0)
     }
 
     pub fn direction_of(&self, lane_idx: usize) -> TrafficDir {
@@ -359,7 +371,9 @@ impl State {
     }
 
     pub fn track_total_km(&self) -> f32 {
-        self.active_track.map(|t| t.total_distance_km()).unwrap_or(0.0)
+        self.active_track
+            .map(|t| t.total_distance_km())
+            .unwrap_or(0.0)
     }
 
     pub fn current_stage_km(&self) -> f32 {
@@ -379,21 +393,26 @@ impl State {
     }
 
     pub fn move_left(&mut self) {
-        if !self.is_playing() || self.is_paused || self.wheels_blocked() { return; }
+        if !self.is_playing() || self.is_paused || self.wheels_blocked() {
+            return;
+        }
         if self.player_lane_idx > 0 {
             self.player_lane_idx -= 1;
         }
     }
 
     pub fn move_right(&mut self) {
-        if !self.is_playing() || self.is_paused || self.wheels_blocked() { return; }
+        if !self.is_playing() || self.is_paused || self.wheels_blocked() {
+            return;
+        }
         if self.player_lane_idx + 1 < self.total_lanes() {
             self.player_lane_idx += 1;
         }
     }
 
     fn wheels_blocked(&self) -> bool {
-        self.wheel_blocked_until.map_or(false, |t| Instant::now() < t)
+        self.wheel_blocked_until
+            .map_or(false, |t| Instant::now() < t)
     }
 
     fn gas_blocked(&self) -> bool {
@@ -401,7 +420,8 @@ impl State {
     }
 
     fn brake_blocked(&self) -> bool {
-        self.brake_blocked_until.map_or(false, |t| Instant::now() < t)
+        self.brake_blocked_until
+            .map_or(false, |t| Instant::now() < t)
     }
 
     pub fn set_input(&mut self, input: PlayerInput) {
@@ -410,7 +430,9 @@ impl State {
             PlayerInput::Brake | PlayerInput::Handbrake => !self.brake_blocked(),
             PlayerInput::None => true,
         };
-        if !allowed { return; }
+        if !allowed {
+            return;
+        }
         self.input = input;
         self.input_last_set = Some(Instant::now());
     }
@@ -418,7 +440,9 @@ impl State {
     // ─── Tick ─────────────────────────────────────────────────────────────────
 
     pub fn tick(&mut self) {
-        if !self.is_playing() || self.is_paused { return; }
+        if !self.is_playing() || self.is_paused {
+            return;
+        }
         let dt = Config::TICK_DT;
 
         if let Some(t) = self.input_last_set {
@@ -454,8 +478,7 @@ impl State {
             }
             PlayerInput::None => {
                 if passive > 0.0 && self.player_speed_kmh > own_min {
-                    self.player_speed_kmh =
-                        (self.player_speed_kmh - passive * dt).max(own_min);
+                    self.player_speed_kmh = (self.player_speed_kmh - passive * dt).max(own_min);
                 }
             }
         }
@@ -494,7 +517,9 @@ impl State {
 
         // An obstacle crash may have ended play (Crashed/Dead); stop here so the
         // later collision check can't spend a second life in the same tick.
-        if !matches!(self.phase, Phase::Playing) { return; }
+        if !matches!(self.phase, Phase::Playing) {
+            return;
+        }
 
         if let Some(stage) = self.current_stage() {
             let stage_distance_m = stage.distance_km * 1000.0 * self.distance_scale();
@@ -513,7 +538,10 @@ impl State {
             if self.player_pos_m >= total_m {
                 let score = track.grade_time(self.elapsed_s);
                 self.score = score;
-                self.phase = Phase::Finished { elapsed_s: self.elapsed_s, score };
+                self.phase = Phase::Finished {
+                    elapsed_s: self.elapsed_s,
+                    score,
+                };
                 self.record_best();
             }
         }
@@ -528,8 +556,12 @@ impl State {
     /// crashing/dying yields nothing. The Traffic high score is the sum of all
     /// per-track bests.
     fn record_best(&mut self) {
-        let Some(track) = self.active_track else { return; };
-        let Phase::Finished { score, .. } = self.phase else { return; };
+        let Some(track) = self.active_track else {
+            return;
+        };
+        let Phase::Finished { score, .. } = self.phase else {
+            return;
+        };
         let entry = self.best_scores.entry(track.name).or_insert(0);
         if score > *entry {
             *entry = score;
@@ -541,15 +573,22 @@ impl State {
     }
 
     fn advance_stage(&mut self) {
-        let Some(track) = self.active_track else { return; };
-        let stage_m = track.stages[self.current_stage_idx].distance_km
-            * 1000.0
-            * self.distance_scale();
+        let Some(track) = self.active_track else {
+            return;
+        };
+        let stage_m =
+            track.stages[self.current_stage_idx].distance_km * 1000.0 * self.distance_scale();
         let overflow = (self.stage_traveled_m - stage_m).max(0.0);
         let next_idx = self.current_stage_idx + 1;
-        if next_idx >= track.stages.len() { return; }
+        if next_idx >= track.stages.len() {
+            return;
+        }
 
-        let old_incoming = track.stages[self.current_stage_idx].road.lanes.incoming.len();
+        let old_incoming = track.stages[self.current_stage_idx]
+            .road
+            .lanes
+            .incoming
+            .len();
 
         self.current_stage_idx = next_idx;
         self.stage_traveled_m = overflow;
@@ -563,12 +602,16 @@ impl State {
         // a side that the new stage has no lanes for are dropped.
         self.ai_cars.retain_mut(|car| {
             if car.lane_idx < old_incoming {
-                if new_incoming == 0 { return false; }
+                if new_incoming == 0 {
+                    return false;
+                }
                 car.lane_idx = car.lane_idx.min(new_incoming - 1);
                 car.direction = TrafficDir::Oncoming;
             } else {
                 let outgoing_idx = car.lane_idx - old_incoming;
-                if new_outgoing == 0 { return false; }
+                if new_outgoing == 0 {
+                    return false;
+                }
                 car.lane_idx = new_incoming + outgoing_idx.min(new_outgoing - 1);
                 car.direction = TrafficDir::Same;
             }
@@ -588,8 +631,7 @@ impl State {
         let player_pos = self.player_pos_m;
         let clear_half = Config::INITIAL_SKIP_M * 0.5;
         self.ai_cars.retain(|car| {
-            car.lane_idx != player_lane
-                || (car.pos_m - player_pos).abs() > clear_half
+            car.lane_idx != player_lane || (car.pos_m - player_pos).abs() > clear_half
         });
 
         self.obstacles.clear();
@@ -622,7 +664,9 @@ impl State {
 
             let mut nearest: Option<(f32, f32)> = None;
             for (j, &(jpos, jlane, jdir, jspeed, jhalf)) in snap.iter().enumerate() {
-                if i == j || jlane != car.lane_idx { continue; }
+                if i == j || jlane != car.lane_idx {
+                    continue;
+                }
                 let j_back = match jdir {
                     TrafficDir::Same => jpos - jhalf,
                     TrafficDir::Oncoming => jpos + jhalf,
@@ -631,7 +675,9 @@ impl State {
                     TrafficDir::Same => j_back - my_front,
                     TrafficDir::Oncoming => my_front - j_back,
                 };
-                if gap <= 0.0 { continue; }
+                if gap <= 0.0 {
+                    continue;
+                }
                 if nearest.map_or(true, |(g, _)| gap < g) {
                     nearest = Some((gap, jspeed));
                 }
@@ -654,12 +700,16 @@ impl State {
         let p_top = Config::PLAYER_TOP_ROW as i32;
         let p_bot = p_top + Config::CAR_HEIGHT_ROWS as i32 - 1;
         for car in &self.ai_cars {
-            if car.lane_idx != self.player_lane_idx { continue; }
+            if car.lane_idx != self.player_lane_idx {
+                continue;
+            }
             let center = self.track_to_screen_row(car.pos_m);
             let h = car.height_rows as i32;
             let top = center - h / 2;
             let bot = top + h - 1;
-            if top <= p_bot && bot >= p_top { return true; }
+            if top <= p_bot && bot >= p_top {
+                return true;
+            }
         }
         false
     }
@@ -691,7 +741,9 @@ impl State {
 
     /// Dismiss the crash popup: resume play and start the recovery flash.
     pub fn resume_from_crash(&mut self) {
-        if !matches!(self.phase, Phase::Crashed) { return; }
+        if !matches!(self.phase, Phase::Crashed) {
+            return;
+        }
         self.phase = Phase::Playing;
         self.flash_until = Some(Instant::now() + Duration::from_millis(Config::CRASH_FLASH_MS));
         self.input = PlayerInput::None;
@@ -709,7 +761,9 @@ impl State {
         match self.flash_until {
             Some(t) => {
                 let now = Instant::now();
-                if now >= t { return true; }
+                if now >= t {
+                    return true;
+                }
                 let remaining_ms = (t - now).as_millis();
                 (remaining_ms / 150) % 2 == 0
             }
@@ -718,17 +772,20 @@ impl State {
     }
 
     fn manage_ai(&mut self) {
-        let Some(stage) = self.current_stage() else { return; };
+        let Some(stage) = self.current_stage() else {
+            return;
+        };
         let lanes = stage.road.lanes;
         let total_lanes = lanes.total();
-        if total_lanes == 0 { return; }
+        if total_lanes == 0 {
+            return;
+        }
 
         let player_pos = self.player_pos_m;
 
         // Despawn cars that fell too far behind or are in lanes that no longer exist.
         self.ai_cars.retain(|car| {
-            car.pos_m > player_pos - Config::AI_DESPAWN_BEHIND_M
-                && car.lane_idx < total_lanes
+            car.pos_m > player_pos - Config::AI_DESPAWN_BEHIND_M && car.lane_idx < total_lanes
         });
 
         // Initial fill: on the very first tick of a race the car list is empty.
@@ -736,25 +793,32 @@ impl State {
         // so the road isn't bare at start. Ongoing: spawn only beyond the
         // minimap so new cars scroll in naturally from ahead.
         let is_initial_fill = self.ai_cars.is_empty();
-        let spawn_min = player_pos + if is_initial_fill {
-            Config::INITIAL_SKIP_M
-        } else {
-            Config::MINIMAP_RANGE_M
-        };
+        let spawn_min = player_pos
+            + if is_initial_fill {
+                Config::INITIAL_SKIP_M
+            } else {
+                Config::MINIMAP_RANGE_M
+            };
         let spawn_max = player_pos + Config::SPAWN_AHEAD_M;
 
-        if spawn_max <= spawn_min { return; }
+        if spawn_max <= spawn_min {
+            return;
+        }
 
         let mut rng = rand::thread_rng();
 
         // Count current cars per lane.
         let mut per_lane = vec![0usize; total_lanes];
-        for c in &self.ai_cars { per_lane[c.lane_idx] += 1; }
+        for c in &self.ai_cars {
+            per_lane[c.lane_idx] += 1;
+        }
 
         for lane_idx in 0..total_lanes {
             let lane = lanes.get(lane_idx).expect("idx in range");
             let target = density_to_count(lane.traffic_density);
-            if per_lane[lane_idx] >= target { continue; }
+            if per_lane[lane_idx] >= target {
+                continue;
+            }
 
             let direction = self.direction_of(lane_idx);
             let needed = target - per_lane[lane_idx];
@@ -766,9 +830,13 @@ impl State {
             let mut placed = 0;
 
             for _ in 0..max_attempts {
-                if placed >= to_place { break; }
+                if placed >= to_place {
+                    break;
+                }
                 let pos = spawn_min + rng.r#gen::<f32>() * (spawn_max - spawn_min);
-                if !self.spawn_clear(pos, lane_idx, direction) { continue; }
+                if !self.spawn_clear(pos, lane_idx, direction) {
+                    continue;
+                }
                 let cruise = rng.gen_range(
                     lane.traffic_min_speed
                         ..=lane.traffic_max_speed.max(lane.traffic_min_speed + 1.0),
@@ -797,7 +865,9 @@ impl State {
     // ─── Obstacles ────────────────────────────────────────────────────────────
 
     fn spawn_obstacles_ahead(&mut self) {
-        let Some(stage) = self.current_stage() else { return; };
+        let Some(stage) = self.current_stage() else {
+            return;
+        };
         let lanes = stage.road.lanes;
         let target_max_m = self.player_pos_m + Config::MINIMAP_RANGE_M;
 
@@ -805,13 +875,18 @@ impl State {
         while self.obstacle_seed_m < target_max_m {
             let slot = (self.obstacle_seed_m / SLOT_M) as i64 ^ self.scenery_seed as i64;
             for lane_idx in 0..lanes.total() {
-                let lane = match lanes.get(lane_idx) { Some(l) => l, None => continue };
+                let lane = match lanes.get(lane_idx) {
+                    Some(l) => l,
+                    None => continue,
+                };
                 for ob in lane.obstacles {
                     let h = hash3(slot, lane_idx as i64, ob.style.id);
                     let p = (h % 10_000) as f32 / 10_000.0;
                     if p < ob.frequency {
                         let pos = self.obstacle_seed_m + (h as u64 % SLOT_M as u64) as f32;
-                        if self.is_near_stage_boundary(pos) { continue; }
+                        if self.is_near_stage_boundary(pos) {
+                            continue;
+                        }
                         self.obstacles.push(SpawnedObstacle {
                             style: ob.style,
                             effects: ob.effects,
@@ -836,7 +911,9 @@ impl State {
 
         let mut triggered: Vec<(&'static str, &'static [ObstacleEffect])> = Vec::new();
         for obs in self.obstacles.iter_mut() {
-            if obs.triggered || obs.lane_idx != self.player_lane_idx { continue; }
+            if obs.triggered || obs.lane_idx != self.player_lane_idx {
+                continue;
+            }
             if obs.pos_m >= p_back && obs.pos_m <= p_front {
                 obs.triggered = true;
                 triggered.push((obs.style.label, obs.effects));
@@ -878,8 +955,12 @@ impl State {
 
     /// Push a labelled effect into the right-panel log, capping at capacity.
     fn push_effect(&mut self, label: &'static str) {
-        self.recent_effects.push_front(RecentEffect { label, at: Instant::now() });
-        self.recent_effects.truncate(Config::RECENT_EFFECTS_CAPACITY);
+        self.recent_effects.push_front(RecentEffect {
+            label,
+            at: Instant::now(),
+        });
+        self.recent_effects
+            .truncate(Config::RECENT_EFFECTS_CAPACITY);
     }
 
     // ─── Geometry helpers (used by ui.rs) ────────────────────────────────────
@@ -890,9 +971,13 @@ impl State {
     }
 
     pub fn progress_pct(&self) -> f32 {
-        let Some(track) = self.active_track else { return 0.0; };
+        let Some(track) = self.active_track else {
+            return 0.0;
+        };
         let total_m = track.total_distance_km() * 1000.0 * self.distance_scale();
-        if total_m == 0.0 { return 0.0; }
+        if total_m == 0.0 {
+            return 0.0;
+        }
         (self.player_pos_m.max(0.0) / total_m * 100.0).clamp(0.0, 100.0)
     }
 
@@ -907,17 +992,26 @@ impl State {
     /// Absolute `player_pos_m` value at which stage `idx` begins.
     /// Stage 0 always starts at 0 (the pre-stage zone is before that).
     pub fn stage_start_pos_m(&self, idx: usize) -> f32 {
-        let Some(track) = self.active_track else { return 0.0; };
+        let Some(track) = self.active_track else {
+            return 0.0;
+        };
         let scale = self.distance_scale();
-        track.stages[..idx].iter().map(|s| s.distance_km * 1000.0 * scale).sum()
+        track.stages[..idx]
+            .iter()
+            .map(|s| s.distance_km * 1000.0 * scale)
+            .sum()
     }
 
     fn is_near_stage_boundary(&self, pos: f32) -> bool {
-        let Some(track) = self.active_track else { return false; };
+        let Some(track) = self.active_track else {
+            return false;
+        };
         let scale = self.distance_scale();
         let mut boundary = 0.0f32;
         for stage in track.stages {
-            if (pos - boundary).abs() < Config::STAGE_CLEAR_M { return true; }
+            if (pos - boundary).abs() < Config::STAGE_CLEAR_M {
+                return true;
+            }
             boundary += stage.distance_km * 1000.0 * scale;
         }
         (pos - boundary).abs() < Config::STAGE_CLEAR_M
@@ -932,12 +1026,18 @@ fn density_to_count(density: f32) -> usize {
 }
 
 fn pick_car_height(cars: &[super::track::Car], rng: &mut impl Rng) -> u8 {
-    if cars.is_empty() { return 3; }
+    if cars.is_empty() {
+        return 3;
+    }
     let total: f32 = cars.iter().map(|c| c.incidence).sum();
-    if total <= 0.0 { return cars[0].height; }
+    if total <= 0.0 {
+        return cars[0].height;
+    }
     let mut r: f32 = rng.r#gen::<f32>() * total;
     for c in cars {
-        if r < c.incidence { return c.height; }
+        if r < c.incidence {
+            return c.height;
+        }
         r -= c.incidence;
     }
     cars[cars.len() - 1].height

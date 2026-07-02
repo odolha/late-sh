@@ -1,18 +1,19 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
-use crate::app::arcade::traffic::track::{Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulder, Shoulders, Stage, Theme, Track};
+use crate::app::arcade::traffic::track::{
+    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulder, Shoulders, Stage,
+    Theme, Track,
+};
 
 // PRESETS
 
 const B_CITY_LANE: Lane = Lane {
     own_max_speed: 120.0,
-    obstacles: &[
-        Obstacle {
-            style: theme::OBSTACLE_POTHOLE_SMALL,
-            frequency: 0.02,
-            effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
-        }
-    ],
+    obstacles: &[Obstacle {
+        style: theme::OBSTACLE_POTHOLE_SMALL,
+        frequency: 0.02,
+        effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
+    }],
     ..CITY_LANE
 };
 
@@ -45,7 +46,7 @@ const B_TOWN_LANE: Lane = Lane {
             style: theme::OBSTACLE_SPEED_BUMP,
             frequency: 0.01,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.8 }],
-        }
+        },
     ],
     ..CITY_LANE
 };
@@ -73,7 +74,7 @@ const B_OUTSKIRT_LANE: Lane = Lane {
             style: theme::OBSTACLE_POTHOLE_SMALL,
             frequency: 0.03,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
-        }
+        },
     ],
     ..CITY_LANE
 };
@@ -101,7 +102,7 @@ const B_OUTSIDE_LANE: Lane = Lane {
             style: theme::OBSTACLE_POTHOLE_BIG,
             frequency: 0.02,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.6 }],
-        }
+        },
     ],
     ..CITY_LANE
 };
@@ -158,7 +159,7 @@ const B_RURAL_LANE: Lane = Lane {
             style: theme::OBSTACLE_POTHOLE_SMALL,
             frequency: 0.1,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
-        }
+        },
     ],
 };
 
@@ -186,7 +187,7 @@ const B_RURAL_LANE_OUT_SLOW: Lane = Lane {
             style: theme::OBSTACLE_POTHOLE_SMALL,
             frequency: 0.3,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
-        }
+        },
     ],
     ..B_RURAL_LANE_OUT
 };
@@ -218,7 +219,7 @@ const B_RURAL_LANE_IN_SLOW: Lane = Lane {
             style: theme::OBSTACLE_POTHOLE_SMALL,
             frequency: 0.3,
             effects: &[ObstacleEffect::SpeedChange { affect: -0.3 }],
-        }
+        },
     ],
     ..B_RURAL_LANE_IN
 };
@@ -232,26 +233,46 @@ const S01_CLUJ: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_CITY_LANE_OUT, B_CITY_LANE_OUT],
             incoming: &[B_CITY_LANE_IN, B_CITY_LANE_IN],
         },
         sceneries: Sceneries {
             left: CITY_SCENERY,
-            right: CITY_SCENERY
+            right: CITY_SCENERY,
         },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_SIDEWALK,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_HARD_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_SIDEWALK,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_SIDEWALK,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_HARD_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_SIDEWALK,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -263,24 +284,50 @@ const S02_SANNICOARA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSKIRT_LANE_OUT],
             incoming: &[B_OUTSKIRT_LANE_IN, B_OUTSKIRT_LANE_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: HIGHWAY_SCENERY },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: HIGHWAY_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_SIDEWALK,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_SIDEWALK,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_POLES,  repeat: 20 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_POLES,
+                    repeat: 20,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -292,26 +339,58 @@ const S03_APAHIDA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 3.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSKIRT_LANE_OUT],
             incoming: &[B_OUTSKIRT_LANE_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: HIGHWAY_SCENERY },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: HIGHWAY_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_SIDEWALK,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_SIDEWALK,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_TREE_OAK, repeat: 1 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_TREE_OAK,
+                    repeat: 1,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -323,23 +402,50 @@ const S04_JUCU: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 4.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
-            outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
+            outgoing: &[
+                B_OUTSIDE_LANE_OUT,
+                B_OUTSIDE_LANE_OUT,
+                B_OUTSIDE_LANE_OUT_SLOW,
+            ],
             incoming: &[B_OUTSIDE_LANE_IN, B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -351,23 +457,46 @@ const S05_E576_1: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 7.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
             incoming: &[B_OUTSIDE_LANE_IN, B_OUTSIDE_LANE_IN_SLOW],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -379,25 +508,54 @@ const S06_RASCRUCI: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RIVER,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RIVER,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -409,24 +567,50 @@ const S07_BONTIDA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -438,25 +622,54 @@ const S08_FUNDATURA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RIVER,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RIVER,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -468,25 +681,54 @@ const S09_ICLOD: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: VILLAGE_SCENERY, right: VILLAGE_SCENERY },
+        sceneries: Sceneries {
+            left: VILLAGE_SCENERY,
+            right: VILLAGE_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RIVER,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RIVER,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -498,26 +740,58 @@ const S10_LIVADA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT, B_OUTSIDE_LANE_OUT_SLOW],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: VILLAGE_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: VILLAGE_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RIVER,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RIVER,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -529,30 +803,61 @@ const S11_BAITA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RIVER,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RIVER,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
-
 
 const S12_GHERLA: Stage = Stage {
     name: "Gherla",
@@ -561,24 +866,50 @@ const S12_GHERLA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 5.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_TOWN_LANE_OUT, B_TOWN_LANE_OUT],
             incoming: &[B_TOWN_LANE_IN, B_TOWN_LANE_IN],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: TOWN_SCENERY },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: TOWN_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_PARKED_CAR, repeat: 4 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_HARD_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_PARKED_CAR,
+                    repeat: 4,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_SIDEWALK, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_HARD_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_SIDEWALK,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -590,24 +921,50 @@ const S13_E576_2: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_TREE_OAK, repeat: 3 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_TREE_OAK,
+                    repeat: 3,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -619,25 +976,54 @@ const S14_DEJ: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 3.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSKIRT_LANE_OUT, B_OUTSKIRT_LANE_OUT],
             incoming: &[B_OUTSKIRT_LANE_IN, B_OUTSKIRT_LANE_IN],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: RURAL_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_TREE_OAK, repeat: 3 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_TREE_OAK,
+                    repeat: 3,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_TREE_OAK, repeat: 3 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RAILROAD,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_TREE_OAK,
+                    repeat: 3,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RAILROAD,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -649,24 +1035,50 @@ const S15_MANASTIREA: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT],
             incoming: &[B_OUTSIDE_LANE_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: FOREST_SCENERY },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: FOREST_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_RIVER,  repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_RIVER,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -678,21 +1090,38 @@ const S16_DJ161D_1: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 7.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT_SLOW],
             incoming: &[B_OUTSIDE_LANE_IN_SLOW],
         },
-        sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
+        sceneries: Sceneries {
+            left: FOREST_SCENERY,
+            right: FOREST_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -704,21 +1133,38 @@ const S17_NIRES: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_RURAL_LANE_OUT],
             incoming: &[B_RURAL_LANE_IN],
         },
-        sceneries: Sceneries { left: FOREST_SCENERY, right: VILLAGE_SCENERY },
+        sceneries: Sceneries {
+            left: FOREST_SCENERY,
+            right: VILLAGE_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -730,16 +1176,20 @@ const S18_DJ161D_2: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 5.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_OUTSIDE_LANE_OUT_SLOW],
             incoming: &[B_OUTSIDE_LANE_IN_SLOW],
         },
-        sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
+        sceneries: Sceneries {
+            left: FOREST_SCENERY,
+            right: FOREST_SCENERY,
+        },
         shoulders: NO_SHOULDERS,
     },
 };
-
 
 const S19_UNGURAS: Stage = Stage {
     name: "Unguras",
@@ -748,21 +1198,38 @@ const S19_UNGURAS: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 4.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_RURAL_LANE_OUT],
             incoming: &[B_RURAL_LANE_IN],
         },
-        sceneries: Sceneries { left: VILLAGE_SCENERY, right: VILLAGE_SCENERY },
+        sceneries: Sceneries {
+            left: VILLAGE_SCENERY,
+            right: VILLAGE_SCENERY,
+        },
         shoulders: Shoulders {
             left: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
             ],
             right: &[
-                Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0 },
-                Shoulder { style: theme::SHOULDER_EMPTY, repeat: 0 },
-            ]
+                Shoulder {
+                    style: theme::SHOULDER_SOFT_EDGE,
+                    repeat: 0,
+                },
+                Shoulder {
+                    style: theme::SHOULDER_EMPTY,
+                    repeat: 0,
+                },
+            ],
         },
     },
 };
@@ -774,12 +1241,17 @@ const S20_DJ161D_3: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 3.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_RURAL_LANE_OUT_SLOW],
             incoming: &[B_RURAL_LANE_IN_SLOW],
         },
-        sceneries: Sceneries { left: FOREST_SCENERY, right: FOREST_SCENERY },
+        sceneries: Sceneries {
+            left: FOREST_SCENERY,
+            right: FOREST_SCENERY,
+        },
         shoulders: NO_SHOULDERS,
     },
 };
@@ -791,12 +1263,17 @@ const S21_BATIN: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 2.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[B_RURAL_LANE_OUT_SLOW],
             incoming: &[B_RURAL_LANE_IN_SLOW],
         },
-        sceneries: Sceneries { left: FOREST_SCENERY, right: VILLAGE_SCENERY },
+        sceneries: Sceneries {
+            left: FOREST_SCENERY,
+            right: VILLAGE_SCENERY,
+        },
         shoulders: NO_SHOULDERS,
     },
 };

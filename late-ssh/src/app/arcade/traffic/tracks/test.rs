@@ -1,8 +1,8 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
 use crate::app::arcade::traffic::track::{
-    Car, Lane, Lanes, Object, Obstacle, ObstacleEffect,
-    Road, RoadAspect, Sceneries, Scenery, Shoulder, Shoulders, Stage, Theme, Track,
+    Car, Lane, Lanes, Object, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery,
+    Shoulder, Shoulders, Stage, Theme, Track,
 };
 
 const TEST_LANE: Lane = Lane {
@@ -14,10 +14,22 @@ const TEST_LANE: Lane = Lane {
     traffic_max_speed: 90.0,
     traffic_density: 0.4,
     traffic_cars: &[
-        Car { height: 3,  incidence: 0.4 },
-        Car { height: 5,  incidence: 0.4 },
-        Car { height: 1,  incidence: 0.1 },
-        Car { height: 10, incidence: 0.1 },
+        Car {
+            height: 3,
+            incidence: 0.4,
+        },
+        Car {
+            height: 5,
+            incidence: 0.4,
+        },
+        Car {
+            height: 1,
+            incidence: 0.1,
+        },
+        Car {
+            height: 10,
+            incidence: 0.1,
+        },
     ],
     obstacles: &[
         Obstacle {
@@ -57,52 +69,94 @@ pub const TRACK: Track = Track {
     name: "Test",
     author: "odd",
     description: "Test track",
-    stages: &[
-        Stage {
-            name: "Stage0",
-            description: "This is stage0 test.",
-            icon: "🏢",
-            theme: Theme::Desert,
-            distance_km: 20.0,
-            road: Road {
-                aspect: RoadAspect { dividers: URBAN_DIVIDERS },
-                lanes: Lanes {
-                    incoming: &[TEST_LANE, TEST_LANE],
-                    outgoing: &[TEST_LANE, TEST_LANE],
+    stages: &[Stage {
+        name: "Stage0",
+        description: "This is stage0 test.",
+        icon: "🏢",
+        theme: Theme::Desert,
+        distance_km: 20.0,
+        road: Road {
+            aspect: RoadAspect {
+                dividers: URBAN_DIVIDERS,
+            },
+            lanes: Lanes {
+                incoming: &[TEST_LANE, TEST_LANE],
+                outgoing: &[TEST_LANE, TEST_LANE],
+            },
+            sceneries: Sceneries {
+                left: Scenery {
+                    width: 16,
+                    background: theme::SCENERY_CONCRETE,
+                    objects: &[Object {
+                        style: theme::OBJ_BUILDING_HOUSE,
+                        incidence: 1.0,
+                    }],
                 },
-                sceneries: Sceneries {
-                    left: Scenery {
-                        width: 16,
-                        background: theme::SCENERY_CONCRETE,
-                        objects: &[Object { style: theme::OBJ_BUILDING_HOUSE, incidence: 1.0 }],
-                    },
-                    right: Scenery {
-                        width: 16,
-                        background: theme::SCENERY_CONCRETE,
-                        objects: &[Object { style: theme::OBJ_BUILDING_HOUSE, incidence: 1.0 }],
-                    },
-                },
-                shoulders: Shoulders {
-                    left: &[
-                        Shoulder { style: theme::SHOULDER_SOFT_EDGE,    repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_EMPTY,        repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_COUNTRY_ROAD, repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_EMPTY,        repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_TREE_PALM,    repeat: 10 },
-                        Shoulder { style: theme::SHOULDER_EMPTY,        repeat: 0  },
-                    ],
-                    right: &[
-                        Shoulder { style: theme::SHOULDER_SOFT_EDGE, repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_RIVER,     repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0  },
-                        Shoulder { style: theme::SHOULDER_TREE_PINE, repeat: 10 },
-                        Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0  },
-                    ],
+                right: Scenery {
+                    width: 16,
+                    background: theme::SCENERY_CONCRETE,
+                    objects: &[Object {
+                        style: theme::OBJ_BUILDING_HOUSE,
+                        incidence: 1.0,
+                    }],
                 },
             },
+            shoulders: Shoulders {
+                left: &[
+                    Shoulder {
+                        style: theme::SHOULDER_SOFT_EDGE,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_EMPTY,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_COUNTRY_ROAD,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_EMPTY,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_TREE_PALM,
+                        repeat: 10,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_EMPTY,
+                        repeat: 0,
+                    },
+                ],
+                right: &[
+                    Shoulder {
+                        style: theme::SHOULDER_SOFT_EDGE,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_EMPTY,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_RIVER,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_EMPTY,
+                        repeat: 0,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_TREE_PINE,
+                        repeat: 10,
+                    },
+                    Shoulder {
+                        style: theme::SHOULDER_EMPTY,
+                        repeat: 0,
+                    },
+                ],
+            },
         },
-    ],
+    }],
     distance_scale: 0.5,
     speed_scale: 1.0,
     lives: 3,

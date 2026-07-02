@@ -7,8 +7,8 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
 use crate::app::arcade::traffic::track::{
-    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulder, Shoulders,
-    Stage, Theme, Track,
+    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Shoulder, Shoulders, Stage,
+    Theme, Track,
 };
 
 // ─── Lane variants ───────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ const MOTORWAY_OUT: Lane = Lane {
     ..MOTORWAY_LANE
 };
 const MOTORWAY_IN: Lane = Lane {
-    own_max_speed: 230.0,  // wrong-side speed bonus: 200 → 230
+    own_max_speed: 230.0, // wrong-side speed bonus: 200 → 230
     traffic_density: 0.15,
     ..MOTORWAY_LANE
 };
@@ -82,7 +82,7 @@ const ALPINE_MOTORWAY_OUT: Lane = Lane {
     ..MOTORWAY_LANE
 };
 const ALPINE_MOTORWAY_IN: Lane = Lane {
-    own_max_speed: 225.0,  // wrong-side speed bonus: 200 → 225
+    own_max_speed: 225.0, // wrong-side speed bonus: 200 → 225
     traffic_density: 0.14,
     ..ALPINE_MOTORWAY_OUT
 };
@@ -145,21 +145,46 @@ const MONACO_LANE: Lane = Lane {
 // ─── Shoulder strips ─────────────────────────────────────────────────────────
 
 const ALPS_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_GUARDRAIL,     repeat: 0 },
-    Shoulder { style: theme::SHOULDER_EMPTY,         repeat: 0 },
-    Shoulder { style: theme::SHOULDER_TREE_PINE,     repeat: 6 },
+    Shoulder {
+        style: theme::SHOULDER_GUARDRAIL,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_TREE_PINE,
+        repeat: 6,
+    },
 ];
-const TUNNEL_SHOULDERS_BOTH: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_CRASH_BARRIER, repeat: 0 },
-];
+const TUNNEL_SHOULDERS_BOTH: &[Shoulder] = &[Shoulder {
+    style: theme::SHOULDER_CRASH_BARRIER,
+    repeat: 0,
+}];
 const MOTORWAY_POLES_R: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_HARD_EDGE, repeat: 0 },
-    Shoulder { style: theme::SHOULDER_POLES,     repeat: 8 },
-    Shoulder { style: theme::SHOULDER_EMPTY,     repeat: 0 },
+    Shoulder {
+        style: theme::SHOULDER_HARD_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_POLES,
+        repeat: 8,
+    },
+    Shoulder {
+        style: theme::SHOULDER_EMPTY,
+        repeat: 0,
+    },
 ];
 const MONACO_SHOULDERS: &[Shoulder] = &[
-    Shoulder { style: theme::SHOULDER_HARD_EDGE,   repeat: 0 },
-    Shoulder { style: theme::SHOULDER_PARKED_CAR,  repeat: 3 },
+    Shoulder {
+        style: theme::SHOULDER_HARD_EDGE,
+        repeat: 0,
+    },
+    Shoulder {
+        style: theme::SHOULDER_PARKED_CAR,
+        repeat: 3,
+    },
 ];
 
 // ─── Stages ──────────────────────────────────────────────────────────────────
@@ -171,13 +196,21 @@ const S01_LONDON: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 80.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[LONDON_OUT, LONDON_OUT],
             incoming: &[LONDON_IN, LONDON_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: CITY_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: CITY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -192,7 +225,10 @@ const S02_M20: Stage = Stage {
             outgoing: &[MOTORWAY_OUT, MOTORWAY_OUT],
             incoming: &[MOTORWAY_IN, MOTORWAY_IN],
         },
-        sceneries: Sceneries { left: HIGHWAY_SCENERY, right: RURAL_SCENERY },
+        sceneries: Sceneries {
+            left: HIGHWAY_SCENERY,
+            right: RURAL_SCENERY,
+        },
         ..ROAD_MOTORWAY_2X2
     },
 };
@@ -204,13 +240,21 @@ const S03_CHANNEL_TUNNEL: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 50.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[TUNNEL_LANE],
             incoming: &[TUNNEL_LANE],
         },
-        sceneries: Sceneries { left: TUNNEL_SCENERY, right: TUNNEL_SCENERY },
-        shoulders: Shoulders { left: TUNNEL_SHOULDERS_BOTH, right: TUNNEL_SHOULDERS_BOTH },
+        sceneries: Sceneries {
+            left: TUNNEL_SCENERY,
+            right: TUNNEL_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: TUNNEL_SHOULDERS_BOTH,
+            right: TUNNEL_SHOULDERS_BOTH,
+        },
     },
 };
 
@@ -225,8 +269,14 @@ const S04_FRENCH_MOTORWAY: Stage = Stage {
             outgoing: &[MOTORWAY_OUT, MOTORWAY_OUT],
             incoming: &[MOTORWAY_IN, MOTORWAY_IN],
         },
-        sceneries: Sceneries { left: RURAL_SCENERY, right: HIGHWAY_SCENERY },
-        shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: MOTORWAY_POLES_R },
+        sceneries: Sceneries {
+            left: RURAL_SCENERY,
+            right: HIGHWAY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: HIGHWAY_SHOULDERS,
+            right: MOTORWAY_POLES_R,
+        },
         ..ROAD_MOTORWAY_2X2
     },
 };
@@ -238,13 +288,21 @@ const S05_PARIS: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 80.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[EURO_CITY_OUT, EURO_CITY_OUT],
             incoming: &[EURO_CITY_IN, EURO_CITY_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: CITY_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: CITY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -259,7 +317,10 @@ const S06_BELGIUM: Stage = Stage {
             outgoing: &[MOTORWAY_OUT, MOTORWAY_OUT, MOTORWAY_OUT],
             incoming: &[MOTORWAY_IN, MOTORWAY_IN],
         },
-        sceneries: Sceneries { left: TOWN_SCENERY, right: TOWN_SCENERY },
+        sceneries: Sceneries {
+            left: TOWN_SCENERY,
+            right: TOWN_SCENERY,
+        },
         ..ROAD_MOTORWAY_3X2
     },
 };
@@ -271,13 +332,21 @@ const S07_AUTOBAHN: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 450.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[AUTOBAHN_FAST_OUT, AUTOBAHN_FAST_OUT, AUTOBAHN_FAST_OUT],
             incoming: &[AUTOBAHN_SLOW_IN, AUTOBAHN_SLOW_IN],
         },
-        sceneries: Sceneries { left: HIGHWAY_SCENERY, right: HIGHWAY_SCENERY },
-        shoulders: Shoulders { left: HIGHWAY_SHOULDERS, right: MOTORWAY_POLES_R },
+        sceneries: Sceneries {
+            left: HIGHWAY_SCENERY,
+            right: HIGHWAY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: HIGHWAY_SHOULDERS,
+            right: MOTORWAY_POLES_R,
+        },
     },
 };
 
@@ -292,7 +361,10 @@ const S08_FRANKFURT: Stage = Stage {
             outgoing: &[EURO_CITY_OUT],
             incoming: &[EURO_CITY_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: TOWN_SCENERY },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: TOWN_SCENERY,
+        },
         ..ROAD_CITY_2X2
     },
 };
@@ -308,7 +380,10 @@ const S09_AUSTRIA: Stage = Stage {
             outgoing: &[ALPINE_MOTORWAY_OUT, ALPINE_MOTORWAY_OUT],
             incoming: &[ALPINE_MOTORWAY_IN, ALPINE_MOTORWAY_IN],
         },
-        sceneries: Sceneries { left: MOUNTAIN_SCENERY, right: HIGHWAY_SCENERY },
+        sceneries: Sceneries {
+            left: MOUNTAIN_SCENERY,
+            right: HIGHWAY_SCENERY,
+        },
         ..ROAD_MOTORWAY_2X2
     },
 };
@@ -320,13 +395,21 @@ const S10_SWISS_ALPS: Stage = Stage {
     theme: Theme::Winter,
     distance_km: 150.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[ALPS_LANE],
             incoming: &[ALPS_LANE],
         },
-        sceneries: Sceneries { left: ALPINE_SCENERY, right: ALPINE_SCENERY },
-        shoulders: Shoulders { left: ALPS_SHOULDERS, right: ALPS_SHOULDERS },
+        sceneries: Sceneries {
+            left: ALPINE_SCENERY,
+            right: ALPINE_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: ALPS_SHOULDERS,
+            right: ALPS_SHOULDERS,
+        },
     },
 };
 
@@ -337,13 +420,21 @@ const S11_BRENNER: Stage = Stage {
     theme: Theme::Winter,
     distance_km: 100.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[BRENNER_LANE],
             incoming: &[BRENNER_LANE],
         },
-        sceneries: Sceneries { left: ALPINE_SCENERY, right: MOUNTAIN_SCENERY },
-        shoulders: Shoulders { left: ALPS_SHOULDERS, right: ALPS_SHOULDERS },
+        sceneries: Sceneries {
+            left: ALPINE_SCENERY,
+            right: MOUNTAIN_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: ALPS_SHOULDERS,
+            right: ALPS_SHOULDERS,
+        },
     },
 };
 
@@ -358,7 +449,10 @@ const S12_NORTH_ITALY: Stage = Stage {
             outgoing: &[ALPINE_MOTORWAY_OUT, ALPINE_MOTORWAY_OUT],
             incoming: &[ALPINE_MOTORWAY_IN, ALPINE_MOTORWAY_IN],
         },
-        sceneries: Sceneries { left: EURO_VILLAGE_SCENERY, right: MOUNTAIN_SCENERY },
+        sceneries: Sceneries {
+            left: EURO_VILLAGE_SCENERY,
+            right: MOUNTAIN_SCENERY,
+        },
         ..ROAD_MOTORWAY_2X2
     },
 };
@@ -370,13 +464,21 @@ const S13_MILAN: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 80.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[EURO_CITY_OUT, EURO_CITY_OUT],
             incoming: &[EURO_CITY_IN, EURO_CITY_IN],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: EURO_VILLAGE_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: EURO_VILLAGE_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -391,7 +493,10 @@ const S14_FRENCH_RIVIERA: Stage = Stage {
             outgoing: &[MOTORWAY_OUT, MOTORWAY_OUT],
             incoming: &[MOTORWAY_IN],
         },
-        sceneries: Sceneries { left: MOUNTAIN_SCENERY, right: COASTAL_SCENERY },
+        sceneries: Sceneries {
+            left: MOUNTAIN_SCENERY,
+            right: COASTAL_SCENERY,
+        },
         ..ROAD_MOTORWAY_2X2
     },
 };
@@ -403,13 +508,21 @@ const S15_MONACO: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 80.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[MONACO_LANE],
             incoming: &[MONACO_LANE],
         },
-        sceneries: Sceneries { left: COASTAL_SCENERY, right: CITY_SCENERY },
-        shoulders: Shoulders { left: MONACO_SHOULDERS, right: MONACO_SHOULDERS },
+        sceneries: Sceneries {
+            left: COASTAL_SCENERY,
+            right: CITY_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: MONACO_SHOULDERS,
+            right: MONACO_SHOULDERS,
+        },
     },
 };
 
@@ -424,7 +537,10 @@ const S16_BARCELONA: Stage = Stage {
             outgoing: &[EURO_CITY_OUT, EURO_CITY_OUT],
             incoming: &[EURO_CITY_IN, EURO_CITY_IN],
         },
-        sceneries: Sceneries { left: COASTAL_SCENERY, right: CITY_SCENERY },
+        sceneries: Sceneries {
+            left: COASTAL_SCENERY,
+            right: CITY_SCENERY,
+        },
         ..ROAD_CITY_2X2
     },
 };

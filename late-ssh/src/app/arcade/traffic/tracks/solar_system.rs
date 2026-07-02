@@ -8,8 +8,8 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
 use crate::app::arcade::traffic::track::{
-    Lane, Lanes, Object, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery,
-    Shoulders, Stage, Theme, Track,
+    Lane, Lanes, Object, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery, Shoulders,
+    Stage, Theme, Track,
 };
 
 // ─── Lane variants ────────────────────────────────────────────────────────────
@@ -154,9 +154,18 @@ const PLUTO_LANE: Lane = Lane {
 // ─── Local sceneries ─────────────────────────────────────────────────────────
 
 const MOON_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_ROCK,          incidence: 0.75 },
-    Object { style: theme::OBJ_STAR,          incidence: 0.20 },
-    Object { style: theme::OBJ_CRYSTAL_SPIKE, incidence: 0.05 },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.75,
+    },
+    Object {
+        style: theme::OBJ_STAR,
+        incidence: 0.20,
+    },
+    Object {
+        style: theme::OBJ_CRYSTAL_SPIKE,
+        incidence: 0.05,
+    },
 ];
 
 const MOON_SCENERY: Scenery = Scenery {
@@ -166,10 +175,22 @@ const MOON_SCENERY: Scenery = Scenery {
 };
 
 const ASTEROID_SCENERY_OBJECTS: &[Object] = &[
-    Object { style: theme::OBJ_ROCK,          incidence: 0.50 },
-    Object { style: theme::OBJ_STAR,          incidence: 0.30 },
-    Object { style: theme::OBJ_PLANET_SMALL,  incidence: 0.10 },
-    Object { style: theme::OBJ_CRYSTAL_SPIKE, incidence: 0.10 },
+    Object {
+        style: theme::OBJ_ROCK,
+        incidence: 0.50,
+    },
+    Object {
+        style: theme::OBJ_STAR,
+        incidence: 0.30,
+    },
+    Object {
+        style: theme::OBJ_PLANET_SMALL,
+        incidence: 0.10,
+    },
+    Object {
+        style: theme::OBJ_CRYSTAL_SPIKE,
+        incidence: 0.10,
+    },
 ];
 
 const ASTEROID_SCENERY: Scenery = Scenery {
@@ -191,7 +212,10 @@ const S01_LAUNCH_PAD: Stage = Stage {
             outgoing: &[CITY_LANE, CITY_LANE],
             incoming: &[CITY_LANE, CITY_LANE],
         },
-        sceneries: Sceneries { left: CITY_SCENERY, right: PLAINS_SCENERY },
+        sceneries: Sceneries {
+            left: CITY_SCENERY,
+            right: PLAINS_SCENERY,
+        },
         ..ROAD_CITY_2X2
     },
 };
@@ -207,7 +231,10 @@ const S02_LOW_EARTH_ORBIT: Stage = Stage {
             outgoing: &[ORBIT_LANE, ORBIT_LANE],
             incoming: &[ORBIT_LANE, ORBIT_LANE],
         },
-        sceneries: Sceneries { left: STARFIELD_SCENERY, right: STARFIELD_SCENERY },
+        sceneries: Sceneries {
+            left: STARFIELD_SCENERY,
+            right: STARFIELD_SCENERY,
+        },
         ..ROAD_SPACE_2X2
     },
 };
@@ -219,13 +246,21 @@ const S03_THE_MOON: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 10.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[MOON_LANE],
             incoming: &[MOON_LANE],
         },
-        sceneries: Sceneries { left: MOON_SCENERY, right: MOON_SCENERY },
-        shoulders: Shoulders { left: SPACE_BEACON_SHOULDERS, right: SPACE_BEACON_SHOULDERS },
+        sceneries: Sceneries {
+            left: MOON_SCENERY,
+            right: MOON_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SPACE_BEACON_SHOULDERS,
+            right: SPACE_BEACON_SHOULDERS,
+        },
     },
 };
 
@@ -236,13 +271,21 @@ const S04_MARS: Stage = Stage {
     theme: Theme::Desert,
     distance_km: 12.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[MARS_LANE],
             incoming: &[MARS_LANE],
         },
-        sceneries: Sceneries { left: SOUTHWESTERN_SCENERY, right: SOUTHWESTERN_SCENERY },
-        shoulders: Shoulders { left: SPACE_BEACON_SHOULDERS, right: SPACE_BEACON_SHOULDERS },
+        sceneries: Sceneries {
+            left: SOUTHWESTERN_SCENERY,
+            right: SOUTHWESTERN_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SPACE_BEACON_SHOULDERS,
+            right: SPACE_BEACON_SHOULDERS,
+        },
     },
 };
 
@@ -253,13 +296,21 @@ const S05_ASTEROID_BELT: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: FOREST_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[ASTEROID_BELT_LANE],
             incoming: &[ASTEROID_BELT_LANE],
         },
-        sceneries: Sceneries { left: ASTEROID_SCENERY, right: ASTEROID_SCENERY },
-        shoulders: Shoulders { left: SPACE_BEACON_SHOULDERS, right: SPACE_BEACON_SHOULDERS },
+        sceneries: Sceneries {
+            left: ASTEROID_SCENERY,
+            right: ASTEROID_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SPACE_BEACON_SHOULDERS,
+            right: SPACE_BEACON_SHOULDERS,
+        },
     },
 };
 
@@ -315,13 +366,21 @@ const S09_PLUTOS_EDGE: Stage = Stage {
     theme: Theme::Winter,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[PLUTO_LANE],
             incoming: &[PLUTO_LANE],
         },
-        sceneries: Sceneries { left: ALPINE_SCENERY, right: STARFIELD_SCENERY },
-        shoulders: Shoulders { left: SPACE_BEACON_SHOULDERS, right: SPACE_BEACON_SHOULDERS },
+        sceneries: Sceneries {
+            left: ALPINE_SCENERY,
+            right: STARFIELD_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SPACE_BEACON_SHOULDERS,
+            right: SPACE_BEACON_SHOULDERS,
+        },
     },
 };
 

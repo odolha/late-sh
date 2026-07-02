@@ -7,8 +7,8 @@
 use super::presets::*;
 use crate::app::arcade::traffic::theme;
 use crate::app::arcade::traffic::track::{
-    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery,
-    Shoulders, Stage, Theme, Track,
+    Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery, Shoulders, Stage,
+    Theme, Track,
 };
 
 // ─── Lane variants ────────────────────────────────────────────────────────────
@@ -159,13 +159,21 @@ const S01_BRAMBLEWOOD: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[VILLAGE_LANE, VILLAGE_LANE],
             incoming: &[VILLAGE_LANE],
         },
-        sceneries: Sceneries { left: EURO_VILLAGE_SCENERY, right: EURO_VILLAGE_SCENERY },
-        shoulders: Shoulders { left: MAGIC_RUNE_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+        sceneries: Sceneries {
+            left: EURO_VILLAGE_SCENERY,
+            right: EURO_VILLAGE_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: MAGIC_RUNE_SHOULDERS,
+            right: MAGIC_RUNE_SHOULDERS,
+        },
     },
 };
 
@@ -176,13 +184,21 @@ const S02_ENCHANTED_FOREST: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 12.0,
     road: Road {
-        aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: FOREST_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[ENCHANTED_LANE],
             incoming: &[ENCHANTED_LANE],
         },
-        sceneries: Sceneries { left: MAGIC_FOREST_SCENERY, right: MAGIC_FOREST_SCENERY },
-        shoulders: Shoulders { left: MAGIC_RUNE_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+        sceneries: Sceneries {
+            left: MAGIC_FOREST_SCENERY,
+            right: MAGIC_FOREST_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: MAGIC_RUNE_SHOULDERS,
+            right: MAGIC_RUNE_SHOULDERS,
+        },
     },
 };
 
@@ -193,13 +209,21 @@ const S03_CRYSTAL_CAVES: Stage = Stage {
     theme: Theme::Winter,
     distance_km: 6.0,
     road: Road {
-        aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: FOREST_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[CRYSTAL_CAVE_LANE],
             incoming: &[CRYSTAL_CAVE_LANE],
         },
-        sceneries: Sceneries { left: CRYSTAL_CAVE_SCENERY, right: CRYSTAL_CAVE_SCENERY },
-        shoulders: Shoulders { left: MAGIC_RUNE_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+        sceneries: Sceneries {
+            left: CRYSTAL_CAVE_SCENERY,
+            right: CRYSTAL_CAVE_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: MAGIC_RUNE_SHOULDERS,
+            right: MAGIC_RUNE_SHOULDERS,
+        },
     },
 };
 
@@ -210,13 +234,21 @@ const S04_DRAGONS_PASS: Stage = Stage {
     theme: Theme::Desert,
     distance_km: 10.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[DRAGONS_PASS_LANE],
             incoming: &[DRAGONS_PASS_LANE],
         },
-        sceneries: Sceneries { left: LAVA_SCENERY, right: LAVA_SCENERY },
-        shoulders: Shoulders { left: GUARDRAIL_SHOULDERS, right: GUARDRAIL_SHOULDERS },
+        sceneries: Sceneries {
+            left: LAVA_SCENERY,
+            right: LAVA_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: GUARDRAIL_SHOULDERS,
+            right: GUARDRAIL_SHOULDERS,
+        },
     },
 };
 
@@ -227,12 +259,17 @@ const S05_FLOATING_BRIDGE: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 5.0,
     road: Road {
-        aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: FOREST_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[CRYSTAL_CAVE_LANE],
             incoming: &[CRYSTAL_CAVE_LANE],
         },
-        sceneries: Sceneries { left: VOID_SIDES, right: VOID_SIDES },
+        sceneries: Sceneries {
+            left: VOID_SIDES,
+            right: VOID_SIDES,
+        },
         shoulders: NO_SHOULDERS,
     },
 };
@@ -244,13 +281,21 @@ const S06_ANCIENT_RUINS: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: RURAL_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: RURAL_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[RUINS_LANE],
             incoming: &[RUINS_LANE],
         },
-        sceneries: Sceneries { left: DARK_REALM_SCENERY, right: MAGIC_FOREST_SCENERY },
-        shoulders: Shoulders { left: GUARDRAIL_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+        sceneries: Sceneries {
+            left: DARK_REALM_SCENERY,
+            right: MAGIC_FOREST_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: GUARDRAIL_SHOULDERS,
+            right: MAGIC_RUNE_SHOULDERS,
+        },
     },
 };
 
@@ -261,13 +306,21 @@ const S07_DARK_REALM: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 8.0,
     road: Road {
-        aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: FOREST_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[DARK_REALM_LANE, DARK_REALM_LANE],
             incoming: &[DARK_REALM_LANE],
         },
-        sceneries: Sceneries { left: DARK_REALM_SCENERY, right: DARK_REALM_SCENERY },
-        shoulders: Shoulders { left: MAGIC_RUNE_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+        sceneries: Sceneries {
+            left: DARK_REALM_SCENERY,
+            right: DARK_REALM_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: MAGIC_RUNE_SHOULDERS,
+            right: MAGIC_RUNE_SHOULDERS,
+        },
     },
 };
 
@@ -278,13 +331,21 @@ const S08_ELVEN_CAUSEWAY: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 10.0,
     road: Road {
-        aspect: RoadAspect { dividers: HIGHWAY_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: HIGHWAY_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[ELVEN_LANE, ELVEN_LANE],
             incoming: &[ELVEN_LANE, ELVEN_LANE],
         },
-        sceneries: Sceneries { left: MAGIC_FOREST_SCENERY, right: MAGIC_FOREST_SCENERY },
-        shoulders: Shoulders { left: MAGIC_RUNE_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+        sceneries: Sceneries {
+            left: MAGIC_FOREST_SCENERY,
+            right: MAGIC_FOREST_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: MAGIC_RUNE_SHOULDERS,
+            right: MAGIC_RUNE_SHOULDERS,
+        },
     },
 };
 
@@ -295,13 +356,21 @@ const S09_THE_CITADEL: Stage = Stage {
     theme: Theme::Standard,
     distance_km: 6.0,
     road: Road {
-        aspect: RoadAspect { dividers: URBAN_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: URBAN_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[CITADEL_LANE, CITADEL_LANE],
             incoming: &[CITADEL_LANE],
         },
-        sceneries: Sceneries { left: DARK_REALM_SCENERY, right: DARK_REALM_SCENERY },
-        shoulders: Shoulders { left: SIDEWALK_SHOULDERS, right: SIDEWALK_SHOULDERS },
+        sceneries: Sceneries {
+            left: DARK_REALM_SCENERY,
+            right: DARK_REALM_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: SIDEWALK_SHOULDERS,
+            right: SIDEWALK_SHOULDERS,
+        },
     },
 };
 
@@ -312,13 +381,21 @@ const S10_REALMS_END: Stage = Stage {
     theme: Theme::Winter,
     distance_km: 5.0,
     road: Road {
-        aspect: RoadAspect { dividers: FOREST_DIVIDERS },
+        aspect: RoadAspect {
+            dividers: FOREST_DIVIDERS,
+        },
         lanes: Lanes {
             outgoing: &[REALM_END_LANE, REALM_END_LANE],
             incoming: &[REALM_END_LANE],
         },
-        sceneries: Sceneries { left: CRYSTAL_CAVE_SCENERY, right: MAGIC_FOREST_SCENERY },
-        shoulders: Shoulders { left: MAGIC_RUNE_SHOULDERS, right: MAGIC_RUNE_SHOULDERS },
+        sceneries: Sceneries {
+            left: CRYSTAL_CAVE_SCENERY,
+            right: MAGIC_FOREST_SCENERY,
+        },
+        shoulders: Shoulders {
+            left: MAGIC_RUNE_SHOULDERS,
+            right: MAGIC_RUNE_SHOULDERS,
+        },
     },
 };
 

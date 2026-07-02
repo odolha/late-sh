@@ -4,7 +4,7 @@
 //! racing view. The dispatcher routes to the right handler based on
 //! `state.screen`.
 
-use super::state::{PlayerInput, TrafficScreen, State};
+use super::state::{PlayerInput, State, TrafficScreen};
 
 // ─── Picker ─────────────────────────────────────────────────────────────────
 
