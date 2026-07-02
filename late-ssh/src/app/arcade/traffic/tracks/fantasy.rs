@@ -14,8 +14,8 @@ use crate::app::arcade::traffic::track::{
 // ─── Lane variants ────────────────────────────────────────────────────────────
 
 const VILLAGE_LANE: Lane = Lane {
-    own_max_speed: 80.0,
-    traffic_density: 0.42,
+    own_max_speed: 100.0,
+    traffic_density: 0.35,
     traffic_cars: FANTASY_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_SPEED_BUMP,
@@ -26,9 +26,9 @@ const VILLAGE_LANE: Lane = Lane {
 };
 
 const ENCHANTED_LANE: Lane = Lane {
-    own_max_speed: 120.0,
+    own_max_speed: 140.0,
     passive_decel: 2.0,
-    traffic_density: 0.12,
+    traffic_density: 0.1,
     traffic_cars: FANTASY_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_POTHOLE_SMALL,
@@ -39,8 +39,8 @@ const ENCHANTED_LANE: Lane = Lane {
 };
 
 const CRYSTAL_CAVE_LANE: Lane = Lane {
-    own_max_speed: 100.0,
-    traffic_density: 0.08,
+    own_max_speed: 120.0,
+    traffic_density: 0.1,
     traffic_cars: FANTASY_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_MAGIC_TRAP,
@@ -54,8 +54,8 @@ const CRYSTAL_CAVE_LANE: Lane = Lane {
 };
 
 const DRAGONS_PASS_LANE: Lane = Lane {
-    own_max_speed: 80.0,
-    traffic_density: 0.05,
+    own_max_speed: 100.0,
+    traffic_density: 0.1,
     traffic_cars: FANTASY_MIX,
     obstacles: &[
         Obstacle {
@@ -73,8 +73,8 @@ const DRAGONS_PASS_LANE: Lane = Lane {
 };
 
 const RUINS_LANE: Lane = Lane {
-    own_max_speed: 70.0,
-    traffic_density: 0.08,
+    own_max_speed: 90.0,
+    traffic_density: 0.1,
     traffic_cars: FANTASY_MIX,
     obstacles: &[
         Obstacle {
@@ -121,15 +121,15 @@ const ELVEN_LANE: Lane = Lane {
 };
 
 const CITADEL_LANE: Lane = Lane {
-    own_max_speed: 60.0,
-    traffic_density: 0.52,
+    own_max_speed: 80.0,
+    traffic_density: 0.45,
     traffic_cars: FANTASY_MIX,
     ..COBBLE_LANE
 };
 
 const REALM_END_LANE: Lane = Lane {
-    own_max_speed: 150.0,
-    traffic_density: 0.05,
+    own_max_speed: 180.0,
+    traffic_density: 0.1,
     traffic_cars: FANTASY_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_MAGIC_TRAP,

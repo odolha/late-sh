@@ -17,7 +17,7 @@ use crate::app::arcade::traffic::track::{
 // Climbing into orbit — faster than a highway, traffic thinning fast
 const ORBIT_LANE: Lane = Lane {
     own_max_speed: 240.0,
-    traffic_density: 0.06,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     ..SPACE_LANE
 };
@@ -25,9 +25,9 @@ const ORBIT_LANE: Lane = Lane {
 // Lunar surface — rough, slow, craters everywhere
 const MOON_LANE: Lane = Lane {
     style: theme::LANE_GRAVEL,
-    own_max_speed: 120.0,
+    own_max_speed: 140.0,
     passive_decel: 2.5,
-    traffic_density: 0.04,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[
         Obstacle {
@@ -46,9 +46,9 @@ const MOON_LANE: Lane = Lane {
 
 // Mars — cracked dust road, violent sand storms
 const MARS_LANE: Lane = Lane {
-    own_max_speed: 140.0,
+    own_max_speed: 160.0,
     passive_decel: 1.0,
-    traffic_density: 0.05,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[
         Obstacle {
@@ -67,8 +67,8 @@ const MARS_LANE: Lane = Lane {
 
 // Asteroid Belt — dodge or die
 const ASTEROID_BELT_LANE: Lane = Lane {
-    own_max_speed: 140.0,
-    traffic_density: 0.04,
+    own_max_speed: 160.0,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[
         Obstacle {
@@ -91,7 +91,7 @@ const ASTEROID_BELT_LANE: Lane = Lane {
 // Jupiter Approach — gravity assist, fast, light turbulence
 const JUPITER_LANE: Lane = Lane {
     own_max_speed: 320.0,
-    traffic_density: 0.05,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_ASTEROID_CHUNK,
@@ -103,8 +103,8 @@ const JUPITER_LANE: Lane = Lane {
 
 // Saturn's Rings — ring particles like a soft asteroid field
 const RING_LANE: Lane = Lane {
-    own_max_speed: 220.0,
-    traffic_density: 0.03,
+    own_max_speed: 240.0,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_ASTEROID_CHUNK,
@@ -120,7 +120,7 @@ const RING_LANE: Lane = Lane {
 // Deep Space — no obstacles, pure velocity
 const DEEP_SPACE_LANE: Lane = Lane {
     own_max_speed: 500.0,
-    traffic_density: 0.02,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[],
     ..SPACE_LANE
@@ -129,9 +129,9 @@ const DEEP_SPACE_LANE: Lane = Lane {
 // Pluto's Edge — frigid, icy, nearly empty
 const PLUTO_LANE: Lane = Lane {
     style: theme::LANE_GRAVEL,
-    own_max_speed: 90.0,
+    own_max_speed: 110.0,
     passive_decel: 2.0,
-    traffic_density: 0.02,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[
         Obstacle {

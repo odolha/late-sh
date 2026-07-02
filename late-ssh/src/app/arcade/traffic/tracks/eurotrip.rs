@@ -14,7 +14,7 @@ use crate::app::arcade::traffic::track::{
 // ─── Lane variants ───────────────────────────────────────────────────────────
 
 const LONDON_OUT: Lane = Lane {
-    traffic_density: 0.38,
+    traffic_density: 0.35,
     traffic_cars: EURO_CITY_MIX,
     ..CITY_LANE
 };
@@ -25,23 +25,23 @@ const LONDON_IN: Lane = Lane {
 };
 
 const EURO_CITY_OUT: Lane = Lane {
-    traffic_density: 0.42,
+    traffic_density: 0.4,
     traffic_cars: EURO_CITY_MIX,
     ..CITY_LANE
 };
 const EURO_CITY_IN: Lane = Lane {
-    traffic_density: 0.34,
+    traffic_density: 0.3,
     traffic_cars: EURO_CITY_MIX,
     ..CITY_LANE
 };
 
 const MOTORWAY_OUT: Lane = Lane {
-    traffic_density: 0.22,
+    traffic_density: 0.2,
     ..MOTORWAY_LANE
 };
 const MOTORWAY_IN: Lane = Lane {
     own_max_speed: 230.0,  // wrong-side speed bonus: 200 → 230
-    traffic_density: 0.16,
+    traffic_density: 0.15,
     ..MOTORWAY_LANE
 };
 
@@ -50,7 +50,7 @@ const TUNNEL_LANE: Lane = Lane {
     own_max_speed: 140.0,
     traffic_min_speed: 80.0,
     traffic_max_speed: 120.0,
-    traffic_density: 0.12,
+    traffic_density: 0.1,
     traffic_cars: EURO_HIGHWAY_MIX,
     obstacles: &[],
     ..MOTORWAY_LANE
@@ -59,10 +59,10 @@ const TUNNEL_LANE: Lane = Lane {
 // German Autobahn: no speed limit on unrestricted sections
 const AUTOBAHN_FAST_OUT: Lane = Lane {
     own_min_speed: 0.0,
-    own_max_speed: 340.0,
+    own_max_speed: 350.0,
     traffic_min_speed: 100.0,
     traffic_max_speed: 220.0,
-    traffic_density: 0.13,
+    traffic_density: 0.12,
     traffic_cars: EURO_HIGHWAY_MIX,
     obstacles: &[],
     ..AUTOBAHN_LANE
@@ -132,7 +132,7 @@ const BRENNER_LANE: Lane = Lane {
 // Monaco cobblestones: very tight, dense luxury traffic
 const MONACO_LANE: Lane = Lane {
     own_max_speed: 55.0,
-    traffic_density: 0.60,
+    traffic_density: 0.50,
     traffic_cars: EURO_CITY_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_POTHOLE_SMALL,

@@ -138,7 +138,7 @@ pub const COBBLE_LANE: Lane = Lane {
     passive_decel: 2.0,
     traffic_min_speed: 18.0,
     traffic_max_speed: 50.0,
-    traffic_density: 0.45,
+    traffic_density: 0.4,
     traffic_cars: EURO_CITY_MIX,
     obstacles: &[],
 };
@@ -162,7 +162,7 @@ pub const DESERT_LANE: Lane = Lane {
     passive_decel: 1.0,
     traffic_min_speed: 40.0,
     traffic_max_speed: 95.0,
-    traffic_density: 0.05,
+    traffic_density: 0.1,
     traffic_cars: AMERICAN_CAR_MIX,
     obstacles: &[],
 };
@@ -198,7 +198,7 @@ pub const SPACE_LANE: Lane = Lane {
     passive_decel: 0.0,
     traffic_min_speed: 70.0,
     traffic_max_speed: 210.0,
-    traffic_density: 0.07,
+    traffic_density: 0.1,
     traffic_cars: SPACE_SHIP_MIX,
     obstacles: &[],
 };
@@ -210,7 +210,7 @@ pub const TURBO_LANE: Lane = Lane {
     passive_decel: 0.0,
     traffic_min_speed: 120.0,
     traffic_max_speed: 420.0,
-    traffic_density: 0.05,
+    traffic_density: 0.1,
     traffic_cars: CRAZY_MIX,
     obstacles: &[],
 };
@@ -222,7 +222,7 @@ pub const GRIDLOCK_LANE: Lane = Lane {
     passive_decel: 4.0,
     traffic_min_speed: 4.0,
     traffic_max_speed: 22.0,
-    traffic_density: 0.95,
+    traffic_density: 0.8,
     traffic_cars: CRAZY_MIX,
     obstacles: &[],
 };

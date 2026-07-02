@@ -22,27 +22,27 @@ const MICRO_MIX:   &[Car] = &[CAR_TINY, CAR_MICRO, CAR_HATCHBACK];
 // Tokyo: dense city at speed
 const TOKYO_OUT: Lane = Lane {
     own_max_speed: 110.0,
-    traffic_density: 0.62,
+    traffic_density: 0.5,
     traffic_cars: CRAZY_MIX,
     ..CITY_LANE
 };
 const TOKYO_IN: Lane = Lane {
     own_max_speed: 110.0,
-    traffic_density: 0.52,
+    traffic_density: 0.4,
     traffic_cars: CRAZY_MIX,
     ..CITY_LANE
 };
 
 // Gridlock: legally a road, practically a car park
 const GRIDLOCK: Lane = Lane {
-    traffic_density: 0.95,
+    traffic_density: 0.8,
     ..GRIDLOCK_LANE
 };
 
 // Monster Truck Alley: wide lanes, everything oversized
 const MONSTER_LANE: Lane = Lane {
     own_max_speed: 130.0,
-    traffic_density: 0.42,
+    traffic_density: 0.35,
     traffic_cars: MONSTER_MIX,
     ..HIGHWAY_LANE
 };
@@ -88,7 +88,7 @@ const OBSTACLE_GARDEN_LANE: Lane = Lane {
 // Micro Lane: cobblestones, bumper cars edition
 const MICRO_LANE: Lane = Lane {
     own_max_speed: 32.0,
-    traffic_density: 0.82,
+    traffic_density: 0.5,
     traffic_cars: MICRO_MIX,
     ..COBBLE_LANE
 };
@@ -96,7 +96,7 @@ const MICRO_LANE: Lane = Lane {
 // Impossible Highway: turbo + obstacles + chaos traffic
 const IMPOSSIBLE_LANE: Lane = Lane {
     own_max_speed: 500.0,
-    traffic_density: 0.40,
+    traffic_density: 0.30,
     obstacles: &[
         Obstacle {
             style: theme::OBSTACLE_SPEED_BUMP,

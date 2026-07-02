@@ -14,31 +14,31 @@ use crate::app::arcade::traffic::track::{
 // ─── Lane variants ───────────────────────────────────────────────────────────
 
 const CHICAGO_LANE_OUT: Lane = Lane {
-    traffic_density: 0.36,
+    traffic_density: 0.3,
     traffic_cars: CITY_CAR_MIX,
     ..CITY_LANE
 };
 const CHICAGO_LANE_IN: Lane = Lane {
-    traffic_density: 0.28,
+    traffic_density: 0.2,
     traffic_cars: CITY_CAR_MIX,
     ..CITY_LANE
 };
 
 // LA traffic: denser than Chicago, you arrive through sprawl
 const LA_LANE_OUT: Lane = Lane {
-    traffic_density: 0.48,
+    traffic_density: 0.4,
     traffic_cars: CITY_CAR_MIX,
     ..CITY_LANE
 };
 const LA_LANE_IN: Lane = Lane {
-    traffic_density: 0.38,
+    traffic_density: 0.3,
     traffic_cars: CITY_CAR_MIX,
     ..CITY_LANE
 };
 
 const TOWN_LANE: Lane = Lane {
-    own_max_speed: 80.0,
-    traffic_density: 0.38,
+    own_max_speed: 110.0,
+    traffic_density: 0.3,
     traffic_cars: AMERICAN_CAR_MIX,
     obstacles: &[Obstacle {
         style: theme::OBSTACLE_SPEED_BUMP,
@@ -49,32 +49,32 @@ const TOWN_LANE: Lane = Lane {
 };
 
 const INTERSTATE_OUT: Lane = Lane {
-    traffic_density: 0.20,
+    traffic_density: 0.15,
     ..INTERSTATE_LANE
 };
 const INTERSTATE_IN: Lane = Lane {
-    own_max_speed: 230.0,  // wrong-side speed bonus: 200 → 230
-    traffic_density: 0.14,
+    own_max_speed: 250.0,  // wrong-side speed bonus: 200 → 230
+    traffic_density: 0.1,
     ..INTERSTATE_LANE
 };
 
 const PLAINS_OUT: Lane = Lane {
-    traffic_density: 0.08,
+    traffic_density: 0.1,
     ..PLAINS_LANE
 };
 const PLAINS_IN: Lane = Lane {
-    own_max_speed: 195.0,  // wrong-side speed bonus: 160 → 195
-    traffic_density: 0.06,
+    own_max_speed: 240.0,  // wrong-side speed bonus
+    traffic_density: 0.1,
     ..PLAINS_LANE
 };
 
 // Historic two-lane blacktop — narrow, patchy, low speed
 const R66_BLACKTOP: Lane = Lane {
     style: theme::LANE_ASPHALT_PATCHY,
-    own_max_speed: 110.0,
-    traffic_density: 0.12,
-    traffic_min_speed: 50.0,
-    traffic_max_speed: 85.0,
+    own_max_speed: 130.0,
+    traffic_density: 0.1,
+    traffic_min_speed: 60.0,
+    traffic_max_speed: 95.0,
     traffic_cars: AMERICAN_CAR_MIX,
     obstacles: &[
         Obstacle {
@@ -92,7 +92,7 @@ const R66_BLACKTOP: Lane = Lane {
 };
 
 const DESERT_OUT: Lane = Lane {
-    traffic_density: 0.05,
+    traffic_density: 0.1,
     obstacles: &[
         Obstacle {
             style: theme::OBSTACLE_SAND_DRIFT,
@@ -116,14 +116,14 @@ const DESERT_OUT: Lane = Lane {
     ..DESERT_LANE
 };
 const DESERT_IN: Lane = Lane {
-    own_max_speed: 185.0,  // wrong-side speed bonus: 140 → 185 (risky!)
-    traffic_density: 0.03,
+    own_max_speed: 205.0,  // wrong-side speed bonus
+    traffic_density: 0.1,
     ..DESERT_OUT
 };
 
 const MOJAVE_LANE: Lane = Lane {
-    own_max_speed: 110.0,
-    traffic_density: 0.03,
+    own_max_speed: 140.0,
+    traffic_density: 0.1,
     obstacles: &[
         Obstacle {
             style: theme::OBSTACLE_SAND_DRIFT,
@@ -145,7 +145,7 @@ const MOJAVE_LANE: Lane = Lane {
 };
 
 const MOJAVE_LANE_IN: Lane = Lane {
-    own_max_speed: 150.0,  // wrong-side speed bonus: 110 → 150
+    own_max_speed: 180.0,  // wrong-side speed bonus
     ..MOJAVE_LANE
 };
 
