@@ -411,8 +411,7 @@ impl State {
     }
 
     fn wheels_blocked(&self) -> bool {
-        self.wheel_blocked_until
-            .is_some_and(|t| Instant::now() < t)
+        self.wheel_blocked_until.is_some_and(|t| Instant::now() < t)
     }
 
     fn gas_blocked(&self) -> bool {
@@ -420,8 +419,7 @@ impl State {
     }
 
     fn brake_blocked(&self) -> bool {
-        self.brake_blocked_until
-            .is_some_and(|t| Instant::now() < t)
+        self.brake_blocked_until.is_some_and(|t| Instant::now() < t)
     }
 
     pub fn set_input(&mut self, input: PlayerInput) {
