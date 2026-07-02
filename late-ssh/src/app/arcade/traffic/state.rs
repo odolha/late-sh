@@ -19,42 +19,71 @@ use super::tracks::{ALL_TRACKS, DEFAULT_TRACK};
 pub struct Config;
 
 impl Config {
+    /// Total terminal rows allocated to the game viewport.
     pub const VISIBLE_ROWS: u16 = 50;
+    /// Width of a single lane in character columns.
     pub const LANE_WIDTH: u16 = 5;
+    /// Height of any car (player and AI) in terminal rows. Drives collision
+    /// boxes, minimap scale, and player rear-position calculations.
     pub const CAR_HEIGHT_ROWS: u16 = 3;
+    /// Rows between the bottom of the player car and the bottom of the viewport.
     pub const PLAYER_BOTTOM_MARGIN: u16 = 4;
+    /// Screen row of the top edge of the player car (0 = top of viewport).
+    /// All road-to-screen geometry is anchored here.
     pub const PLAYER_TOP_ROW: u16 =
         Self::VISIBLE_ROWS - Self::CAR_HEIGHT_ROWS - Self::PLAYER_BOTTOM_MARGIN;
+    /// World-space scale: metres represented by one terminal row.
+    /// Every metre ↔ row conversion multiplies or divides by this.
     pub const METERS_PER_ROW: f32 = 3.0;
+    /// Metres of road visible ahead of the player (top of car to top of screen).
     pub const VISIBLE_AHEAD_M: f32 = Self::PLAYER_TOP_ROW as f32 * Self::METERS_PER_ROW;
+    /// Metres covered by the minimap. Also used as the obstacle seeding horizon
+    /// so the minimap always shows what has already been populated.
     pub const MINIMAP_RANGE_M: f32 = 2.0 * Self::VISIBLE_ROWS as f32 * Self::METERS_PER_ROW;
+    /// Minimum front-to-back gap enforced between any two AI cars in the same
+    /// lane during placement.
     pub const AI_MIN_SEPARATION_M: f32 = 32.0;
+    /// Distance behind the player after which AI cars and obstacles are removed.
     pub const AI_DESPAWN_BEHIND_M: f32 = 200.0;
+    /// Follow distance in rows: converted to metres each tick to determine when
+    /// an AI car slows to match the speed of the one directly ahead.
     pub const AI_FOLLOW_GAP_ROWS: u16 = 5;
-    /// How far ahead the managed traffic zone extends (beyond minimap).
-    /// New cars are seeded here so they scroll naturally into view.
+    /// Outer edge of the managed traffic zone. New cars are seeded anywhere
+    /// between `MINIMAP_RANGE_M` and here so they scroll naturally into view.
     pub const SPAWN_AHEAD_M: f32 = Self::MINIMAP_RANGE_M * 1.5;
-    /// Safe gap in front of the player used only during initial fill,
-    /// so the road immediately ahead is clear on race start.
+    /// Safe gap left clear in front of the player during initial fill so the
+    /// road immediately ahead is obstacle-free on race start.
     pub const INITIAL_SKIP_M: f32 = Self::AI_MIN_SEPARATION_M * 2.5;
-    /// How far before the first stage separator the player spawns, so the
-    /// separator scrolls in from the top edge at race start.
+    /// Negative offset applied to `player_pos_m` at race start so the player
+    /// spawns just before the first stage separator and it scrolls in naturally.
     pub const PRE_STAGE_M: f32 = Self::VISIBLE_AHEAD_M + Self::METERS_PER_ROW * 2.0;
-    /// Clear zone around every stage boundary: no obstacles placed within this
-    /// many metres of a separator in either direction.
+    /// Half-width of the obstacle exclusion zone around every stage boundary.
+    /// No obstacles are placed within this distance of a separator in either direction.
     pub const STAGE_CLEAR_M: f32 = 12.0;
 
+    /// Player speed at race start and after every restart.
     pub const PLAYER_START_SPEED_KMH: f32 = 50.0;
+    /// Speed gained per second while holding accelerate.
     pub const ACCEL_KMH_PER_S: f32 = 88.0;
+    /// Speed lost per second while braking; doubled when using the handbrake.
     pub const DECEL_KMH_PER_S: f32 = 128.0;
+    /// Rate at which speed eases back into the new lane's bounds after a lane
+    /// change, preventing an instant hard clamp.
     pub const SPEED_CLAMP_PER_S: f32 = 80.0;
+    /// Fixed physics timestep (15 Hz). All per-frame increments multiply by this.
     pub const TICK_DT: f32 = 1.0 / 15.0;
+    /// Milliseconds a held-key input stays active before auto-releasing.
     pub const INPUT_HOLD_MS: u64 = 150;
+    /// Visual lane-change speed in display-lane-units per second. Controls
+    /// how fast the player car glides to the target lane on screen.
     pub const LANE_TRANSITION_PER_S: f32 = 7.0;
 
+    /// Maximum entries kept in the right-panel obstacle-effect log.
     pub const RECENT_EFFECTS_CAPACITY: usize = 5;
 
+    /// Minimum terminal width (columns) required to render the game.
     pub const MIN_TERMINAL_WIDTH_FLOOR: u16 = 70;
+    /// Minimum terminal height (rows) required to render the game.
     pub const MIN_TERMINAL_HEIGHT: u16 = Self::VISIBLE_ROWS + 3;
 }
 
