@@ -43,6 +43,10 @@ fn handle_picker_arrow(state: &mut State, key: u8) -> bool {
 // ─── Racing ─────────────────────────────────────────────────────────────────
 
 fn handle_race_key(state: &mut State, byte: u8) -> bool {
+    if state.is_crashed() {
+        state.resume_from_crash();
+        return true;
+    }
     match byte {
         b'w' | b'W' => {
             state.set_input(PlayerInput::Accelerate);
@@ -81,6 +85,10 @@ fn handle_race_key(state: &mut State, byte: u8) -> bool {
 }
 
 fn handle_race_arrow(state: &mut State, key: u8) -> bool {
+    if state.is_crashed() {
+        state.resume_from_crash();
+        return true;
+    }
     match key {
         b'A' => {
             state.set_input(PlayerInput::Accelerate);

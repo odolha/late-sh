@@ -342,4 +342,5 @@ pub const TRACK: Track = Track {
     ],
     distance_scale: 0.45,
     speed_scale: 2.0,
+    lives: 3,
 };

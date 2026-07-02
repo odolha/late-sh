@@ -74,6 +74,8 @@ impl Config {
     pub const TICK_DT: f32 = 1.0 / 15.0;
     /// Milliseconds a held-key input stays active before auto-releasing.
     pub const INPUT_HOLD_MS: u64 = 150;
+    /// Duration of the on/off recovery flash after dismissing a crash popup. Also provides temporary immunity.
+    pub const CRASH_FLASH_MS: u64 = 1500;
     /// Visual lane-change speed in display-lane-units per second. Controls
     /// how fast the player car glides to the target lane on screen.
     pub const LANE_TRANSITION_PER_S: f32 = 7.0;
@@ -112,6 +114,9 @@ pub enum PlayerInput {
 #[derive(Clone, Copy, Debug)]
 pub enum Phase {
     Playing,
+    /// Survived a crash with lives remaining: frozen behind a popup until the
+    /// player dismisses it (any key), then resumes into a brief recovery flash.
+    Crashed,
     Finished { elapsed_s: f32, score: i64 },
     Dead,
 }
@@ -170,6 +175,7 @@ pub struct State {
     pub elapsed_s: f32,
     pub score: i64,
     pub phase: Phase,
+    pub lives: u8,
     pub is_paused: bool,
 
     pub recent_effects: VecDeque<RecentEffect>,
@@ -177,6 +183,9 @@ pub struct State {
     pub gas_blocked_until: Option<Instant>,
     pub brake_blocked_until: Option<Instant>,
     pub wheel_blocked_until: Option<Instant>,
+
+    /// While set and in the future, the player car blinks (post-crash recovery).
+    pub flash_until: Option<Instant>,
 }
 
 impl State {
@@ -204,11 +213,13 @@ impl State {
             elapsed_s: 0.0,
             score: 0,
             phase: Phase::Playing,
+            lives: 0,
             is_paused: false,
             recent_effects: VecDeque::with_capacity(Config::RECENT_EFFECTS_CAPACITY),
             gas_blocked_until: None,
             brake_blocked_until: None,
             wheel_blocked_until: None,
+            flash_until: None,
         }
     }
 
@@ -265,11 +276,13 @@ impl State {
         self.elapsed_s = 0.0;
         self.score = Track::SCORE_MAX;
         self.phase = Phase::Playing;
+        self.lives = track.lives;
         self.is_paused = false;
         self.recent_effects.clear();
         self.gas_blocked_until = None;
         self.brake_blocked_until = None;
         self.wheel_blocked_until = None;
+        self.flash_until = None;
         self.screen = TrafficScreen::Racing;
     }
 
@@ -479,6 +492,10 @@ impl State {
         self.spawn_obstacles_ahead();
         self.check_obstacle_crossings();
 
+        // An obstacle crash may have ended play (Crashed/Dead); stop here so the
+        // later collision check can't spend a second life in the same tick.
+        if !matches!(self.phase, Phase::Playing) { return; }
+
         if let Some(stage) = self.current_stage() {
             let stage_distance_m = stage.distance_km * 1000.0 * self.distance_scale();
             if self.stage_traveled_m >= stage_distance_m {
@@ -486,9 +503,8 @@ impl State {
             }
         }
 
-        if self.check_collision() {
-            self.phase = Phase::Dead;
-            self.record_best();
+        if !self.is_flashing() && self.check_collision() {
+            self.handle_crash();
             return;
         }
 
@@ -648,6 +664,59 @@ impl State {
         false
     }
 
+    /// Handle a crash (AI collision or crash obstacle). Spends one life; if any
+    /// remain the run continues in place with the surrounding cars in the
+    /// player's lane cleared so no instant re-crash fires. At zero lives the
+    /// run ends.
+    fn handle_crash(&mut self) {
+        self.lives = self.lives.saturating_sub(1);
+        if self.lives == 0 {
+            self.phase = Phase::Dead;
+            self.record_best();
+            return;
+        }
+        let player_lane = self.player_lane_idx;
+        let player_pos = self.player_pos_m;
+        let clear_half = Config::INITIAL_SKIP_M * 0.5;
+        self.ai_cars.retain(|car| {
+            car.lane_idx != player_lane || (car.pos_m - player_pos).abs() > clear_half
+        });
+        self.push_effect("crash! -1 life");
+        self.phase = Phase::Crashed;
+    }
+
+    pub fn is_crashed(&self) -> bool {
+        matches!(self.phase, Phase::Crashed) && self.screen == TrafficScreen::Racing
+    }
+
+    /// Dismiss the crash popup: resume play and start the recovery flash.
+    pub fn resume_from_crash(&mut self) {
+        if !matches!(self.phase, Phase::Crashed) { return; }
+        self.phase = Phase::Playing;
+        self.flash_until = Some(Instant::now() + Duration::from_millis(Config::CRASH_FLASH_MS));
+        self.input = PlayerInput::None;
+        self.input_last_set = None;
+    }
+
+    /// Post-crash recovery window: the car blinks and is immune to crashes.
+    pub fn is_flashing(&self) -> bool {
+        self.flash_until.map_or(false, |t| Instant::now() < t)
+    }
+
+    /// Whether the player car should be drawn this frame. Solid normally; during
+    /// the recovery window it blinks on/off.
+    pub fn player_visible(&self) -> bool {
+        match self.flash_until {
+            Some(t) => {
+                let now = Instant::now();
+                if now >= t { return true; }
+                let remaining_ms = (t - now).as_millis();
+                (remaining_ms / 150) % 2 == 0
+            }
+            None => true,
+        }
+    }
+
     fn manage_ai(&mut self) {
         let Some(stage) = self.current_stage() else { return; };
         let lanes = stage.road.lanes;
@@ -785,8 +854,9 @@ impl State {
     fn apply_effect(&mut self, eff: ObstacleEffect) {
         match eff {
             ObstacleEffect::Crash => {
-                self.phase = Phase::Dead;
-                self.record_best();
+                if !self.is_flashing() {
+                    self.handle_crash();
+                }
             }
             ObstacleEffect::SpeedChange { affect } => {
                 self.player_speed_kmh = (self.player_speed_kmh * (1.0 + affect)).max(0.0);

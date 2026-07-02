@@ -133,6 +133,8 @@ pub struct Track {
     pub distance_scale: f32,
     /// Multiplies the displayed speedometer reading vs. physics speed.
     pub speed_scale: f32,
+    /// Lives before the run ends.
+    pub lives: u8,
 }
 
 /// A contiguous segment of a [`Track`] with its own road, theme, and scenery.

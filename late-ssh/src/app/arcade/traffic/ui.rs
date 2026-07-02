@@ -272,6 +272,10 @@ fn draw_race(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: bool
         Phase::Dead => {
             draw_game_overlay(frame, road_area, "CRASH!", "Press r to restart", app_theme::ERROR());
         }
+        Phase::Crashed => {
+            let sub = format!("{} lives left · any key", state.lives);
+            draw_game_overlay(frame, road_area, "YOU CRASHED!", &sub, app_theme::ERROR());
+        }
         Phase::Finished { elapsed_s, score } => {
             let mins = (*elapsed_s as u32) / 60;
             let secs = (*elapsed_s as u32) % 60;
@@ -710,7 +714,7 @@ fn draw_road(
 
         let p_top = Config::PLAYER_TOP_ROW as i32;
         let p_h = Config::CAR_HEIGHT_ROWS as i32;
-        if ri >= p_top && ri < p_top + p_h {
+        if ri >= p_top && ri < p_top + p_h && state.player_visible() {
             let body_x = player_body_x_start(geom, state.player_lane_display);
             let bg = lanes
                 .get(state.player_lane_idx)
@@ -805,6 +809,16 @@ fn draw_stats(frame: &mut Frame, area: Rect, state: &State, track: &Track, stage
             bright(format!("{:.0}/{:.0}", lane.own_min_speed, lane.own_max_speed)),
         ]));
     }
+    let max_lives = state.track().map(|t| t.lives).unwrap_or(state.lives);
+    let lost = max_lives.saturating_sub(state.lives);
+    lines.push(Line::from(vec![
+        dim(" Lives "),
+        Span::styled(
+            "♥ ".repeat(state.lives as usize),
+            Style::default().fg(app_theme::ERROR()).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("♡ ".repeat(lost as usize), Style::default().fg(app_theme::TEXT_DIM())),
+    ]));
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
         dim(" Stage "),
