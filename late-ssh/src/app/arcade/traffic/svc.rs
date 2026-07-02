@@ -1,9 +1,9 @@
-//! DB-backed persistence for Racer per-track scores and the aggregate high
+//! DB-backed persistence for Traffic per-track scores and the aggregate high
 //! score (sum of a user's per-track bests).
 
 use anyhow::Result;
 use late_core::db::Db;
-use late_core::models::racer::{HighScore, TrackScore};
+use late_core::models::traffic::{HighScore, TrackScore};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -11,12 +11,12 @@ use crate::app::activity::event::{ActivityEvent, ActivityGame};
 use crate::app::activity::publisher::ActivityPublisher;
 
 #[derive(Clone)]
-pub struct RacerService {
+pub struct TrafficService {
     db: Db,
     activity: Option<ActivityPublisher>,
 }
 
-impl RacerService {
+impl TrafficService {
     pub fn new(db: Db) -> Self {
         Self { db, activity: None }
     }
@@ -42,7 +42,7 @@ impl RacerService {
         let svc = self.clone();
         tokio::spawn(async move {
             if let Err(e) = svc.submit_track_score(user_id, track_key, score).await {
-                tracing::error!(error = ?e, "failed to submit racer track score");
+                tracing::error!(error = ?e, "failed to submit traffic track score");
             }
         });
     }
@@ -53,7 +53,7 @@ impl RacerService {
             HighScore::update_track_score_if_higher(&client, user_id, &track_key, score).await?;
         HighScore::record_score_event(&client, user_id, total).await?;
         if let Some(activity) = &self.activity {
-            activity.game_scored_task(user_id, ActivityGame::Racer, total, None);
+            activity.game_scored_task(user_id, ActivityGame::Traffic, total, None);
         }
         Ok(())
     }

@@ -1,4 +1,4 @@
-//! Track data model for the Racer game.
+//! Track data model for the Traffic game.
 //!
 //! A **track** is a named, multi-stage course. Each [`Stage`] defines the road
 //! geometry, traffic, scenery, and theme that apply while the player is in that
@@ -25,7 +25,7 @@
 //!
 //! All distance/speed values are in **displayed** units (the numbers the player
 //! sees).  [`Track::distance_scale`] and [`Track::speed_scale`] convert between
-//! these and the internal physics units used by `racer::state`.
+//! these and the internal physics units used by `traffic::state`.
 
 #![allow(dead_code)]
 

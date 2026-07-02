@@ -5,8 +5,8 @@
 //! → the obsidian Citadel → Realm's End.  ~78 km, ~14 min.
 
 use super::presets::*;
-use crate::app::arcade::racer::theme;
-use crate::app::arcade::racer::track::{
+use crate::app::arcade::traffic::theme;
+use crate::app::arcade::traffic::track::{
     Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery,
     Shoulders, Stage, Theme, Track,
 };

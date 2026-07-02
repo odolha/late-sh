@@ -74,7 +74,7 @@ pub enum ActivityGame {
     TwentyFortyEight,
     Tron,
     Snake,
-    Racer,
+    Traffic,
 }
 
 impl ActivityGame {
@@ -98,7 +98,7 @@ impl ActivityGame {
             Self::TwentyFortyEight => "2048",
             Self::Tron => "tron",
             Self::Snake => "snake",
-            Self::Racer => "racer",
+            Self::Traffic => "traffic",
         }
     }
 
@@ -122,7 +122,7 @@ impl ActivityGame {
             Self::TwentyFortyEight => "2048",
             Self::Tron => "Tron",
             Self::Snake => "Snake",
-            Self::Racer => "Racer",
+            Self::Traffic => "Traffic",
         }
     }
 }
@@ -192,7 +192,7 @@ impl ActivityEvent {
             ActivityGame::TwentyFortyEight => "won 2048",
             ActivityGame::Tron => "won Tron round",
             ActivityGame::Snake => "won Snake",
-            ActivityGame::Racer => "finished a Racer track",
+            ActivityGame::Traffic => "finished a Traffic track",
         };
         let action = match detail.as_deref() {
             Some(detail) if !detail.is_empty() => format!("{base_action} ({detail})"),

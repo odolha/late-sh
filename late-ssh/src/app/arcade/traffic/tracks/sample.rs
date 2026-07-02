@@ -2,8 +2,8 @@
 //! code can be smoke-tested with realistic input.
 
 use super::presets::*;
-use crate::app::arcade::racer::theme;
-use crate::app::arcade::racer::track::{
+use crate::app::arcade::traffic::theme;
+use crate::app::arcade::traffic::track::{
     Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect,
     Sceneries, Shoulders, Stage, Theme, Track,
 };

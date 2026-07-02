@@ -200,7 +200,7 @@ async fn main() -> anyhow::Result<()> {
         .with_activity_feed(activity_tx.clone());
     let snake_service = late_ssh::app::arcade::snake::svc::SnakeService::new(db.clone())
         .with_activity_feed(activity_tx.clone());
-    let racer_service = late_ssh::app::arcade::racer::svc::RacerService::new(db.clone())
+    let traffic_service = late_ssh::app::arcade::traffic::svc::TrafficService::new(db.clone())
         .with_activity_feed(activity_tx.clone());
     let rubiks_cube_service = late_ssh::app::arcade::rubiks_cube::svc::RubiksCubeService::new(
         db.clone(),
@@ -367,7 +367,7 @@ async fn main() -> anyhow::Result<()> {
         twenty_forty_eight_service,
         tetris_service,
         snake_service,
-        racer_service,
+        traffic_service,
         rubiks_cube_service,
         le_word_service,
         sudoku_service,

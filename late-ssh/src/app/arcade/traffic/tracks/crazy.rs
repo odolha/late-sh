@@ -6,8 +6,8 @@
 //! 1000 km/h final sprint.  ~69 km, ~9 min.
 
 use super::presets::*;
-use crate::app::arcade::racer::theme;
-use crate::app::arcade::racer::track::{
+use crate::app::arcade::traffic::theme;
+use crate::app::arcade::traffic::track::{
     Car, Lane, Lanes, Obstacle, ObstacleEffect, Road, RoadAspect, Sceneries, Scenery,
     Shoulders, Stage, Theme, Track,
 };

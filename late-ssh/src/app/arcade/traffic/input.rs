@@ -1,10 +1,10 @@
-//! Key input dispatch for the Racer game.
+//! Key input dispatch for the Traffic game.
 //!
 //! Two surfaces share one state: the picker (track selection) and the
 //! racing view. The dispatcher routes to the right handler based on
 //! `state.screen`.
 
-use super::state::{PlayerInput, RacerScreen, State};
+use super::state::{PlayerInput, TrafficScreen, State};
 
 // ─── Picker ─────────────────────────────────────────────────────────────────
 
@@ -106,28 +106,28 @@ fn handle_race_arrow(state: &mut State, key: u8) -> bool {
 
 pub fn handle_key(state: &mut State, byte: u8) -> bool {
     match state.screen {
-        RacerScreen::Picker => handle_picker_key(state, byte),
-        RacerScreen::Racing => handle_race_key(state, byte),
+        TrafficScreen::Picker => handle_picker_key(state, byte),
+        TrafficScreen::Racing => handle_race_key(state, byte),
     }
 }
 
 pub fn handle_arrow(state: &mut State, key: u8) -> bool {
     match state.screen {
-        RacerScreen::Picker => handle_picker_arrow(state, key),
-        RacerScreen::Racing => handle_race_arrow(state, key),
+        TrafficScreen::Picker => handle_picker_arrow(state, key),
+        TrafficScreen::Racing => handle_race_arrow(state, key),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::arcade::racer::tracks::DEFAULT_TRACK;
+    use crate::app::arcade::traffic::tracks::DEFAULT_TRACK;
 
     #[test]
     fn picker_enter_starts_a_track() {
         let mut s = State::new();
         handle_key(&mut s, b'\r');
-        assert_eq!(s.screen, RacerScreen::Racing);
+        assert_eq!(s.screen, TrafficScreen::Racing);
     }
 
     #[test]

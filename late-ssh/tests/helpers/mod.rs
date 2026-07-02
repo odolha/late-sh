@@ -14,7 +14,7 @@ use late_ssh::app::arcade::minesweeper::svc::MinesweeperService;
 use late_ssh::app::arcade::nonogram::state::Library as NonogramLibrary;
 use late_ssh::app::arcade::nonogram::svc::NonogramService;
 use late_ssh::app::arcade::rubiks_cube::svc::RubiksCubeService;
-use late_ssh::app::arcade::racer::svc::RacerService;
+use late_ssh::app::arcade::traffic::svc::TrafficService;
 use late_ssh::app::arcade::snake::svc::SnakeService;
 use late_ssh::app::arcade::solitaire::svc::SolitaireService;
 use late_ssh::app::arcade::sudoku::svc::SudokuService;
@@ -249,7 +249,7 @@ pub fn test_app_state(db: Db, config: Config) -> State {
     let twenty_forty_eight_service = TwentyFortyEightService::new(db.clone());
     let tetris_service = LaterisService::new(db.clone());
     let snake_service = SnakeService::new(db.clone());
-    let racer_service = RacerService::new(db.clone());
+    let traffic_service = TrafficService::new(db.clone());
     let le_word_service = LeWordService::new(db.clone(), activity_tx.clone());
     let rubiks_cube_service = RubiksCubeService::new(db.clone(), activity_tx.clone());
     let chip_service = ChipService::new(db.clone());
@@ -308,7 +308,7 @@ pub fn test_app_state(db: Db, config: Config) -> State {
         twenty_forty_eight_service,
         tetris_service,
         snake_service,
-        racer_service,
+        traffic_service,
         le_word_service,
         rubiks_cube_service,
         sudoku_service,
@@ -442,13 +442,13 @@ fn make_app_with_chat_service_and_permissions(
         initial_2048_high_score: None,
         tetris_service: LaterisService::new(db.clone()),
         snake_service: SnakeService::new(db.clone()),
-        racer_service: RacerService::new(db.clone()),
+        traffic_service: TrafficService::new(db.clone()),
         initial_tetris_game: None,
         initial_snake_game: None,
         initial_tetris_high_score: None,
         initial_snake_high_score: None,
-        initial_racer_track_scores: Vec::new(),
-        initial_racer_high_score: None,
+        initial_traffic_track_scores: Vec::new(),
+        initial_traffic_high_score: None,
         le_word_service: LeWordService::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
         rubiks_cube_service: RubiksCubeService::new(db.clone(), activity_tx.clone()),
         initial_le_word_daily_word: None,
@@ -600,13 +600,13 @@ pub fn make_app_with_paired_client(
         initial_2048_high_score: None,
         tetris_service: LaterisService::new(db.clone()),
         snake_service: SnakeService::new(db.clone()),
-        racer_service: RacerService::new(db.clone()),
+        traffic_service: TrafficService::new(db.clone()),
         initial_tetris_game: None,
         initial_snake_game: None,
         initial_tetris_high_score: None,
         initial_snake_high_score: None,
-        initial_racer_track_scores: Vec::new(),
-        initial_racer_high_score: None,
+        initial_traffic_track_scores: Vec::new(),
+        initial_traffic_high_score: None,
         le_word_service: LeWordService::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
         rubiks_cube_service: RubiksCubeService::new(db.clone(), activity_tx.clone()),
         initial_le_word_daily_word: None,

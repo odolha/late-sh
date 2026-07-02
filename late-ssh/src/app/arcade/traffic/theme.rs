@@ -1,4 +1,4 @@
-//! Standard style library for the Racer game.
+//! Standard style library for the Traffic game.
 //!
 //! Every `pub const` in this module is a ready-made instance of one of the
 //! style descriptor types defined in `track.rs`.  Track authors import these by

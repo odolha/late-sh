@@ -1,6 +1,6 @@
 use super::presets::*;
-use crate::app::arcade::racer::theme;
-use crate::app::arcade::racer::track::{
+use crate::app::arcade::traffic::theme;
+use crate::app::arcade::traffic::track::{
     Car, Lane, Lanes, Object, Obstacle, ObstacleEffect,
     Road, RoadAspect, Sceneries, Scenery, Shoulder, Shoulders, Stage, Theme, Track,
 };

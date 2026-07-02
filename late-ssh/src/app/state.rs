@@ -84,7 +84,7 @@ pub(crate) const GAME_SELECTION_NONOGRAMS: usize = 4;
 pub(crate) const GAME_SELECTION_MINESWEEPER: usize = 5;
 pub(crate) const GAME_SELECTION_SOLITAIRE: usize = 6;
 pub(crate) const GAME_SELECTION_SNAKE: usize = 7;
-pub(crate) const GAME_SELECTION_RACER: usize = 8;
+pub(crate) const GAME_SELECTION_TRAFFIC: usize = 8;
 pub(crate) const GAME_SELECTION_NES_SQUIRREL_DOMINO: usize = 9;
 pub(crate) const GAME_SELECTION_NES_THWAITE: usize = 10;
 pub(crate) const GAME_SELECTION_NES_DABG: usize = 11;
@@ -201,14 +201,14 @@ pub struct SessionConfig {
     pub initial_2048_high_score: Option<late_core::models::twenty_forty_eight::HighScore>,
     pub tetris_service: crate::app::arcade::tetris::svc::LaterisService,
     pub snake_service: crate::app::arcade::snake::svc::SnakeService,
-    pub racer_service: crate::app::arcade::racer::svc::RacerService,
+    pub traffic_service: crate::app::arcade::traffic::svc::TrafficService,
     pub rubiks_cube_service: crate::app::arcade::rubiks_cube::svc::RubiksCubeService,
     pub initial_tetris_game: Option<late_core::models::tetris::Game>,
     pub initial_snake_game: Option<late_core::models::snake::Game>,
     pub initial_tetris_high_score: Option<late_core::models::tetris::HighScore>,
     pub initial_snake_high_score: Option<late_core::models::snake::HighScore>,
-    pub initial_racer_track_scores: Vec<late_core::models::racer::TrackScore>,
-    pub initial_racer_high_score: Option<late_core::models::racer::HighScore>,
+    pub initial_traffic_track_scores: Vec<late_core::models::traffic::TrackScore>,
+    pub initial_traffic_high_score: Option<late_core::models::traffic::HighScore>,
     pub le_word_service: crate::app::arcade::le_word::svc::LeWordService,
     pub initial_le_word_daily_word: Option<late_core::models::le_word::DailyWord>,
     pub initial_le_word_game: Option<late_core::models::le_word::Game>,
@@ -536,7 +536,7 @@ pub struct App {
     pub(crate) solitaire_state: crate::app::arcade::solitaire::state::State,
     pub(crate) minesweeper_state: crate::app::arcade::minesweeper::state::State,
     pub(crate) nes_cabinet_state: crate::app::arcade::nes_cabinet::state::State,
-    pub(crate) racer_state: crate::app::arcade::racer::state::State,
+    pub(crate) traffic_state: crate::app::arcade::traffic::state::State,
     pub(crate) active_room_game: Option<Box<dyn crate::app::rooms::backend::ActiveRoomBackend>>,
     /// Rooms whose current pending turn already emitted a "your turn"
     /// notification; each room is cleared once that turn passes.
@@ -838,12 +838,12 @@ impl App {
             config.initial_minesweeper_games,
         );
         let nes_cabinet_state = crate::app::arcade::nes_cabinet::state::State::new();
-        let mut racer_state = crate::app::arcade::racer::state::State::new();
-        racer_state.hydrate(
+        let mut traffic_state = crate::app::arcade::traffic::state::State::new();
+        traffic_state.hydrate(
             config.user_id,
-            config.racer_service.clone(),
-            config.initial_racer_track_scores,
-            config.initial_racer_high_score,
+            config.traffic_service.clone(),
+            config.initial_traffic_track_scores,
+            config.initial_traffic_high_score,
         );
         let rooms_snapshot_rx = config.rooms_service.subscribe_snapshot();
         let rooms_snapshot = rooms_snapshot_rx.borrow().clone();
@@ -1155,7 +1155,7 @@ impl App {
             solitaire_state,
             minesweeper_state,
             nes_cabinet_state,
-            racer_state,
+            traffic_state,
             active_room_game: None,
             rooms_turn_notified_room_ids: HashSet::new(),
             rooms_last_turn_scan_at: None,

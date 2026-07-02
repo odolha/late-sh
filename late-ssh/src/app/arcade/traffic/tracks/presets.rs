@@ -4,7 +4,7 @@
 //! field-by-field configurations.  Example:
 //!
 //! ```ignore
-//! use crate::app::arcade::racer::tracks::presets;
+//! use crate::app::arcade::traffic::tracks::presets;
 //!
 //! const FAST_LANE: Lane = Lane {
 //!     style: theme::LANE_ASPHALT_PREMIUM,
@@ -13,8 +13,8 @@
 //! };
 //! ```
 
-use crate::app::arcade::racer::theme;
-use crate::app::arcade::racer::track::{
+use crate::app::arcade::traffic::theme;
+use crate::app::arcade::traffic::track::{
     Car, Divider, Lane, Lanes, Object, Road, RoadAspect, Sceneries, Scenery, Shoulder, Shoulders,
 };
 

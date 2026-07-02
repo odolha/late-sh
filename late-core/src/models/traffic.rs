@@ -8,7 +8,7 @@ pub struct TrackScore {
     pub score: i32,
 }
 
-/// A user's aggregate Racer high score: the sum of their per-track bests.
+/// A user's aggregate Traffic high score: the sum of their per-track bests.
 pub struct HighScore {
     pub user_id: Uuid,
     pub score: i32,
@@ -19,7 +19,7 @@ impl TrackScore {
     pub async fn list_for_user(client: &Client, user_id: Uuid) -> Result<Vec<TrackScore>> {
         let rows = client
             .query(
-                "SELECT track_key, score FROM racer_track_scores WHERE user_id = $1",
+                "SELECT track_key, score FROM traffic_track_scores WHERE user_id = $1",
                 &[&user_id],
             )
             .await?;
@@ -37,7 +37,7 @@ impl HighScore {
     pub async fn find_by_user_id(client: &Client, user_id: Uuid) -> Result<Option<Self>> {
         let row = client
             .query_opt(
-                "SELECT user_id, score FROM racer_high_scores WHERE user_id = $1",
+                "SELECT user_id, score FROM traffic_high_scores WHERE user_id = $1",
                 &[&user_id],
             )
             .await?;
@@ -48,7 +48,7 @@ impl HighScore {
     }
 
     /// Record a track finish: keep the best per-track score, then recompute the
-    /// aggregate Racer high score as the sum of the user's per-track bests.
+    /// aggregate Traffic high score as the sum of the user's per-track bests.
     /// Returns the new aggregate total.
     pub async fn update_track_score_if_higher(
         client: &Client,
@@ -58,10 +58,10 @@ impl HighScore {
     ) -> Result<i32> {
         client
             .execute(
-                "INSERT INTO racer_track_scores (user_id, track_key, score)
+                "INSERT INTO traffic_track_scores (user_id, track_key, score)
                  VALUES ($1, $2, $3)
                  ON CONFLICT (user_id, track_key) DO UPDATE
-                    SET score = GREATEST(racer_track_scores.score, $3),
+                    SET score = GREATEST(traffic_track_scores.score, $3),
                         updated = current_timestamp",
                 &[&user_id, &track_key, &new_score],
             )
@@ -70,7 +70,7 @@ impl HighScore {
         let total: i32 = client
             .query_one(
                 "SELECT COALESCE(SUM(score), 0)::int AS total
-                 FROM racer_track_scores WHERE user_id = $1",
+                 FROM traffic_track_scores WHERE user_id = $1",
                 &[&user_id],
             )
             .await?
@@ -78,7 +78,7 @@ impl HighScore {
 
         client
             .execute(
-                "INSERT INTO racer_high_scores (user_id, score)
+                "INSERT INTO traffic_high_scores (user_id, score)
                  VALUES ($1, $2)
                  ON CONFLICT (user_id) DO UPDATE
                     SET score = $2, updated = current_timestamp",
@@ -93,7 +93,7 @@ impl HighScore {
         client
             .execute(
                 "INSERT INTO game_score_events (user_id, game, score)
-                 VALUES ($1, 'racer', $2)",
+                 VALUES ($1, 'traffic', $2)",
                 &[&user_id, &total],
             )
             .await?;

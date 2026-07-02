@@ -168,9 +168,9 @@ fn draw_score_row(frame: &mut Frame, panels: &[Rect], data: &LeaderboardData, us
     draw_score_panel(
         frame,
         panels[3],
-        "Racer",
-        &data.monthly_racer_high_scores,
-        high_scores_for(data, "Racer"),
+        "Traffic",
+        &data.monthly_traffic_high_scores,
+        high_scores_for(data, "Traffic"),
         user_id,
     );
 }

@@ -74,7 +74,7 @@ pub struct LeaderboardData {
     pub monthly_tetris_high_scores: Vec<HighScoreEntry>,
     pub monthly_2048_high_scores: Vec<HighScoreEntry>,
     pub monthly_snake_high_scores: Vec<HighScoreEntry>,
-    pub monthly_racer_high_scores: Vec<HighScoreEntry>,
+    pub monthly_traffic_high_scores: Vec<HighScoreEntry>,
 }
 
 pub async fn fetch_leaderboard_data(client: &Client) -> Result<LeaderboardData> {
@@ -89,7 +89,7 @@ pub async fn fetch_leaderboard_data(client: &Client) -> Result<LeaderboardData> 
         monthly_tetris_high_scores,
         monthly_2048_high_scores,
         monthly_snake_high_scores,
-        monthly_racer_high_scores,
+        monthly_traffic_high_scores,
     ) = tokio::try_join!(
         fetch_today_champions(client, 10),
         fetch_today_daily_statuses(client),
@@ -101,7 +101,7 @@ pub async fn fetch_leaderboard_data(client: &Client) -> Result<LeaderboardData> 
         fetch_monthly_tetris_high_scores(client, 500),
         fetch_monthly_2048_high_scores(client, 500),
         fetch_monthly_snake_high_scores(client, 500),
-        fetch_monthly_racer_high_scores(client, 500),
+        fetch_monthly_traffic_high_scores(client, 500),
     )?;
 
     Ok(LeaderboardData {
@@ -115,7 +115,7 @@ pub async fn fetch_leaderboard_data(client: &Client) -> Result<LeaderboardData> 
         monthly_tetris_high_scores,
         monthly_2048_high_scores,
         monthly_snake_high_scores,
-        monthly_racer_high_scores,
+        monthly_traffic_high_scores,
     })
 }
 
@@ -316,7 +316,7 @@ async fn fetch_high_scores(client: &Client, limit: i64) -> Result<Vec<HighScoreE
         });
     }
 
-    // Racer top scores (aggregate of per-track bests)
+    // Traffic top scores (aggregate of per-track bests)
     let rows = client
         .query(
             "WITH ranked AS (
@@ -324,7 +324,7 @@ async fn fetch_high_scores(client: &Client, limit: i64) -> Result<Vec<HighScoreE
                        h.user_id,
                        h.score,
                        RANK() OVER (ORDER BY h.score DESC) AS rank
-                FROM racer_high_scores h
+                FROM traffic_high_scores h
                 JOIN users u ON u.id = h.user_id
              )
              SELECT username, user_id, score, rank
@@ -336,7 +336,7 @@ async fn fetch_high_scores(client: &Client, limit: i64) -> Result<Vec<HighScoreE
         .await?;
     for row in rows {
         entries.push(HighScoreEntry {
-            game: "Racer",
+            game: "Traffic",
             username: row.get("username"),
             user_id: row.get("user_id"),
             rank: row.get("rank"),
@@ -375,11 +375,11 @@ async fn fetch_monthly_snake_high_scores(
     fetch_monthly_score_board(client, "Snake", "snake", "snake_high_scores", limit).await
 }
 
-async fn fetch_monthly_racer_high_scores(
+async fn fetch_monthly_traffic_high_scores(
     client: &Client,
     limit: i64,
 ) -> Result<Vec<HighScoreEntry>> {
-    fetch_monthly_score_board(client, "Racer", "racer", "racer_high_scores", limit).await
+    fetch_monthly_score_board(client, "Traffic", "traffic", "traffic_high_scores", limit).await
 }
 
 async fn fetch_monthly_score_board(

@@ -1,4 +1,4 @@
-//! Racer game state and physics.
+//! Traffic game state and physics.
 //!
 //! Geometry, lane configuration, and speed ranges are no longer hard-coded —
 //! they're read live from the active [`Track`] and current [`Stage`] (see
@@ -61,7 +61,7 @@ impl Config {
 // ─── Top-level state machine ─────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum RacerScreen {
+pub enum TrafficScreen {
     Picker,
     Racing,
 }
@@ -114,15 +114,15 @@ pub struct RecentEffect {
     pub at: Instant,
 }
 
-/// All runtime racer state — drives both the picker and the race.
+/// All runtime traffic state — drives both the picker and the race.
 pub struct State {
-    pub screen: RacerScreen,
+    pub screen: TrafficScreen,
     pub picker_selected_idx: usize,
     pub best_scores: HashMap<&'static str, i64>,
     pub best_score: i64,
 
     /// Persistence handle + owner; `None` in unit tests.
-    svc: Option<super::svc::RacerService>,
+    svc: Option<super::svc::TrafficService>,
     user_id: uuid::Uuid,
 
     pub active_track: Option<&'static Track>,
@@ -153,7 +153,7 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         Self {
-            screen: RacerScreen::Picker,
+            screen: TrafficScreen::Picker,
             picker_selected_idx: 0,
             best_scores: HashMap::new(),
             best_score: 0,
@@ -188,9 +188,9 @@ impl State {
     pub fn hydrate(
         &mut self,
         user_id: uuid::Uuid,
-        svc: super::svc::RacerService,
-        track_scores: Vec<late_core::models::racer::TrackScore>,
-        high_score: Option<late_core::models::racer::HighScore>,
+        svc: super::svc::TrafficService,
+        track_scores: Vec<late_core::models::traffic::TrackScore>,
+        high_score: Option<late_core::models::traffic::HighScore>,
     ) {
         self.user_id = user_id;
         self.svc = Some(svc);
@@ -241,7 +241,7 @@ impl State {
         self.gas_blocked_until = None;
         self.brake_blocked_until = None;
         self.wheel_blocked_until = None;
-        self.screen = RacerScreen::Racing;
+        self.screen = TrafficScreen::Racing;
     }
 
     pub fn restart_current(&mut self) {
@@ -251,7 +251,7 @@ impl State {
     }
 
     pub fn return_to_picker(&mut self) {
-        self.screen = RacerScreen::Picker;
+        self.screen = TrafficScreen::Picker;
     }
 
     /// Live 0..=SCORE_MAX grade: extrapolate the current average pace to the
@@ -327,7 +327,7 @@ impl State {
     // ─── Player control ───────────────────────────────────────────────────────
 
     pub fn is_playing(&self) -> bool {
-        matches!(self.phase, Phase::Playing) && self.screen == RacerScreen::Racing
+        matches!(self.phase, Phase::Playing) && self.screen == TrafficScreen::Racing
     }
 
     pub fn toggle_pause(&mut self) {
@@ -480,7 +480,7 @@ impl State {
     }
 
     /// Record a finished run. Only completed tracks earn a per-track score;
-    /// crashing/dying yields nothing. The Racer high score is the sum of all
+    /// crashing/dying yields nothing. The Traffic high score is the sum of all
     /// per-track bests.
     fn record_best(&mut self) {
         let Some(track) = self.active_track else { return; };
@@ -859,12 +859,12 @@ pub(super) fn hash3(a: i64, b: i64, c: i64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::arcade::racer::tracks::DEFAULT_TRACK;
+    use crate::app::arcade::traffic::tracks::DEFAULT_TRACK;
 
     #[test]
     fn picker_starts_with_zero_score() {
         let s = State::new();
-        assert_eq!(s.screen, RacerScreen::Picker);
+        assert_eq!(s.screen, TrafficScreen::Picker);
         assert_eq!(s.best_score, 0);
     }
 
@@ -872,7 +872,7 @@ mod tests {
     fn start_track_moves_to_racing() {
         let mut s = State::new();
         s.start_track(DEFAULT_TRACK);
-        assert_eq!(s.screen, RacerScreen::Racing);
+        assert_eq!(s.screen, TrafficScreen::Racing);
         assert_eq!(s.current_stage_idx, 0);
         assert_eq!(
             s.player_lane_idx,

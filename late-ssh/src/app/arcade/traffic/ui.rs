@@ -1,4 +1,4 @@
-//! Racer rendering. Reads geometry, lane configs, scenery, shoulders, and
+//! Traffic rendering. Reads geometry, lane configs, scenery, shoulders, and
 //! dividers from the active stage on each frame so the picture updates
 //! immediately when a stage transition occurs.
 //!
@@ -14,7 +14,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthChar;
 
-use super::state::{Config, Phase, RacerScreen, State, TrafficDir, hash3};
+use super::state::{Config, Phase, TrafficScreen, State, TrafficDir, hash3};
 use super::theme;
 use super::track::{Lanes, Stage, Track};
 use super::tracks::ALL_TRACKS;
@@ -44,8 +44,8 @@ const MINI_OBSTACLE_CRASH: Color  = Color::Rgb(200, 0, 0);
 
 pub fn draw_game(frame: &mut Frame, area: Rect, state: &State, show_bottom_bar: bool) {
     match state.screen {
-        RacerScreen::Picker => draw_picker(frame, area, state, show_bottom_bar),
-        RacerScreen::Racing => draw_race(frame, area, state, show_bottom_bar),
+        TrafficScreen::Picker => draw_picker(frame, area, state, show_bottom_bar),
+        TrafficScreen::Racing => draw_race(frame, area, state, show_bottom_bar),
     }
 }
 
