@@ -563,6 +563,7 @@ fn draw_grass(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_scenery_side(
     buf: &mut ratatui::buffer::Buffer,
     objects: &[super::track::Object],
@@ -607,7 +608,7 @@ fn draw_scenery_side(
                 d as i64,
                 if left_side { 0 } else { 1 },
             );
-            if seed % PLACEMENT_GATE != 0 {
+            if !seed.is_multiple_of(PLACEMENT_GATE) {
                 continue;
             }
             let obj = pick_object(objects, seed);
@@ -643,7 +644,7 @@ fn draw_scenery_side(
                 };
                 let fg = fade.map_or(raw_fg, |f| darken(raw_fg, f));
                 if let Some(c) = buf.cell_mut((xx, screen_y)) {
-                    c.set_symbol(*glyph).set_fg(fg).set_bg(fallback_bg);
+                    c.set_symbol(glyph).set_fg(fg).set_bg(fallback_bg);
                 }
             }
             break;
@@ -651,6 +652,7 @@ fn draw_scenery_side(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_shoulders_side(
     buf: &mut ratatui::buffer::Buffer,
     shoulders: &[super::track::Shoulder],
@@ -713,7 +715,7 @@ fn player_body_x_start(geom: &StageGeom, lane_f: f32) -> u16 {
 }
 
 fn is_car_col(col: u16) -> bool {
-    col >= 1 && col <= 3
+    (1..=3).contains(&col)
 }
 
 const SEP_LINE_FG: Color = Color::Rgb(160, 160, 160);
@@ -869,10 +871,10 @@ fn draw_road(
                         if let Some(cell) = buf.cell_mut((screen_x, screen_y)) {
                             cell.set_symbol(sym).set_fg(SEP_LABEL_FG).set_bg(SEP_BG);
                         }
-                        if w == 2 {
-                            if let Some(cell) = buf.cell_mut((screen_x + 1, screen_y)) {
-                                cell.set_symbol(" ").set_fg(SEP_LABEL_FG).set_bg(SEP_BG);
-                            }
+                        if w == 2
+                            && let Some(cell) = buf.cell_mut((screen_x + 1, screen_y))
+                        {
+                            cell.set_symbol(" ").set_fg(SEP_LABEL_FG).set_bg(SEP_BG);
                         }
                         in_label_idx += w;
                         x_inner += w;

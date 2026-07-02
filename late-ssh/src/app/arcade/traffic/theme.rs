@@ -172,9 +172,9 @@ pub const LANE_ASPHALT_CRACKED: LaneStyle = LaneStyle {
     cell: |theme, row, col| {
         let bg = tint(CRACKED_BG, theme);
         let c = col as i32;
-        if row.rem_euclid(6) == 0 && c.rem_euclid(7) < 2 {
-            Cell::new("╌", tint(CRACK_FG, theme), bg)
-        } else if row.rem_euclid(11) == 4 && c.rem_euclid(5) == 0 {
+        if (row.rem_euclid(6) == 0 && c.rem_euclid(7) < 2)
+            || (row.rem_euclid(11) == 4 && c.rem_euclid(5) == 0)
+        {
             Cell::new("╌", tint(CRACK_FG, theme), bg)
         } else {
             Cell::new(" ", bg, bg)

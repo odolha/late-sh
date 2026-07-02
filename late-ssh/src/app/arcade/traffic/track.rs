@@ -264,7 +264,7 @@ pub struct Obstacle {
 
 impl Obstacle {
     pub fn has_crash(&self) -> bool {
-        self.effects.iter().any(|&e| e == ObstacleEffect::Crash)
+        self.effects.contains(&ObstacleEffect::Crash)
     }
 }
 

@@ -412,16 +412,16 @@ impl State {
 
     fn wheels_blocked(&self) -> bool {
         self.wheel_blocked_until
-            .map_or(false, |t| Instant::now() < t)
+            .is_some_and(|t| Instant::now() < t)
     }
 
     fn gas_blocked(&self) -> bool {
-        self.gas_blocked_until.map_or(false, |t| Instant::now() < t)
+        self.gas_blocked_until.is_some_and(|t| Instant::now() < t)
     }
 
     fn brake_blocked(&self) -> bool {
         self.brake_blocked_until
-            .map_or(false, |t| Instant::now() < t)
+            .is_some_and(|t| Instant::now() < t)
     }
 
     pub fn set_input(&mut self, input: PlayerInput) {
@@ -445,11 +445,11 @@ impl State {
         }
         let dt = Config::TICK_DT;
 
-        if let Some(t) = self.input_last_set {
-            if t.elapsed() > Duration::from_millis(Config::INPUT_HOLD_MS) {
-                self.input = PlayerInput::None;
-                self.input_last_set = None;
-            }
+        if let Some(t) = self.input_last_set
+            && t.elapsed() > Duration::from_millis(Config::INPUT_HOLD_MS)
+        {
+            self.input = PlayerInput::None;
+            self.input_last_set = None;
         }
 
         let lane = self.current_lane_cfg();
@@ -678,7 +678,7 @@ impl State {
                 if gap <= 0.0 {
                     continue;
                 }
-                if nearest.map_or(true, |(g, _)| gap < g) {
+                if nearest.is_none_or(|(g, _)| gap < g) {
                     nearest = Some((gap, jspeed));
                 }
             }
@@ -752,7 +752,7 @@ impl State {
 
     /// Post-crash recovery window: the car blinks and is immune to crashes.
     pub fn is_flashing(&self) -> bool {
-        self.flash_until.map_or(false, |t| Instant::now() < t)
+        self.flash_until.is_some_and(|t| Instant::now() < t)
     }
 
     /// Whether the player car should be drawn this frame. Solid normally; during
@@ -765,7 +765,7 @@ impl State {
                     return true;
                 }
                 let remaining_ms = (t - now).as_millis();
-                (remaining_ms / 150) % 2 == 0
+                (remaining_ms / 150).is_multiple_of(2)
             }
             None => true,
         }
@@ -813,15 +813,15 @@ impl State {
             per_lane[c.lane_idx] += 1;
         }
 
-        for lane_idx in 0..total_lanes {
+        for (lane_idx, &lane_count) in per_lane.iter().enumerate().take(total_lanes) {
             let lane = lanes.get(lane_idx).expect("idx in range");
             let target = density_to_count(lane.traffic_density);
-            if per_lane[lane_idx] >= target {
+            if lane_count >= target {
                 continue;
             }
 
             let direction = self.direction_of(lane_idx);
-            let needed = target - per_lane[lane_idx];
+            let needed = target - lane_count;
 
             // Initial fill: place as many as needed (up to MAX_ATTEMPTS tries).
             // Ongoing: place at most one car per manage_ai call to keep it smooth.
@@ -883,7 +883,7 @@ impl State {
                     let h = hash3(slot, lane_idx as i64, ob.style.id);
                     let p = (h % 10_000) as f32 / 10_000.0;
                     if p < ob.frequency {
-                        let pos = self.obstacle_seed_m + (h as u64 % SLOT_M as u64) as f32;
+                        let pos = self.obstacle_seed_m + (h % SLOT_M as u64) as f32;
                         if self.is_near_stage_boundary(pos) {
                             continue;
                         }
@@ -1015,6 +1015,12 @@ impl State {
             boundary += stage.distance_km * 1000.0 * scale;
         }
         (pos - boundary).abs() < Config::STAGE_CLEAR_M
+    }
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
