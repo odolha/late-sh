@@ -122,7 +122,7 @@ const ELVEN_LANE: Lane = Lane {
 
 const CITADEL_LANE: Lane = Lane {
     own_max_speed: 80.0,
-    traffic_density: 0.45,
+    traffic_density: 0.4,
     traffic_cars: FANTASY_MIX,
     ..COBBLE_LANE
 };

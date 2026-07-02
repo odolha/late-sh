@@ -29,7 +29,6 @@ pub const CAR_PICKUP:    Car = Car { height: 3,  incidence: 0.35 };
 pub const CAR_RV:        Car = Car { height: 7,  incidence: 0.08 };
 pub const CAR_MICRO:     Car = Car { height: 2,  incidence: 0.40 };
 pub const CAR_CART:      Car = Car { height: 4,  incidence: 0.30 };
-pub const CAR_TINY:      Car = Car { height: 1,  incidence: 0.35 };
 pub const CAR_MONSTER:   Car = Car { height: 14, incidence: 0.05 };
 pub const CAR_FIGHTER:   Car = Car { height: 2,  incidence: 0.45 };
 pub const CAR_FREIGHTER: Car = Car { height: 9,  incidence: 0.20 };
@@ -43,7 +42,7 @@ pub const EURO_CITY_MIX:       &[Car] = &[CAR_MICRO, CAR_HATCHBACK, CAR_SEDAN, C
 pub const EURO_HIGHWAY_MIX:    &[Car] = &[CAR_SEDAN, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI];
 pub const FANTASY_MIX:         &[Car] = &[CAR_HATCHBACK, CAR_SEDAN, CAR_CART, CAR_VAN];
 pub const SPACE_SHIP_MIX:      &[Car] = &[CAR_FIGHTER, CAR_SEDAN, CAR_VAN, CAR_FREIGHTER];
-pub const CRAZY_MIX:           &[Car] = &[CAR_TINY, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI, CAR_MONSTER];
+pub const CRAZY_MIX:           &[Car] = &[CAR_MICRO, CAR_HATCHBACK, CAR_VAN, CAR_TRUCK, CAR_SEMI, CAR_MONSTER];
 
 // ─── Lane templates ──────────────────────────────────────────────────────────
 

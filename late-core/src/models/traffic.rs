@@ -50,24 +50,30 @@ impl HighScore {
     /// Record a track finish: keep the best per-track score, then recompute the
     /// aggregate Traffic high score as the sum of the user's per-track bests.
     /// Returns the new aggregate total.
+    ///
+    /// All three statements run in one transaction so the `traffic_high_scores`
+    /// aggregate can never persist a total that disagrees with the source-of-
+    /// truth `traffic_track_scores` sum, even under concurrent finishes for the
+    /// same user.
     pub async fn update_track_score_if_higher(
-        client: &Client,
+        client: &mut Client,
         user_id: Uuid,
         track_key: &str,
         new_score: i32,
     ) -> Result<i32> {
-        client
-            .execute(
-                "INSERT INTO traffic_track_scores (user_id, track_key, score)
+        let tx = client.transaction().await?;
+
+        tx.execute(
+            "INSERT INTO traffic_track_scores (user_id, track_key, score)
                  VALUES ($1, $2, $3)
                  ON CONFLICT (user_id, track_key) DO UPDATE
                     SET score = GREATEST(traffic_track_scores.score, $3),
                         updated = current_timestamp",
-                &[&user_id, &track_key, &new_score],
-            )
-            .await?;
+            &[&user_id, &track_key, &new_score],
+        )
+        .await?;
 
-        let total: i32 = client
+        let total: i32 = tx
             .query_one(
                 "SELECT COALESCE(SUM(score), 0)::int AS total
                  FROM traffic_track_scores WHERE user_id = $1",
@@ -76,16 +82,16 @@ impl HighScore {
             .await?
             .get("total");
 
-        client
-            .execute(
-                "INSERT INTO traffic_high_scores (user_id, score)
+        tx.execute(
+            "INSERT INTO traffic_high_scores (user_id, score)
                  VALUES ($1, $2)
                  ON CONFLICT (user_id) DO UPDATE
                     SET score = $2, updated = current_timestamp",
-                &[&user_id, &total],
-            )
-            .await?;
+            &[&user_id, &total],
+        )
+        .await?;
 
+        tx.commit().await?;
         Ok(total)
     }
 

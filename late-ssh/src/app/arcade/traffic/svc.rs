@@ -48,9 +48,9 @@ impl TrafficService {
     }
 
     async fn submit_track_score(&self, user_id: Uuid, track_key: String, score: i32) -> Result<()> {
-        let client = self.db.get().await?;
+        let mut client = self.db.get().await?;
         let total =
-            HighScore::update_track_score_if_higher(&client, user_id, &track_key, score).await?;
+            HighScore::update_track_score_if_higher(&mut client, user_id, &track_key, score).await?;
         HighScore::record_score_event(&client, user_id, total).await?;
         if let Some(activity) = &self.activity {
             activity.game_scored_task(user_id, ActivityGame::Traffic, total, None);

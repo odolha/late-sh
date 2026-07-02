@@ -15,20 +15,20 @@ use crate::app::arcade::traffic::track::{
 // ─── Local car mixes ─────────────────────────────────────────────────────────
 
 const MONSTER_MIX: &[Car] = &[CAR_SEMI, CAR_TRUCK, CAR_RV, CAR_MONSTER];
-const MICRO_MIX:   &[Car] = &[CAR_TINY, CAR_MICRO, CAR_HATCHBACK];
+const MICRO_MIX:   &[Car] = &[CAR_MICRO, CAR_HATCHBACK];
 
 // ─── Lane variants ────────────────────────────────────────────────────────────
 
 // Tokyo: dense city at speed
 const TOKYO_OUT: Lane = Lane {
     own_max_speed: 110.0,
-    traffic_density: 0.5,
+    traffic_density: 0.4,
     traffic_cars: CRAZY_MIX,
     ..CITY_LANE
 };
 const TOKYO_IN: Lane = Lane {
     own_max_speed: 110.0,
-    traffic_density: 0.4,
+    traffic_density: 0.35,
     traffic_cars: CRAZY_MIX,
     ..CITY_LANE
 };
