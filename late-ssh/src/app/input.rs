@@ -2281,11 +2281,6 @@ fn dispatch_escape(app: &mut App) {
         app.chat.close_overlay();
         return;
     }
-    // Esc during the clubhouse tour skips the rest of it, once.
-    if ctx.screen == Screen::Clubhouse && app.clubhouse.tutorial_skip() {
-        app.persist_clubhouse_tutorial_done();
-        return;
-    }
     if ctx.screen == Screen::Artboard {
         let Some(state) = app.dartboard_state.as_ref() else {
             return;
@@ -3464,8 +3459,14 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
         return true;
     }
 
-    if matches!(byte, b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8')
-        && ctx.screen == Screen::Dashboard
+    // While the reaction leader is armed, every digit belongs to it: `1`-`9`
+    // are the quick reactions and `0` opens the custom icon picker. Let them
+    // fall through to the chat message-action handler instead of the global
+    // page switch (`0` now lands on the Clubhouse, `1`-`7` on other pages).
+    if matches!(
+        byte,
+        b'0' | b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9'
+    ) && ctx.screen == Screen::Dashboard
         && app.chat.is_reaction_leader_active()
     {
         return false;

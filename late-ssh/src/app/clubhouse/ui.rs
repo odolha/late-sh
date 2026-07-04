@@ -46,7 +46,6 @@ pub(crate) struct ClubhouseView<'a> {
     /// The #lounge tail, for speech bubbles.
     pub lounge_messages: &'a [ChatMessage],
     /// Staff bot ids so their #lounge lines can bubble over their sprites.
-    pub bartender_user_id: Option<Uuid>,
     pub graybeard_user_id: Option<Uuid>,
     /// The shared composer block, pinned under the tavern. `None` only
     /// before the #lounge room id is known.
@@ -598,7 +597,10 @@ fn place_people(cells: &mut Cells, view: &ClubhouseView<'_>) -> BubbleAnchors {
     let own_id = state.own_user_id();
     for who in state.snapshot.people.iter().filter(|p| p.user_id != own_id) {
         let style = Style::default().fg(occupant_color(who.user_id));
-        let label_style = Style::default().fg(theme::TEXT_DIM());
+        let mut label_style = Style::default().fg(theme::TEXT_DIM());
+        if let Some(bg) = theme::DRUNK_LABEL_BG(who.drunk_level) {
+            label_style = label_style.bg(bg);
+        }
         let anchor = draw_presence(cells, who.placement, 'o', style, &who.username, label_style);
         anchors.insert(who.user_id, anchor);
         if let Some(emote) = who.emote {
@@ -620,9 +622,16 @@ fn place_people(cells: &mut Cells, view: &ClubhouseView<'_>) -> BubbleAnchors {
     let own_style = Style::default()
         .fg(theme::AMBER_GLOW())
         .add_modifier(Modifier::BOLD);
-    let own_label_style = Style::default()
+    let mut own_label_style = Style::default()
         .fg(theme::TEXT_BRIGHT())
         .add_modifier(Modifier::BOLD);
+    if let Some(bg) = state
+        .snapshot
+        .find(own_id)
+        .and_then(|p| theme::DRUNK_LABEL_BG(p.drunk_level))
+    {
+        own_label_style = own_label_style.bg(bg);
+    }
     let own_placement = state
         .snapshot
         .find(own_id)
@@ -914,32 +923,19 @@ fn draw_overlays(frame: &mut Frame, inner: Rect, view: &ClubhouseView<'_>) {
     draw_popover(frame, inner, view);
 }
 
-/// How long the bartender's latest line stays pinned; a touch longer than
-/// patron bubbles because his answers carry directions worth reading.
-const BARTENDER_BANNER_MS: i64 = 14_000;
-
-/// The bartender speaks to the whole room: his freshest #lounge line pins
-/// to the top-left corner of the viewport (camera-independent, so you never
-/// miss him from across the tavern) instead of bubbling over his sprite,
-/// where patron bubbles at the bar would collide with it.
+/// The bartender speaks to the whole room: his #lounge lines pin to the
+/// top-left corner of the viewport (camera-independent, so you never miss
+/// him from across the tavern) instead of bubbling over his sprite, where
+/// patron bubbles at the bar would collide with it. Which line shows, and
+/// for how long, is the banner queue's call (`State::update_bartender_banner`):
+/// a burst of answers plays one at a time instead of overwriting itself.
 fn draw_bartender_banner(frame: &mut Frame, inner: Rect, view: &ClubhouseView<'_>) {
-    let Some(bartender_id) = view.bartender_user_id else {
+    let Some(message_id) = view.state.bartender_banner_message_id() else {
         return;
     };
-    // The tail is newest-first, so the first hit is his latest line.
-    let Some(message) = view
-        .lounge_messages
-        .iter()
-        .find(|m| m.user_id == bartender_id)
-    else {
+    let Some(message) = view.lounge_messages.iter().find(|m| m.id == message_id) else {
         return;
     };
-    let age_ms = chrono::Utc::now()
-        .signed_duration_since(message.created)
-        .num_milliseconds();
-    if age_ms > BARTENDER_BANNER_MS {
-        return;
-    }
     // Roomy on purpose: his replies are up to three sanitized lines of real
     // directions, and the banner is the only place they render.
     let width_budget = usize::from(inner.width.saturating_sub(6)).min(56);
@@ -1017,8 +1013,6 @@ fn draw_tutorial(frame: &mut Frame, inner: Rect, view: &ClubhouseView<'_>) -> bo
                     "the bartender is waving you over, head northwest to the bar.",
                     text,
                 )),
-                Line::default(),
-                Line::from(Span::styled("Esc skips the tour", dim)),
             ],
         ),
         Tutorial::BarLesson => (
@@ -1090,12 +1084,12 @@ fn draw_tutorial(frame: &mut Frame, inner: Rect, view: &ClubhouseView<'_>) -> bo
         ),
         Tutorial::GoToBar => {
             // A small nudge, pinned bottom-left, out of the walking path.
-            let lines = vec![
-                Line::from(Span::styled("find the glowing bar, northwest", text)),
-                Line::from(Span::styled("Esc skips the tour", dim)),
-            ];
+            let lines = vec![Line::from(Span::styled(
+                "find the glowing bar, northwest",
+                text,
+            ))];
             let width = (34u16).min(inner.width.saturating_sub(2));
-            let height = 4u16.min(inner.height);
+            let height = 3u16.min(inner.height);
             let rect = Rect {
                 x: inner.x + 1,
                 y: inner.y + inner.height.saturating_sub(height),

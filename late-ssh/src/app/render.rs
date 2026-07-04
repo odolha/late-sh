@@ -185,7 +185,6 @@ struct DrawContext<'a> {
     /// The #lounge tail for clubhouse speech bubbles; empty off that screen.
     clubhouse_lounge_messages: &'a [late_core::models::chat_message::ChatMessage],
     /// Staff bot ids so their #lounge lines bubble over their sprites.
-    clubhouse_bartender_id: Option<uuid::Uuid>,
     clubhouse_graybeard_id: Option<uuid::Uuid>,
     /// The clubhouse composer footer; built only on that screen.
     clubhouse_composer: Option<chat::ui::ComposerBlockView<'a>>,
@@ -417,10 +416,20 @@ impl App {
         let profile_award_badges = self.chat.profile_award_badges();
         let message_reactions = self.chat.message_reactions();
         let voice_snapshot = self.voice.snapshot();
+        // Count humans only: the always-on bots (@bartender, @graybeard,
+        // @dealer, @bot) register with no fingerprint and are excluded from
+        // the clubhouse headcount, so exclude them here too or the two
+        // "people online" numbers disagree.
         let online_count = self
             .active_users
             .as_ref()
-            .map(|active_users| active_users.lock_recover().len())
+            .map(|active_users| {
+                active_users
+                    .lock_recover()
+                    .values()
+                    .filter(|user| user.fingerprint.is_some())
+                    .count()
+            })
             .unwrap_or(0);
         self.afk_user_ids = crate::state::afk_users_snapshot(&self.afk_users);
         let image_modal = self
@@ -534,6 +543,7 @@ impl App {
                 bonsai_glyphs,
                 chat_badges,
                 profile_award_badges,
+                drunk_levels: &self.drunk_levels,
                 bot_username_color_active: self.shop_state.bot_username_color_active(),
                 active_room_effects: dashboard_room_effects,
                 active_poll: dashboard_active_poll,
@@ -673,6 +683,7 @@ impl App {
             bonsai_glyphs,
             chat_badges,
             profile_award_badges,
+            drunk_levels: &self.drunk_levels,
             bot_username_color_active: self.shop_state.bot_username_color_active(),
             news_composer: self.chat.news.composer(),
             news_composing: self.chat.news.composing(),
@@ -742,6 +753,7 @@ impl App {
                     bonsai_glyphs,
                     chat_badges,
                     profile_award_badges,
+                    drunk_levels: &self.drunk_levels,
                     keep_composer_focused: self.profile_state.profile().keep_composer_focused,
                     composer_rect_slot: Some(&self.chat.last_composer_rect),
                     composer_viewport_top_slot: Some(&self.chat.last_composer_viewport_top),
@@ -900,7 +912,6 @@ impl App {
                         clubhouse_state: &self.clubhouse,
                         clubhouse_own_username: self.profile_state.profile().username.as_str(),
                         clubhouse_lounge_messages,
-                        clubhouse_bartender_id: self.clubhouse_bartender_id,
                         clubhouse_graybeard_id: self.clubhouse_graybeard_id,
                         clubhouse_composer,
                         show_flag_fallback: self.profile_state.profile().show_flag_fallback,
@@ -1340,7 +1351,6 @@ impl App {
                     own_username: ctx.clubhouse_own_username,
                     now_playing: ctx.now_playing,
                     lounge_messages: ctx.clubhouse_lounge_messages,
-                    bartender_user_id: ctx.clubhouse_bartender_id,
                     graybeard_user_id: ctx.clubhouse_graybeard_id,
                     composer: ctx.clubhouse_composer.take(),
                 },
