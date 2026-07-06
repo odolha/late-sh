@@ -22,6 +22,7 @@ use uuid::Uuid;
 use crate::app::common::theme;
 use late_core::api_types::NowPlaying;
 use late_core::models::chat_message::ChatMessage;
+use late_core::models::drinks::{DRUNK_LABEL_MIN_LEVEL, DRUNK_MAX_LEVEL};
 
 use super::lobby::{Emote, Placement};
 use super::map;
@@ -549,6 +550,46 @@ fn draw_figure(cells: &mut Cells, x: u16, y: u16, head: char, style: Style) {
     }
 }
 
+/// A tipsy stick figure: the same 3-row build as [`draw_figure`], nudged to
+/// read as unsteady the drunker the patron is. Buzzed (level 2) throws both
+/// arms up in a loose "woo"; sloshed (level 3) slumps off-balance, one knee
+/// buckling (`v` legs) and the head lolling onto a shoulder. Level 4 is
+/// handled by [`draw_passed_out`], not here.
+fn draw_drunk_figure(cells: &mut Cells, x: u16, y: u16, head: char, style: Style, level: u8) {
+    let legs = if level >= 3 { 'v' } else { 'Λ' };
+    set(cells, x, y, legs, style);
+    if y >= 2 {
+        // Buzzed throws both arms up; sloshed sags to a neutral, wobbly stance.
+        let (left, right) = if level >= 3 { ('/', '\\') } else { ('\\', '/') };
+        set(cells, x.saturating_sub(1), y - 1, left, style);
+        set(cells, x, y - 1, '|', style);
+        set(cells, x + 1, y - 1, right, style);
+    }
+    if y >= 3 {
+        // Sloshed lolls the head onto a shoulder; buzzed keeps it upright.
+        let head_x = if level >= 3 { x.saturating_sub(1) } else { x };
+        set(cells, head_x, y - 2, head, style);
+    }
+}
+
+/// A patron knocked out cold on the floor: an X-eyed head sprawled between
+/// limp arms, with a little sleepy `z` drifting up. Drawn in place of the
+/// upright stick figure once someone hits the top drunk level.
+fn draw_passed_out(cells: &mut Cells, x: u16, y: u16, style: Style) {
+    set(cells, x.saturating_sub(1), y, '_', style);
+    set(cells, x, y, 'x', style);
+    set(cells, x + 1, y, '_', style);
+    if y >= 1 {
+        set(cells, x, y - 1, 'z', Style::default().fg(theme::TEXT_MUTED()));
+    }
+}
+
+/// True once a patron is at the top drunk bucket ("wasted") and should be
+/// shown slumped/passed out rather than upright.
+fn is_passed_out(drunk_level: u8) -> bool {
+    drunk_level >= DRUNK_MAX_LEVEL
+}
+
 /// Where an occupant's head goes for a seat: perched above a stool, sunk
 /// into an armchair.
 fn seat_head_y(seat: &map::Seat) -> u16 {
@@ -601,10 +642,21 @@ fn place_people(cells: &mut Cells, view: &ClubhouseView<'_>) -> BubbleAnchors {
         if let Some(bg) = theme::DRUNK_LABEL_BG(who.drunk_level) {
             label_style = label_style.bg(bg);
         }
-        let anchor = draw_presence(cells, who.placement, 'o', style, &who.username, label_style);
+        let anchor = draw_presence(
+            cells,
+            who.placement,
+            'o',
+            style,
+            &who.username,
+            label_style,
+            who.drunk_level,
+        );
         anchors.insert(who.user_id, anchor);
-        if let Some(emote) = who.emote {
-            draw_emote(cells, who.placement, emote, state.anim_tick, style);
+        // A passed-out patron can't wave or dance.
+        if !is_passed_out(who.drunk_level) {
+            if let Some(emote) = who.emote {
+                draw_emote(cells, who.placement, emote, state.anim_tick, style);
+            }
         }
     }
 
@@ -637,6 +689,11 @@ fn place_people(cells: &mut Cells, view: &ClubhouseView<'_>) -> BubbleAnchors {
         .find(own_id)
         .map(|p| p.placement)
         .unwrap_or(Placement::Walking(state.player_x, state.player_y));
+    let own_drunk_level = state
+        .snapshot
+        .find(own_id)
+        .map(|p| p.drunk_level)
+        .unwrap_or(0);
     let anchor = draw_presence(
         cells,
         own_placement,
@@ -644,10 +701,13 @@ fn place_people(cells: &mut Cells, view: &ClubhouseView<'_>) -> BubbleAnchors {
         own_style,
         view.own_username,
         own_label_style,
+        own_drunk_level,
     );
     anchors.insert(own_id, anchor);
-    if let Some(emote) = state.snapshot.find(own_id).and_then(|p| p.emote) {
-        draw_emote(cells, own_placement, emote, state.anim_tick, own_style);
+    if !is_passed_out(own_drunk_level) {
+        if let Some(emote) = state.snapshot.find(own_id).and_then(|p| p.emote) {
+            draw_emote(cells, own_placement, emote, state.anim_tick, own_style);
+        }
     }
 
     anchors
@@ -662,12 +722,18 @@ fn draw_presence(
     style: Style,
     username: &str,
     label_style: Style,
+    drunk_level: u8,
 ) -> (u16, u16) {
+    let passed_out = is_passed_out(drunk_level);
     match placement {
         Placement::Seated(i) => {
             let seat = &map::SEATS[i.min(map::SEATS.len() - 1)];
             let head_y = seat_head_y(seat);
-            set(cells, seat.x, head_y, head, style);
+            // Slumped in the seat: X-eyed head in place of the usual glyph.
+            // (Buzzed/sloshed patrons keep their head but wear the drunk name
+            // badge; a seat has no body to throw a pose with.)
+            let seat_head = if passed_out { 'x' } else { head };
+            set(cells, seat.x, head_y, seat_head, style);
             let label_y = if seat.label_below {
                 seat.y + 2
             } else {
@@ -688,7 +754,13 @@ fn draw_presence(
         }
         Placement::Standing(_) | Placement::Door(_) | Placement::Walking(..) => {
             let (x, y) = placement.position();
-            draw_figure(cells, x, y, head, style);
+            if passed_out {
+                draw_passed_out(cells, x, y, style);
+            } else if drunk_level >= DRUNK_LABEL_MIN_LEVEL {
+                draw_drunk_figure(cells, x, y, head, style, drunk_level);
+            } else {
+                draw_figure(cells, x, y, head, style);
+            }
             let label_y = y.saturating_sub(3).max(1);
             put_label(cells, x, label_y, &truncate_name(username), label_style);
             (x, label_y.saturating_sub(1))
