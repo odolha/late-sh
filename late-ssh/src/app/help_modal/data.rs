@@ -649,6 +649,22 @@ fn arcade_help_lines() -> Vec<String> {
         "Notes",
         "  Game-specific controls appear inside the Arcade page.",
         "  Daily puzzle completions, run scores, chips, payouts, and leaderboards are covered in Economy.",
+        "",
+        "Leaderboard badges",
+        "  Awarded each month to the previous month's top players. They show",
+        "  first in your chat username badge stack, wrapped in brackets.",
+        "  The trailing digit is your rank, 1-3 (so [AW1] is that month's #1).",
+        "  [CHIP]    Top Chips",
+        "  [AW]      Arcade Wins",
+        "  [LA]      Lateris (Tetris)",
+        "  [24#]     2048",
+        "  [SN]      Snake",
+        "  The Lateania and NetHack badges are one-off feats, shown with no rank digit.",
+        "  [LMG]     Lateania Archdemon",
+        "  [LKN]     Lateania Frontier King",
+        "  [LYS]     Lateania Sundering Deep",
+        "  [NHA]     NetHack Amulet",
+        "  [NHY]     NetHack Ascension",
     ]
     .into_iter()
     .map(str::to_string)
