@@ -7,7 +7,7 @@ use crossterm::{
 use late_core::{MutexRecover, api_types::NowPlaying, audio::VizFrame};
 use ratatui::{Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, layout::Rect};
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     io::{self, Write},
     sync::{Arc, Mutex},
     time::Instant,
@@ -246,6 +246,7 @@ pub struct SessionConfig {
     pub ultimate_service: crate::app::ultimates::UltimateService,
     pub initial_ultimate_cooldowns: Vec<late_core::models::ultimate_cooldown::UltimateCooldown>,
     pub nonogram_library: crate::app::arcade::nonogram::state::Library,
+    pub chip_service: crate::app::games::chips::svc::ChipService,
     pub initial_chip_balance: i64,
 
     /// Session / connection
@@ -283,6 +284,14 @@ pub struct SessionConfig {
     /// the snapshot and to mint a viewer guard while on the screen.
     pub worldcup_service: Option<crate::app::worldcup::svc::WorldCupService>,
     pub active_users: Option<ActiveUsers>,
+    /// AI text generation (the clubhouse tutorial's bartender greeting).
+    /// `None` on headless/test paths; the greeting falls back to a script.
+    pub ai_service: Option<crate::app::ai::svc::AiService>,
+    /// Process-global clubhouse presence (seats, walkers, emotes). `None`
+    /// on headless/test paths, which keeps the room session-local.
+    pub clubhouse_lobby: Option<crate::app::clubhouse::lobby::SharedLobby>,
+    /// True once this user finished (or skipped) the clubhouse tutorial.
+    pub clubhouse_tutorial_done: bool,
     pub afk_users: crate::state::AfkUsers,
     pub username_directory: Option<crate::usernames::UsernameDirectory>,
     pub activity_feed_rx: Option<broadcast::Receiver<ActivityEvent>>,
@@ -300,6 +309,10 @@ pub struct SessionConfig {
 
     /// UI flags
     pub is_new_user: bool,
+    /// Tweak: land on Home (Dashboard, page 1) instead of the Clubhouse
+    /// (page 0) when the session starts. Ignored for brand-new users so they
+    /// still get the clubhouse first-visit tutorial.
+    pub land_on_home: bool,
 
     /// Display config
     pub initial_theme_id: String,
@@ -380,6 +393,18 @@ pub struct App {
     /// releases the poll gate.
     pub(crate) worldcup_viewer: Option<crate::app::worldcup::svc::WorldCupViewer>,
     pub(crate) worldcup: crate::app::worldcup::state::State,
+    /// Admin-gated clubhouse tavern (page `0`): avatar, crowd, animations.
+    pub(crate) clubhouse: crate::app::clubhouse::state::State,
+    /// Chips backend, kept for the clubhouse's on-the-house welcome pour.
+    pub(crate) chip_service: crate::app::games::chips::svc::ChipService,
+    /// Staff bot ids from the active-users map, for speech bubbles and the
+    /// tutorial's bartender greeting.
+    pub(crate) clubhouse_bartender_id: Option<Uuid>,
+    pub(crate) clubhouse_graybeard_id: Option<Uuid>,
+    /// Per-author drunk levels (1-4) copied from the shared lobby about once
+    /// a second; chat author labels tint from this owned map, never the mutex.
+    pub(crate) drunk_levels: HashMap<Uuid, u8>,
+    pub(super) ai_service: Option<crate::app::ai::svc::AiService>,
     pub(super) active_users: Option<ActiveUsers>,
     pub(super) afk_users: crate::state::AfkUsers,
     pub(super) username_directory: Option<crate::usernames::UsernameDirectory>,
@@ -649,6 +674,10 @@ impl App {
         self.show_bonsai_modal = false;
         self.show_bonsai_v2_modal = false;
         self.show_cat_modal = false;
+        // Real sessions land in the clubhouse; the integration suite predates
+        // that and drives flows from Home, so tests start there.
+        self.screen = Screen::Dashboard;
+        self.sync_visible_chat_room();
     }
 
     pub(crate) fn login_announcements_visible(&self) -> bool {
@@ -680,6 +709,8 @@ impl App {
                 .rooms_active_room
                 .as_ref()
                 .map(|room| room.chat_room_id),
+            // The clubhouse pins the embedded chat to #lounge.
+            Screen::Clubhouse => self.chat.lounge_room_id(),
             _ => None,
         }
     }
@@ -975,12 +1006,22 @@ impl App {
             config.user_id,
         );
         settings_modal_state.open_from_profile(&initial_profile);
+        // Everyone lands in the clubhouse by default: the tavern is the front
+        // door of late.sh (and the first-visit tutorial starts there). The
+        // "Land on Home page" tweak sends returning users straight to the
+        // dashboard instead; new users always start in the clubhouse so the
+        // tutorial runs.
+        let landing_screen = if config.land_on_home && !config.is_new_user {
+            Screen::Dashboard
+        } else {
+            Screen::Clubhouse
+        };
         let mut app = Self {
             running: true,
             size: (cols, rows),
-            screen: Screen::Dashboard,
+            screen: landing_screen,
             banner: None,
-            show_settings: true,
+            show_settings: false,
             show_splash: true,
             splash_ticks: 0,
             marquee_tick: 0,
@@ -1023,6 +1064,17 @@ impl App {
             worldcup_service: config.worldcup_service,
             worldcup_viewer: None,
             worldcup: crate::app::worldcup::state::State::default(),
+            clubhouse: crate::app::clubhouse::state::State::new(
+                config.clubhouse_lobby.clone(),
+                config.user_id,
+                config.username.clone(),
+                !config.clubhouse_tutorial_done,
+            ),
+            chip_service: config.chip_service,
+            clubhouse_bartender_id: None,
+            clubhouse_graybeard_id: None,
+            drunk_levels: HashMap::new(),
+            ai_service: config.ai_service.clone(),
             active_users: active_users.clone(),
             afk_users: afk_users.clone(),
             username_directory: config.username_directory,
@@ -1193,6 +1245,14 @@ impl App {
         };
         if app.screen == Screen::Artboard {
             app.enter_dartboard();
+        }
+        // The landing screen skips `set_screen`, so run its entry hook by
+        // hand. Clubhouse: immediate crowd refresh plus the first-visit
+        // tutorial. Dashboard: refresh the room list (sync_selection runs just
+        // below for both).
+        match landing_screen {
+            Screen::Dashboard => app.chat.request_list(),
+            _ => app.clubhouse.enter_screen(),
         }
         app.chat
             .set_favorite_room_ids(app.profile_state.profile().favorite_room_ids.clone());
@@ -1608,6 +1668,9 @@ impl App {
         if self.screen == Screen::Pinstar {
             self.enter_directory();
         }
+        if self.screen == Screen::Clubhouse {
+            self.clubhouse.enter_screen();
+        }
         if self.screen == Screen::Arcade
             && self.is_playing_game
             && crate::app::arcade::input::is_nes_selection(self.game_selection)
@@ -1775,6 +1838,125 @@ impl App {
             return false;
         };
         registry.send_control(&self.session_token, PairControlMessage::ToggleMute)
+    }
+
+    /// Advance the clubhouse animation clock every tick and, while the
+    /// screen is up, sync the shared lobby with the active-users map about
+    /// once a second and pull a fresh crowd snapshot every tick. Bots stay
+    /// out of the seat pool; the two staff bots (@bartender, @graybeard)
+    /// only toggle their fixed spots.
+    pub(crate) fn tick_clubhouse(&mut self) {
+        let on_screen = self.screen == Screen::Clubhouse;
+        self.clubhouse.tick(on_screen);
+        if !on_screen {
+            return;
+        }
+
+        if self.clubhouse.roster_refresh_due() {
+            let mut roster = Vec::new();
+            let mut graybeard = None;
+            let mut bartender = None;
+            if let Some(active_users) = &self.active_users {
+                let active_users = active_users.lock_recover();
+                for (user_id, user) in active_users.iter() {
+                    // Ghost bots register with no fingerprint; humans always
+                    // authenticate with an SSH key.
+                    if user.fingerprint.is_none() {
+                        match user.username.as_str() {
+                            "graybeard" => graybeard = Some(*user_id),
+                            "bartender" => bartender = Some(*user_id),
+                            _ => {}
+                        }
+                        continue;
+                    }
+                    // The roster includes this session's own user: everyone
+                    // holds a seat in the shared lobby until they walk.
+                    roster.push(crate::app::clubhouse::state::Occupant {
+                        user_id: *user_id,
+                        username: user.username.clone(),
+                    });
+                }
+            }
+            self.clubhouse.graybeard_online = graybeard.is_some();
+            self.clubhouse.bartender_online = bartender.is_some();
+            self.clubhouse_graybeard_id = graybeard;
+            self.clubhouse_bartender_id = bartender;
+            self.clubhouse.refresh_roster(roster);
+        }
+
+        self.clubhouse.refresh_snapshot();
+
+        let lounge_messages = self
+            .chat
+            .lounge_room_id()
+            .map(|lounge_id| self.chat.messages_for_room(lounge_id))
+            .unwrap_or(&[]);
+        self.clubhouse.update_bartender_banner(
+            self.clubhouse_bartender_id,
+            lounge_messages,
+            chrono::Utc::now(),
+        );
+    }
+
+    /// Persist "the clubhouse tutorial ran" (fire-and-forget).
+    pub(crate) fn persist_clubhouse_tutorial_done(&self) {
+        self.profile_state
+            .service()
+            .set_clubhouse_tutorial_done(self.user_id);
+    }
+
+    /// Open the profile modal for a user, closing the sheet modal that shares
+    /// its slot. The single entry point for every profile-open trigger (chat
+    /// author click, `/profile`, clubhouse avatar click).
+    pub(crate) fn open_profile_modal(&mut self, user_id: Uuid, fallback_name: impl Into<String>) {
+        self.show_sheet_modal = false;
+        self.sheet_modal_state.close();
+        self.profile_modal_state.open(user_id, fallback_name);
+        self.show_profile_modal = true;
+    }
+
+    /// The tutorial's @bartender welcome: a real #lounge message, so the
+    /// newcomer's first bartender line demonstrates the room being live.
+    /// AI-generated in his voice when the AI service is up, with a scripted
+    /// fallback (see `ghost::bartender_tutorial_greeting`).
+    pub(crate) fn send_clubhouse_bartender_greeting(&self) {
+        let Some(bartender_id) = self.clubhouse_bartender_id else {
+            return;
+        };
+        let Some(lounge_id) = self.chat.lounge_room_id() else {
+            return;
+        };
+        // Reaching the bar is the tutorial's finish line: the welcome round is
+        // on the house, so lock the walkthrough in as done and comp the pour.
+        self.persist_clubhouse_tutorial_done();
+        let username = self.profile_state.profile().username.clone();
+        let chat_service = self.chat.service.clone();
+        let ai_service = self.ai_service.clone();
+        let chip_service = self.chip_service.clone();
+        let lobby = self.clubhouse.lobby_handle();
+        let target = self.user_id;
+        tokio::spawn(async move {
+            // Comp the welcome drink first so the newcomer is already glowing
+            // when the bartender's line lands. A failed comp is non-fatal: the
+            // greeting still goes out, just without the buzz.
+            match chip_service
+                .grant_free_drink(target, late_core::models::drinks::WELCOME_DRINK_POINTS)
+                .await
+            {
+                Ok(drinks) => {
+                    if let Some(lobby) = lobby {
+                        lobby.record_drink(target, drinks.drunk_points, drinks.last_drink_at);
+                    }
+                }
+                Err(err) => {
+                    tracing::warn!(error = ?err, user_id = %target, "welcome drink comp failed");
+                }
+            }
+            let body =
+                crate::app::ai::ghost::bartender_tutorial_greeting(ai_service.as_ref(), &username)
+                    .await;
+            chat_service.send_bot_reply_task(bartender_id, lounge_id, body, Some(target));
+        });
     }
 
     fn set_shared_session_afk(&self, message: Option<String>) {

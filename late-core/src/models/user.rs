@@ -71,15 +71,21 @@ pub enum RadioStation {
     Nightride,
     Datawave,
     Spacesynth,
+    Ambient,
 }
 
 impl RadioStation {
+    /// Settings/persistence key, also used to look up live now-playing
+    /// metadata in the Nightride `/meta` feed. The feed keys stations by
+    /// their stream filename, so `Ambient` must key on `"rektify"` (its
+    /// `rektify.mp3` stream) even though its display label is `"ambient"`.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Chillsynth => "chillsynth",
             Self::Nightride => "nightride",
             Self::Datawave => "datawave",
             Self::Spacesynth => "spacesynth",
+            Self::Ambient => "rektify",
         }
     }
 
@@ -88,6 +94,7 @@ impl RadioStation {
             "nightride" => Self::Nightride,
             "datawave" => Self::Datawave,
             "spacesynth" => Self::Spacesynth,
+            "rektify" => Self::Ambient,
             _ => Self::Chillsynth,
         }
     }
@@ -244,10 +251,11 @@ const SHOW_RIGHT_SIDEBAR_KEY: &str = "show_right_sidebar";
 const RIGHT_SIDEBAR_MODE_KEY: &str = "right_sidebar_mode";
 const RIGHT_SIDEBAR_COMPONENTS_KEY: &str = "right_sidebar_components";
 const SHOW_ROOM_LIST_SIDEBAR_KEY: &str = "show_room_list_sidebar";
-const SHOW_SETTINGS_ON_CONNECT_KEY: &str = "show_settings_on_connect";
 const KEEP_COMPOSER_FOCUSED_KEY: &str = "keep_composer_focused";
 const START_WITH_MUSIC_MUTED_KEY: &str = "start_with_music_muted";
+const LAND_ON_HOME_KEY: &str = "land_on_home";
 const SHOW_FLAG_FALLBACK_KEY: &str = "show_flag_fallback";
+const CLUBHOUSE_TUTORIAL_DONE_KEY: &str = "clubhouse_tutorial_done";
 const FAVORITE_ROOM_IDS_KEY: &str = "favorite_room_ids";
 const BIO_KEY: &str = "bio";
 const COUNTRY_KEY: &str = "country";
@@ -489,8 +497,9 @@ impl User {
                  LEFT JOIN LATERAL (
                     SELECT string_agg(
                         CASE category
-                          WHEN 'lateania_archdemon' THEN 'LAD'
-                          WHEN 'lateania_frontier_king' THEN 'LFK'
+                          WHEN 'lateania_archdemon' THEN 'LMG'
+                          WHEN 'lateania_frontier_king' THEN 'LKN'
+                          WHEN 'lateania_sundering_deep' THEN 'LYS'
                           WHEN 'nethack_amulet' THEN 'NHA'
                           WHEN 'nethack_ascension' THEN 'NHY'
                           ELSE (
@@ -670,6 +679,23 @@ impl User {
                      updated = current_timestamp
                  WHERE id = $3",
                 &[&AUDIO_SOURCE_KEY, &value, &user_id],
+            )
+            .await?;
+        if updated == 0 {
+            bail!("user not found");
+        }
+        Ok(())
+    }
+
+    /// Atomically mark the clubhouse first-visit tutorial as completed.
+    pub async fn set_clubhouse_tutorial_done(client: &Client, user_id: Uuid) -> Result<()> {
+        let updated = client
+            .execute(
+                "UPDATE users
+                 SET settings = settings || jsonb_build_object($1::text, true),
+                     updated = current_timestamp
+                 WHERE id = $2",
+                &[&CLUBHOUSE_TUTORIAL_DONE_KEY, &user_id],
             )
             .await?;
         if updated == 0 {
@@ -917,14 +943,17 @@ pub struct ChatAuthorMetadata {
 
 fn chat_profile_award_badges(raw: Option<String>) -> Option<String> {
     let raw = raw?;
-    // Collapse the lesser milestone when its superseding one is present: the
-    // Frontier King implies the Archdemon, and an Ascension implies the Amulet.
-    // Profile views still show both; chat author labels show only the higher.
-    let has_frontier_king = raw.split_whitespace().any(|badge| badge == "LFK");
+    // Collapse the lesser milestone when its superseding one is present:
+    // Yssgar implies the Frontier King implies the Archdemon, and an Ascension
+    // implies the Amulet. Profile views still show all; chat author labels
+    // show only the highest.
+    let has_sundering_deep = raw.split_whitespace().any(|badge| badge == "LYS");
+    let has_frontier_king = raw.split_whitespace().any(|badge| badge == "LKN");
     let has_ascension = raw.split_whitespace().any(|badge| badge == "NHY");
     let badges = raw
         .split_whitespace()
-        .filter(|badge| !(has_frontier_king && *badge == "LAD"))
+        .filter(|badge| !(has_sundering_deep && (*badge == "LKN" || *badge == "LMG")))
+        .filter(|badge| !(has_frontier_king && *badge == "LMG"))
         .filter(|badge| !(has_ascension && *badge == "NHA"))
         .collect::<Vec<_>>()
         .join(" ");
@@ -1134,13 +1163,6 @@ pub fn extract_show_room_list_sidebar(settings: &Value) -> bool {
         .unwrap_or(true)
 }
 
-pub fn extract_show_settings_on_connect(settings: &Value) -> bool {
-    settings
-        .get(SHOW_SETTINGS_ON_CONNECT_KEY)
-        .and_then(Value::as_bool)
-        .unwrap_or(true)
-}
-
 /// Tweak: when true, pressing Enter in the chat composer sends the message
 /// but keeps the composer focused (same behavior as Alt+S, which becomes a
 /// no-op while the tweak is on). Opt-in; defaults to false so existing
@@ -1158,6 +1180,25 @@ pub fn extract_keep_composer_focused(settings: &Value) -> bool {
 pub fn extract_start_with_music_muted(settings: &Value) -> bool {
     settings
         .get(START_WITH_MUSIC_MUTED_KEY)
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// Tweak: land on Home (Dashboard, page 1) instead of the Clubhouse (page 0)
+/// when a session starts. Opt-in; defaults to false so sessions land in the
+/// clubhouse tavern like today.
+pub fn extract_land_on_home(settings: &Value) -> bool {
+    settings
+        .get(LAND_ON_HOME_KEY)
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// True once the user has finished (or skipped) the clubhouse first-visit
+/// tutorial; defaults to false so brand-new users get the walkthrough.
+pub fn extract_clubhouse_tutorial_done(settings: &Value) -> bool {
+    settings
+        .get(CLUBHOUSE_TUTORIAL_DONE_KEY)
         .and_then(Value::as_bool)
         .unwrap_or(false)
 }
@@ -1348,24 +1389,36 @@ mod tests {
     #[test]
     fn chat_profile_award_badges_prefer_frontier_king_over_archdemon() {
         assert_eq!(
-            chat_profile_award_badges(Some("LAD LFK".to_string())).as_deref(),
-            Some("LFK")
+            chat_profile_award_badges(Some("LMG LKN".to_string())).as_deref(),
+            Some("LKN")
         );
         assert_eq!(
-            chat_profile_award_badges(Some("AW1 LAD LFK CHIP2".to_string())).as_deref(),
-            Some("AW1 LFK CHIP2")
+            chat_profile_award_badges(Some("AW1 LMG LKN CHIP2".to_string())).as_deref(),
+            Some("AW1 LKN CHIP2")
+        );
+    }
+
+    #[test]
+    fn chat_profile_award_badges_prefer_sundering_deep_over_the_lesser_crowns() {
+        assert_eq!(
+            chat_profile_award_badges(Some("LMG LKN LYS".to_string())).as_deref(),
+            Some("LYS")
+        );
+        assert_eq!(
+            chat_profile_award_badges(Some("AW1 LMG LYS CHIP2".to_string())).as_deref(),
+            Some("AW1 LYS CHIP2")
         );
     }
 
     #[test]
     fn chat_profile_award_badges_keep_archdemon_when_it_is_the_best_lateania_badge() {
         assert_eq!(
-            chat_profile_award_badges(Some("AW1 LAD CHIP2".to_string())).as_deref(),
-            Some("AW1 LAD CHIP2")
+            chat_profile_award_badges(Some("AW1 LMG CHIP2".to_string())).as_deref(),
+            Some("AW1 LMG CHIP2")
         );
         assert_eq!(
-            chat_profile_award_badges(Some("LAD".to_string())).as_deref(),
-            Some("LAD")
+            chat_profile_award_badges(Some("LMG".to_string())).as_deref(),
+            Some("LMG")
         );
     }
 

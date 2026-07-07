@@ -101,11 +101,11 @@ pub enum TweakRow {
     RightSidebar,
     RoomListSidebar,
     LoungeInfo,
-    // Compose / Music / Display / Other groups.
+    // Compose / Music / Display / Startup groups.
     ComposerKeepFocused,
     StartWithMusicMuted,
     FlagFallback,
-    ShowSettingsOnConnect,
+    LandOnHome,
 }
 
 impl TweakRow {
@@ -118,7 +118,7 @@ impl TweakRow {
         TweakRow::ComposerKeepFocused,
         TweakRow::StartWithMusicMuted,
         TweakRow::FlagFallback,
-        TweakRow::ShowSettingsOnConnect,
+        TweakRow::LandOnHome,
     ];
 }
 
@@ -760,8 +760,8 @@ impl SettingsModalState {
             TweakRow::FlagFallback => {
                 self.draft.show_flag_fallback ^= true;
             }
-            TweakRow::ShowSettingsOnConnect => {
-                self.draft.show_settings_on_connect ^= true;
+            TweakRow::LandOnHome => {
+                self.draft.land_on_home ^= true;
             }
         }
         self.save();
@@ -1886,9 +1886,9 @@ impl SettingsModalState {
                 right_sidebar_mode: self.draft.right_sidebar_mode,
                 right_sidebar_components: self.draft.right_sidebar_components.clone(),
                 show_room_list_sidebar: self.draft.show_room_list_sidebar,
-                show_settings_on_connect: self.draft.show_settings_on_connect,
                 keep_composer_focused: self.draft.keep_composer_focused,
                 start_with_music_muted: self.draft.start_with_music_muted,
+                land_on_home: self.draft.land_on_home,
                 show_flag_fallback: self.draft.show_flag_fallback,
                 favorite_room_ids: self.draft.favorite_room_ids.clone(),
                 birthday: self.draft.birthday.clone(),

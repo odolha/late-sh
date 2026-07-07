@@ -884,6 +884,7 @@ impl russh::server::Handler for ClientHandler {
             ultimate_service: self.state.ultimate_service.clone(),
             initial_ultimate_cooldowns,
             nonogram_library,
+            chip_service: self.state.chip_service.clone(),
             initial_chip_balance,
             leaderboard_rx: Some(self.state.leaderboard_service.subscribe()),
 
@@ -918,6 +919,11 @@ impl russh::server::Handler for ClientHandler {
             radio_meta_rx: Some(self.state.radio_meta_rx.clone()),
             worldcup_service: Some(self.state.worldcup_service.clone()),
             active_users: Some(self.state.active_users.clone()),
+            ai_service: Some(self.state.ai_service.clone()),
+            clubhouse_lobby: Some(self.state.clubhouse_lobby.clone()),
+            clubhouse_tutorial_done: late_core::models::user::extract_clubhouse_tutorial_done(
+                &user.settings,
+            ),
             afk_users: self.state.afk_users.clone(),
             username_directory: Some(self.state.username_directory.clone()),
             activity_feed_rx: self.activity_feed_rx.take(),
@@ -931,6 +937,7 @@ impl russh::server::Handler for ClientHandler {
             artboard_ban_expires_at: artboard_ban.and_then(|ban| ban.expires_at),
 
             is_new_user: self.is_new_user,
+            land_on_home: late_core::models::user::extract_land_on_home(&user.settings),
 
             // Display config
             initial_theme_id: late_ssh_theme_id(&user.settings),

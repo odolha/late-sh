@@ -146,14 +146,20 @@ pub(crate) fn build_birthday_alert(
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
-fn date_for_timezone(now: DateTime<Utc>, timezone: Option<&str>) -> NaiveDate {
-    let Some(timezone) = timezone.map(str::trim).filter(|value| !value.is_empty()) else {
-        return now.date_naive();
-    };
+/// Parse an account's timezone tweak into a `chrono_tz::Tz`. `None` (unset,
+/// blank, or unparseable) means "no local zone" — callers fall back to UTC.
+pub fn parse_account_tz(timezone: Option<&str>) -> Option<chrono_tz::Tz> {
     timezone
-        .parse::<chrono_tz::Tz>()
-        .map(|tz| now.with_timezone(&tz).date_naive())
-        .unwrap_or_else(|_| now.date_naive())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<chrono_tz::Tz>().ok())
+}
+
+fn date_for_timezone(now: DateTime<Utc>, timezone: Option<&str>) -> NaiveDate {
+    match parse_account_tz(timezone) {
+        Some(tz) => now.with_timezone(&tz).date_naive(),
+        None => now.date_naive(),
+    }
 }
 
 impl ProfileService {
@@ -380,6 +386,26 @@ impl ProfileService {
         self.find_profile(user_id);
         self.publish_event(ProfileEvent::Saved { user_id });
         Ok(())
+    }
+
+    /// Fire-and-forget: mark the clubhouse first-visit tutorial finished so
+    /// it never runs again for this user. No event on success; a failure is
+    /// only logged (the tutorial would simply run once more next session).
+    pub fn set_clubhouse_tutorial_done(&self, user_id: Uuid) {
+        let service = self.clone();
+        tokio::spawn(
+            async move {
+                let result = async {
+                    let client = service.db.get().await?;
+                    User::set_clubhouse_tutorial_done(&client, user_id).await
+                }
+                .await;
+                if let Err(e) = result {
+                    tracing::warn!(error = ?e, "failed to persist clubhouse tutorial completion");
+                }
+            }
+            .instrument(info_span!("profile.clubhouse_tutorial_task", user_id = %user_id)),
+        );
     }
 
     pub fn delete_account(&self, user_id: Uuid) {

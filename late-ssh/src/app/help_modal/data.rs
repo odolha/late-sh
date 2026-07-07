@@ -148,8 +148,13 @@ pub fn bot_app_context() -> String {
         "APP CONTEXT:\n\
         CRITICAL FACTS:\n\
         - Chat username badges render in this order: bracketed last-month leaderboard awards, special role badges, bonsai stage, equipped badge, equipped flag, then the /brb moon.\n\
-        - There is no separate top-level Chat screen. Home/Dashboard owns the chat room rail and chat center; top-level screens are Home, The Arcade, Games, Tables, Artboard, and Directory.\n\
-        - The Games hub (page 3) is the dedicated landing for the door games Lateania, Rebels, and NetHack; each is launched from there, not from its own top-level page.\n\
+        - The Clubhouse (page 0, the Late Lounge tavern) is the landing screen: a walkable ASCII room where everyone online is present. Arrows/hjkl walk, i says something (it floats over your head and lands in #lounge), w waves, x dances, Enter interacts with a landmark. This is where you (@bartender) keep the bar.\n\
+        - @bartender pours drinks for Late Chips: mention him (or press t at the bar) to order. There is no fixed menu; he invents each drink's name and prices it 100-1000 chips, never more than the patron can spend while keeping a 100-chip floor untouched. A brand-new patron's first-ever drink is free.\n\
+        - Drinking builds a buzz that levels up: 0 sober, 1 tipsy, 2 buzzed, 3 sloshed, 4 wasted. The printed word only shows from buzzed (level 2) up; tipsy just glows quietly. Once wasted, the bartender cuts a patron off to water or coffee instead of more drinks.\n\
+        - The buzz sobers up on its own over time, no action needed: it decays 300 points an hour, so even a maxed-out binge is fully sober again well within a day.\n\
+        - Drunk level tints the username label's background everywhere it appears (the Clubhouse floor and chat author labels alike), light green through yellow and orange to red as the level climbs.\n\
+        - There is no separate top-level Chat screen. Home/Dashboard owns the chat room rail and chat center; top-level screens are Clubhouse (0), Home (1), The Arcade (2), Games (3), Tables (4), Artboard (5), Directory (6), and World Cup (7).\n\
+        - The Games hub (page 3) is the dedicated landing for the door games Lateania, NetHack, Green Dragon, dopewars, and Rebels; each is launched from there, not from its own top-level page.\n\
         - Directory page 6 owns Profiles, Projects, and Pinstar tabs. Artboard and Pinstar have detailed page-local editing keybinds.\n",
     );
     for topic in HelpTopic::ALL {
@@ -644,6 +649,22 @@ fn arcade_help_lines() -> Vec<String> {
         "Notes",
         "  Game-specific controls appear inside the Arcade page.",
         "  Daily puzzle completions, run scores, chips, payouts, and leaderboards are covered in Economy.",
+        "",
+        "Leaderboard badges",
+        "  Awarded each month to the previous month's top players. They show",
+        "  first in your chat username badge stack, wrapped in brackets.",
+        "  The trailing digit is your rank, 1-3 (so [AW1] is that month's #1).",
+        "  [CHIP]    Top Chips",
+        "  [AW]      Arcade Wins",
+        "  [LA]      Lateris (Tetris)",
+        "  [24#]     2048",
+        "  [SN]      Snake",
+        "  The Lateania and NetHack badges are one-off feats, shown with no rank digit.",
+        "  [LMG]     Lateania Archdemon",
+        "  [LKN]     Lateania Frontier King",
+        "  [LYS]     Lateania Sundering Deep",
+        "  [NHA]     NetHack Amulet",
+        "  [NHY]     NetHack Ascension",
     ]
     .into_iter()
     .map(str::to_string)
@@ -686,6 +707,7 @@ fn tables_help_lines() -> Vec<String> {
         "  Arrows            game gets first chance; otherwise embedded chat handles them",
         "",
         "Home shortcuts",
+        "  \\                 cycle room list and info panel visibility",
         "  3                 open Tables",
         "  b then 1-4         enter one of the recent table shortcuts in lounge",
         "",
@@ -721,7 +743,8 @@ fn lateania_help_lines() -> Vec<String> {
         "  < / >             move up / down where exits exist",
         "  o                 look around",
         "  Space / Enter / x attack",
-        "  1-9               use ability slots after choosing a class",
+        "  1-9, 0            use ability slots 1-10 after choosing a class",
+        "  v then Enter      cast any ability from the panel, however deep the roster",
         "  z                 flee combat",
         "",
         "Panels",
@@ -752,12 +775,17 @@ fn overview_lines() -> Vec<String> {
         "late.sh is a terminal clubhouse over SSH: chat, music, news, games, settings, and shared presence in one session.",
         "",
         "Primary screens",
+        "  0 Clubhouse       the Late Lounge: walk around, everyone is live",
         "  1 Home            chat, tables, music, and live activity",
         "  2 The Arcade      daily puzzles, endless games, leaderboard",
         "  3 Games           Lateania, Rebels, and NetHack in one hub",
         "  4 Tables          persistent table games",
         "  5 Artboard        shared persistent ASCII canvas",
         "  6 Directory       Profiles, Projects, and Pinstar",
+        "  7 World Cup       live scores, groups, and the bracket",
+        "",
+        "You land in the Clubhouse: hjkl/arrows walk, i talks (your words float",
+        "over your head and land in #lounge), w waves, x dances, Enter interacts.",
         "",
         "The Games hub is a selector: arrow keys or h/l switch between the Lateania,",
         "Rebels, and NetHack cards; Enter launches the selected game.",
@@ -767,7 +795,7 @@ fn overview_lines() -> Vec<String> {
         "",
         "Global keys",
         "  Tab / Shift+Tab   next / previous screen",
-        "  1-6               jump straight to a screen",
+        "  0-7               jump straight to a screen",
         "  ?                 open this guide",
         "  q                 open quit confirm (press q again to leave)",
         "  Ctrl+O            open Settings",
@@ -783,7 +811,7 @@ fn overview_lines() -> Vec<String> {
         "  v then v          open the Music Booth (submit + queue + votes)",
         "  v then x          cycle audio source: Icecast → YouTube → Radio",
         "  v then s          skip-vote the current YouTube track",
-        "  v then 1..4       select stream/station in the active source",
+        "  v then 1..5       select stream/station in the active source",
         "",
         "Home",
         "  click top bar     jump screens",
@@ -1148,6 +1176,7 @@ fn bonsai_help_lines() -> Vec<String> {
         "  Watering grows the widest wave; high vigor widens it; stress narrows it.",
         "  Healthy growth reaches up and stays tidy; dry, stressed growth throws messy sideways shoots.",
         "  It also creeps a little on its own while you stay connected, as long as vigor is high enough.",
+        "  The graph caps at 96 branches total; once a tree reaches that size, growth quietly stops adding new ones, though you can still steer, pinch, cut, and split what's already there.",
         "",
         "When it dies",
         "  Dynamic Bonsai only dies when stress maxes out and vigor hits zero at the same time, so it stays recoverable-but-ugly before then.",
@@ -1232,7 +1261,7 @@ late.sh has three music sources:
   YouTube    a shared queue everyone can submit links to.
   Radio      direct Nightride guest stations.
 
-Your paired client plays the selected source. Use v then 1..4 to select a stream or station inside the active source.
+Your paired client plays the selected source. Use v then 1..5 to select a stream or station inside the active source.
 
 Plain stream, no pairing:
   vlc https://late.sh/stream
@@ -1247,7 +1276,7 @@ Global keys (work anywhere)
 
 Select stream or station
   Icecast active: v then 1 / 2 selects chill / classical
-  Radio active:   v then 1..4 selects Chillsynth / Nightride / Datawave / Spacesynth
+  Radio active:   v then 1..5 selects Chillsynth / Nightride / Datawave / Spacesynth / Ambient
 
 Swap which source you hear
   v then x          cycle your paired client through Icecast → YouTube → Radio. Your choice is saved per-user, so a refresh keeps it.
@@ -1468,7 +1497,8 @@ mod tests {
         assert!(arcade.contains("Economy"));
         assert!(tables.contains("Economy tab"));
         assert!(lateania.contains("Lateania"));
-        assert!(!arcade.contains("Lateris"));
+        // The badge glossary names games to explain each badge code; game
+        // details still live in the hub, not here.
         assert!(!tables.contains("Sudoku"));
         assert!(!lateania.contains("Clock presets"));
     }

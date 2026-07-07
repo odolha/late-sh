@@ -395,6 +395,7 @@ pub async fn build_session_config(state: &State, inputs: SessionBootstrapInputs)
         ultimate_service: state.ultimate_service.clone(),
         initial_ultimate_cooldowns,
         nonogram_library: state.nonogram_library.clone(),
+        chip_service: state.chip_service.clone(),
         initial_chip_balance,
         web_url: state.config.web_url.clone(),
         rebels_enabled: state.config.rebels_enabled,
@@ -426,6 +427,11 @@ pub async fn build_session_config(state: &State, inputs: SessionBootstrapInputs)
         radio_meta_rx: Some(state.radio_meta_rx.clone()),
         worldcup_service: Some(state.worldcup_service.clone()),
         active_users: Some(state.active_users.clone()),
+        ai_service: Some(state.ai_service.clone()),
+        clubhouse_lobby: Some(state.clubhouse_lobby.clone()),
+        clubhouse_tutorial_done: late_core::models::user::extract_clubhouse_tutorial_done(
+            &user.settings,
+        ),
         afk_users: state.afk_users.clone(),
         username_directory: Some(state.username_directory.clone()),
         activity_feed_rx,
@@ -439,6 +445,7 @@ pub async fn build_session_config(state: &State, inputs: SessionBootstrapInputs)
         artboard_ban_expires_at: artboard_ban.and_then(|ban| ban.expires_at),
         leaderboard_rx: Some(state.leaderboard_service.subscribe()),
         is_new_user,
+        land_on_home: late_core::models::user::extract_land_on_home(&user.settings),
         initial_theme_id: late_core::models::user::extract_theme_id(&user.settings)
             .unwrap_or_else(|| theme::DEFAULT_ID.to_string()),
         initial_audio_source: late_core::models::user::extract_audio_source(&user.settings),

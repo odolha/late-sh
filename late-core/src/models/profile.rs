@@ -8,13 +8,13 @@ use super::chips::INITIAL_CHIP_BALANCE;
 use super::user::{
     RightSidebarComponentSetting, RightSidebarMode, User, extract_bio, extract_birthday,
     extract_country, extract_enable_background_color, extract_favorite_room_ids, extract_ide,
-    extract_keep_composer_focused, extract_langs, extract_notify_bell,
+    extract_keep_composer_focused, extract_land_on_home, extract_langs, extract_notify_bell,
     extract_notify_cooldown_mins, extract_notify_format, extract_notify_kinds, extract_os,
     extract_right_sidebar_components, extract_right_sidebar_mode, extract_show_dashboard_header,
     extract_show_flag_fallback, extract_show_right_sidebar, extract_show_room_list_sidebar,
-    extract_show_settings_on_connect, extract_start_with_music_muted, extract_terminal,
-    extract_text_brightness_adjustment, extract_theme_id, extract_timezone,
-    normalize_right_sidebar_components, normalize_text_brightness_adjustment,
+    extract_start_with_music_muted, extract_terminal, extract_text_brightness_adjustment,
+    extract_theme_id, extract_timezone, normalize_right_sidebar_components,
+    normalize_text_brightness_adjustment,
 };
 
 #[derive(Clone, Debug)]
@@ -44,14 +44,15 @@ pub struct Profile {
     /// the render order (top to bottom); the clock is pinned above it.
     pub right_sidebar_components: Vec<RightSidebarComponentSetting>,
     pub show_room_list_sidebar: bool,
-    /// When false, the settings modal is not auto-opened on connect.
-    pub show_settings_on_connect: bool,
     /// Tweak: pressing Enter in the chat composer sends without closing it.
     /// While on, the Alt+S shortcut becomes a no-op.
     pub keep_composer_focused: bool,
     /// Tweak: silently mute the first paired audio client on each new SSH
     /// session so music does not auto-play.
     pub start_with_music_muted: bool,
+    /// Tweak: land on Home (page 1) instead of the Clubhouse (page 0) when a
+    /// session starts.
+    pub land_on_home: bool,
     /// Tweak: show text labels instead of flag emoji in the shop Flags tab.
     pub show_flag_fallback: bool,
     /// Ordered list of room ids pinned to the dashboard quick-switch strip.
@@ -90,9 +91,9 @@ impl Default for Profile {
             right_sidebar_mode: RightSidebarMode::On,
             right_sidebar_components: super::user::default_right_sidebar_components(),
             show_room_list_sidebar: true,
-            show_settings_on_connect: true,
             keep_composer_focused: false,
             start_with_music_muted: false,
+            land_on_home: false,
             show_flag_fallback: false,
             favorite_room_ids: Vec::new(),
             birthday: None,
@@ -122,9 +123,9 @@ pub struct ProfileParams {
     pub right_sidebar_mode: RightSidebarMode,
     pub right_sidebar_components: Vec<RightSidebarComponentSetting>,
     pub show_room_list_sidebar: bool,
-    pub show_settings_on_connect: bool,
     pub keep_composer_focused: bool,
     pub start_with_music_muted: bool,
+    pub land_on_home: bool,
     pub show_flag_fallback: bool,
     pub favorite_room_ids: Vec<Uuid>,
     /// Year-less `MM-DD` birthday, normalised on write. Empty/invalid clears it.
@@ -186,7 +187,7 @@ impl Profile {
     /// enable_background_color/text_brightness_adjustment/
     /// show_dashboard_header/show_right_sidebar/
     /// right_sidebar_mode/right_sidebar_components/
-    /// show_room_list_sidebar/show_settings_on_connect/keep_composer_focused/
+    /// show_room_list_sidebar/keep_composer_focused/
     /// start_with_music_muted/show_flag_fallback into settings via
     /// `settings || jsonb_build_object(...)`, so concurrent writes to
     /// unrelated keys (ignored_user_ids) are preserved.
@@ -273,16 +274,16 @@ impl Profile {
                          'right_sidebar_mode', $14::text,
                          'right_sidebar_components', $15::jsonb,
                          'show_room_list_sidebar', $16::bool,
-                         'show_settings_on_connect', $17::bool,
-                         'favorite_room_ids', $18::jsonb,
-                         'ide', $19::text,
-                         'terminal', $20::text,
-                         'os', $21::text,
-                         'langs', $22::jsonb,
-                         'birthday', $23::text,
-                         'keep_composer_focused', $24::bool,
-                         'start_with_music_muted', $25::bool,
-                         'show_flag_fallback', $26::bool
+                         'favorite_room_ids', $17::jsonb,
+                         'ide', $18::text,
+                         'terminal', $19::text,
+                         'os', $20::text,
+                         'langs', $21::jsonb,
+                         'birthday', $22::text,
+                         'keep_composer_focused', $23::bool,
+                         'start_with_music_muted', $24::bool,
+                         'show_flag_fallback', $25::bool,
+                         'land_on_home', $26::bool
                      ),
                      updated = current_timestamp
                  WHERE id = $27
@@ -304,7 +305,6 @@ impl Profile {
                     &params.right_sidebar_mode.as_str(),
                     &right_sidebar_components_json,
                     &params.show_room_list_sidebar,
-                    &params.show_settings_on_connect,
                     &favorite_room_ids_json,
                     &ide,
                     &terminal,
@@ -314,6 +314,7 @@ impl Profile {
                     &params.keep_composer_focused,
                     &params.start_with_music_muted,
                     &params.show_flag_fallback,
+                    &params.land_on_home,
                     &user_id,
                 ],
             )
@@ -345,9 +346,9 @@ impl Profile {
             right_sidebar_mode: extract_right_sidebar_mode(&user.settings),
             right_sidebar_components: extract_right_sidebar_components(&user.settings),
             show_room_list_sidebar: extract_show_room_list_sidebar(&user.settings),
-            show_settings_on_connect: extract_show_settings_on_connect(&user.settings),
             keep_composer_focused: extract_keep_composer_focused(&user.settings),
             start_with_music_muted: extract_start_with_music_muted(&user.settings),
+            land_on_home: extract_land_on_home(&user.settings),
             show_flag_fallback: extract_show_flag_fallback(&user.settings),
             favorite_room_ids: extract_favorite_room_ids(&user.settings),
             birthday: extract_birthday(&user.settings),

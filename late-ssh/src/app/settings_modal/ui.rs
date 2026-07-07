@@ -684,8 +684,8 @@ fn draw_tweaks_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) {
         Constraint::Length(1),                // Display subsection heading
         Constraint::Length(1),                // flag fallback row
         Constraint::Length(1),                // breathing
-        Constraint::Length(1),                // Modals subsection heading
-        Constraint::Length(1),                // show-settings-on-connect row
+        Constraint::Length(1),                // Startup subsection heading
+        Constraint::Length(1),                // land on home row
         Constraint::Min(0),                   // flex spacer
         Constraint::Length(gem_strip_height), // gem
     ])
@@ -781,14 +781,14 @@ fn draw_tweaks_tab(frame: &mut Frame, area: Rect, state: &SettingsModalState) {
         sections[14],
     );
 
-    frame.render_widget(Paragraph::new(section_heading("Other")), sections[16]);
+    frame.render_widget(Paragraph::new(section_heading("Startup")), sections[16]);
     frame.render_widget(
         Paragraph::new(tweak_row_line(
             state,
-            TweakRow::ShowSettingsOnConnect,
+            TweakRow::LandOnHome,
             width,
-            "Show settings on connect",
-            toggle_span(state.draft().show_settings_on_connect),
+            "Land on Home page",
+            toggle_span(state.draft().land_on_home),
         )),
         sections[17],
     );

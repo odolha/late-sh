@@ -75,7 +75,10 @@ impl InputContext {
 }
 
 fn is_chat_composer_context(ctx: InputContext) -> bool {
-    matches!(ctx.screen, Screen::Dashboard | Screen::Rooms) && ctx.chat_composing
+    matches!(
+        ctx.screen,
+        Screen::Dashboard | Screen::Rooms | Screen::Clubhouse
+    ) && ctx.chat_composing
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -682,6 +685,16 @@ fn handle_image_modal_input(app: &mut App, event: &ParsedInput) {
                 ));
             }
         }
+        // A left click dismisses the preview so you don't have to reach for a
+        // key. Only on the press (not release/drag) so the click that opened
+        // the modal doesn't immediately close it.
+        ParsedInput::Mouse(MouseEvent {
+            kind: MouseEventKind::Down,
+            button: Some(MouseButton::Left),
+            ..
+        }) => {
+            close_image_modal(app);
+        }
         _ => {}
     }
 }
@@ -889,7 +902,11 @@ fn handle_parsed_input_inner(app: &mut App, event: ParsedInput) {
         return;
     }
 
-    if matches!(ctx.screen, Screen::Dashboard | Screen::Rooms) && app.chat.has_overlay() {
+    if matches!(
+        ctx.screen,
+        Screen::Dashboard | Screen::Rooms | Screen::Clubhouse
+    ) && app.chat.has_overlay()
+    {
         handle_overlay_input(app, &event);
         return;
     }
@@ -1448,6 +1465,10 @@ fn handle_dedicated_screen_input(app: &mut App, ctx: InputContext, event: &Parse
 
     if ctx.screen == Screen::WorldCup {
         return handle_worldcup_input(app, event);
+    }
+
+    if ctx.screen == Screen::Clubhouse {
+        return crate::app::clubhouse::input::handle_event(app, event);
     }
 
     if ctx.screen == Screen::Rebels {
@@ -2225,6 +2246,12 @@ fn dispatch_escape(app: &mut App) {
         return;
     }
     if app.booth_modal_state.is_open() {
+        // While the History `/` filter is capturing, Esc cancels the filter
+        // rather than closing the whole booth.
+        if app.booth_modal_state.history_filter_active() {
+            app.booth_modal_state.cancel_history_filter();
+            return;
+        }
         app.booth_modal_state.close();
         return;
     }
@@ -2262,7 +2289,11 @@ fn dispatch_escape(app: &mut App) {
         app.chat.cancel_reaction_leader();
         return;
     }
-    if matches!(ctx.screen, Screen::Dashboard | Screen::Rooms) && app.chat.has_overlay() {
+    if matches!(
+        ctx.screen,
+        Screen::Dashboard | Screen::Rooms | Screen::Clubhouse
+    ) && app.chat.has_overlay()
+    {
         app.chat.close_overlay();
         return;
     }
@@ -2539,6 +2570,9 @@ fn handle_scroll_for_screen(app: &mut App, screen: Screen, delta: isize) {
         Screen::Artboard => {}
         Screen::Pinstar => {}
         Screen::WorldCup => app.worldcup.scroll(delta),
+        // The clubhouse has no scrollable chat panel; bubbles carry the
+        // conversation and the full history lives on Home.
+        Screen::Clubhouse => {}
         _ => {}
     }
 }
@@ -2550,14 +2584,15 @@ fn topbar_screen_hit_test(x: u16, y: u16) -> Option<Screen> {
 
     match x {
         // Top title text starts immediately after the left border. The digit
-        // cells in " late.sh | 1 2 3 4 5 6 | ..." land on these columns.
-        12 => Some(Screen::Dashboard),
-        14 => Some(Screen::Arcade),
-        16 => Some(Screen::Games),
-        18 => Some(Screen::Rooms),
-        20 => Some(Screen::Artboard),
-        22 => Some(Screen::Pinstar),
-        24 => Some(Screen::WorldCup),
+        // cells in " late.sh | 0 1 2 3 4 5 6 7 | ..." land on these columns.
+        12 => Some(Screen::Clubhouse),
+        14 => Some(Screen::Dashboard),
+        16 => Some(Screen::Arcade),
+        18 => Some(Screen::Games),
+        20 => Some(Screen::Rooms),
+        22 => Some(Screen::Artboard),
+        24 => Some(Screen::Pinstar),
+        26 => Some(Screen::WorldCup),
         _ => None,
     }
 }
@@ -3069,8 +3104,10 @@ fn mouse_scroll_delta(mouse: MouseEvent) -> Option<isize> {
 
 fn handle_arrow_for_screen(app: &mut App, screen: Screen, key: u8) -> bool {
     // Route arrows to autocomplete when active
-    if matches!(screen, Screen::Dashboard | Screen::Rooms)
-        && app.chat.is_composing()
+    if matches!(
+        screen,
+        Screen::Dashboard | Screen::Rooms | Screen::Clubhouse
+    ) && app.chat.is_composing()
         && app.chat.is_autocomplete_active()
     {
         chat::input::handle_autocomplete_arrow(app, key);
@@ -3099,6 +3136,9 @@ fn handle_arrow_for_screen(app: &mut App, screen: Screen, key: u8) -> bool {
         // World Cup up/down arrows are consumed earlier in
         // handle_dedicated_screen_input (mapped to k/j scroll).
         Screen::WorldCup => false,
+        // Walk-mode arrows are consumed in handle_dedicated_screen_input;
+        // composing-mode arrows are swallowed by the shared composer gate.
+        Screen::Clubhouse => false,
     }
 }
 
@@ -3157,6 +3197,7 @@ fn start_slash_command_composer(app: &mut App, screen: Screen) -> bool {
 
     let room_id = match screen {
         Screen::Dashboard => app.chat.selected_room_id,
+        Screen::Clubhouse => app.chat.lounge_room_id(),
         _ => None,
     };
     let Some(room_id) = room_id else {
@@ -3434,8 +3475,14 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
         return true;
     }
 
-    if matches!(byte, b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8')
-        && ctx.screen == Screen::Dashboard
+    // While the reaction leader is armed, every digit belongs to it: `1`-`9`
+    // are the quick reactions and `0` opens the custom icon picker. Let them
+    // fall through to the chat message-action handler instead of the global
+    // page switch (`0` now lands on the Clubhouse, `1`-`7` on other pages).
+    if matches!(
+        byte,
+        b'0' | b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9'
+    ) && ctx.screen == Screen::Dashboard
         && app.chat.is_reaction_leader_active()
     {
         return false;
@@ -3574,6 +3621,23 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
             app.room_section_prefix_armed = true;
             true
         }
+        b'\\'
+            if ctx.screen == Screen::Dashboard
+                && !ctx.chat_composing
+                && !ctx.feeds_processing
+                && !ctx.news_composing
+                && !ctx.showcase_composing
+                && !ctx.work_composing =>
+        {
+            let label = match app.profile_state.cycle_sidebars() {
+                (true, true) => "Sidebars: both shown",
+                (false, true) => "Sidebars: room list hidden",
+                (true, false) => "Sidebars: info panel hidden",
+                (false, false) => "Sidebars: both hidden",
+            };
+            app.banner = Some(crate::app::common::primitives::Banner::success(label));
+            true
+        }
         b'w' | b'W'
             if !ctx.chat_composing
                 && !ctx.feeds_processing
@@ -3665,6 +3729,11 @@ fn handle_global_key(app: &mut App, ctx: InputContext, byte: u8) -> bool {
             app.set_screen(Screen::WorldCup);
             true
         }
+        b'0' if !artboard_blocks_page_switch => {
+            reset_composers_for_page_change(app);
+            app.set_screen(Screen::Clubhouse);
+            true
+        }
         b'\t' if !artboard_blocks_page_switch => {
             reset_composers_for_page_change(app);
             app.set_screen(ctx.screen.next());
@@ -3751,6 +3820,10 @@ fn dispatch_screen_key(app: &mut App, screen: Screen, byte: u8) {
         Screen::WorldCup => {
             // World Cup keys are handled in handle_dedicated_screen_input
             // (Space/j/k/arrows); byte dispatch is a no-op here.
+        }
+        Screen::Clubhouse => {
+            // Clubhouse keys are handled in handle_dedicated_screen_input
+            // (walking, chat routing, interactions); no-op here.
         }
     }
 }
@@ -4219,7 +4292,10 @@ fn handle_pinstar_browser_input(app: &mut App, event: &ParsedInput) -> bool {
 pub(crate) fn try_open_icon_picker(app: &mut App) {
     let ctx = InputContext::from_app(app);
     // Only chat composers can receive icons.
-    if !matches!(ctx.screen, Screen::Dashboard | Screen::Rooms) {
+    if !matches!(
+        ctx.screen,
+        Screen::Dashboard | Screen::Rooms | Screen::Clubhouse
+    ) {
         return;
     }
     if !ctx.chat_composing {
@@ -4230,6 +4306,10 @@ pub(crate) fn try_open_icon_picker(app: &mut App) {
         } else if ctx.screen == Screen::Rooms {
             if let Some(room) = app.rooms_active_room.as_ref() {
                 app.chat.start_composing_in_room(room.chat_room_id);
+            }
+        } else if ctx.screen == Screen::Clubhouse {
+            if let Some(lounge_id) = app.chat.lounge_room_id() {
+                app.chat.start_composing_in_room(lounge_id);
             }
         } else {
             app.chat.start_composing();
@@ -4379,7 +4459,11 @@ fn apply_icon_selection(app: &mut App, keep_open: bool) {
             }
 
             let ctx = InputContext::from_app(app);
-            if matches!(ctx.screen, Screen::Dashboard | Screen::Rooms) && ctx.chat_composing {
+            if matches!(
+                ctx.screen,
+                Screen::Dashboard | Screen::Rooms | Screen::Clubhouse
+            ) && ctx.chat_composing
+            {
                 for ch in icon_str.chars() {
                     app.chat.composer_push(ch);
                 }
@@ -4594,16 +4678,17 @@ mod tests {
 
     #[test]
     fn topbar_screen_hit_test_maps_screen_digits() {
-        assert_eq!(topbar_screen_hit_test(12, 0), Some(Screen::Dashboard));
-        assert_eq!(topbar_screen_hit_test(14, 0), Some(Screen::Arcade));
-        assert_eq!(topbar_screen_hit_test(16, 0), Some(Screen::Games));
-        assert_eq!(topbar_screen_hit_test(18, 0), Some(Screen::Rooms));
-        assert_eq!(topbar_screen_hit_test(20, 0), Some(Screen::Artboard));
-        assert_eq!(topbar_screen_hit_test(22, 0), Some(Screen::Pinstar));
-        assert_eq!(topbar_screen_hit_test(24, 0), Some(Screen::WorldCup));
+        assert_eq!(topbar_screen_hit_test(12, 0), Some(Screen::Clubhouse));
+        assert_eq!(topbar_screen_hit_test(14, 0), Some(Screen::Dashboard));
+        assert_eq!(topbar_screen_hit_test(16, 0), Some(Screen::Arcade));
+        assert_eq!(topbar_screen_hit_test(18, 0), Some(Screen::Games));
+        assert_eq!(topbar_screen_hit_test(20, 0), Some(Screen::Rooms));
+        assert_eq!(topbar_screen_hit_test(22, 0), Some(Screen::Artboard));
+        assert_eq!(topbar_screen_hit_test(24, 0), Some(Screen::Pinstar));
+        assert_eq!(topbar_screen_hit_test(26, 0), Some(Screen::WorldCup));
         // The door games are no longer top-level tabs; the column past the last
         // digit and the gaps between digits map to nothing.
-        assert_eq!(topbar_screen_hit_test(26, 0), None);
+        assert_eq!(topbar_screen_hit_test(28, 0), None);
         assert_eq!(topbar_screen_hit_test(13, 0), None);
         assert_eq!(topbar_screen_hit_test(12, 1), None);
     }

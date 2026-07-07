@@ -181,12 +181,23 @@ struct DrawContext<'a> {
     pinstar_browser: Option<&'a crate::app::pinstar::browser::DiagramBrowser>,
     worldcup_snapshot: Option<std::sync::Arc<crate::app::worldcup::model::WorldCupSnapshot>>,
     worldcup_state: &'a crate::app::worldcup::state::State,
+    clubhouse_state: &'a crate::app::clubhouse::state::State,
+    clubhouse_own_username: &'a str,
+    /// The #lounge tail for clubhouse speech bubbles; empty off that screen.
+    clubhouse_lounge_messages: &'a [late_core::models::chat_message::ChatMessage],
+    /// Staff bot ids so their #lounge lines bubble over their sprites.
+    clubhouse_graybeard_id: Option<uuid::Uuid>,
+    /// The clubhouse composer footer; built only on that screen.
+    clubhouse_composer: Option<chat::ui::ComposerBlockView<'a>>,
     /// The account's flag-emoji tweak, shared with chat/shop: when set, flags
     /// are replaced by text fallbacks for terminals that can't render them.
     show_flag_fallback: bool,
     /// Client is kitty specifically — it splits regional-indicator flags in the
     /// World Cup overview's rightmost column (see `App::terminal_is_kitty`).
     terminal_is_kitty: bool,
+    /// The account's raw timezone tweak. The World Cup screen (its only
+    /// consumer) parses it lazily so no work happens on other screens' frames.
+    worldcup_timezone: Option<&'a str>,
     artboard_interacting: bool,
     leaderboard: &'a Arc<LeaderboardData>,
     visualizer: &'a Visualizer,
@@ -406,10 +417,20 @@ impl App {
         let profile_award_badges = self.chat.profile_award_badges();
         let message_reactions = self.chat.message_reactions();
         let voice_snapshot = self.voice.snapshot();
+        // Count humans only: the always-on bots (@bartender, @graybeard,
+        // @dealer, @bot) register with no fingerprint and are excluded from
+        // the clubhouse headcount, so exclude them here too or the two
+        // "people online" numbers disagree.
         let online_count = self
             .active_users
             .as_ref()
-            .map(|active_users| active_users.lock_recover().len())
+            .map(|active_users| {
+                active_users
+                    .lock_recover()
+                    .values()
+                    .filter(|user| user.fingerprint.is_some())
+                    .count()
+            })
             .unwrap_or(0);
         self.afk_user_ids = crate::state::afk_users_snapshot(&self.afk_users);
         let image_modal = self
@@ -523,6 +544,7 @@ impl App {
                 bonsai_glyphs,
                 chat_badges,
                 profile_award_badges,
+                drunk_levels: &self.drunk_levels,
                 bot_username_color_active: self.shop_state.bot_username_color_active(),
                 active_room_effects: dashboard_room_effects,
                 active_poll: dashboard_active_poll,
@@ -662,6 +684,7 @@ impl App {
             bonsai_glyphs,
             chat_badges,
             profile_award_badges,
+            drunk_levels: &self.drunk_levels,
             bot_username_color_active: self.shop_state.bot_username_color_active(),
             news_composer: self.chat.news.composer(),
             news_composing: self.chat.news.composing(),
@@ -731,11 +754,38 @@ impl App {
                     bonsai_glyphs,
                     chat_badges,
                     profile_award_badges,
+                    drunk_levels: &self.drunk_levels,
                     keep_composer_focused: self.profile_state.profile().keep_composer_focused,
                     composer_rect_slot: Some(&self.chat.last_composer_rect),
                     composer_viewport_top_slot: Some(&self.chat.last_composer_viewport_top),
                     chat_hit_slot: Some(&self.chat.last_chat_hit_layout),
                 });
+        // The clubhouse has no chat panel: #lounge messages float over their
+        // authors' heads and the shared composer block pins to the bottom.
+        // Both are only assembled while that screen is up.
+        let clubhouse_lounge_id = if screen == Screen::Clubhouse {
+            self.chat.lounge_room_id()
+        } else {
+            None
+        };
+        let clubhouse_lounge_messages: &[late_core::models::chat_message::ChatMessage] =
+            clubhouse_lounge_id
+                .map(|lounge_id| self.chat.messages_for_room(lounge_id))
+                .unwrap_or(&[]);
+        let clubhouse_composer = clubhouse_lounge_id.map(|_| chat::ui::ComposerBlockView {
+            composer: self.chat.composer(),
+            composing: self.chat.composing,
+            selected_message: false,
+            selected_image_message: false,
+            selected_news_message: false,
+            reaction_picker_active: false,
+            reply_author: self.chat.reply_target().map(|reply| reply.author.as_str()),
+            is_editing: self.chat.edited_message_id.is_some(),
+            mention_active: self.chat.mention_ac.active,
+            mention_matches: &self.chat.mention_ac.matches,
+            mention_selected: self.chat.mention_ac.selected,
+            keep_composer_focused: self.profile_state.profile().keep_composer_focused,
+        });
         let mut terminal_image_frame = TerminalImageFrame::default();
 
         // Sixel cleanup, pre-frame phase. Sixel — unlike Kitty — has no
@@ -861,8 +911,14 @@ impl App {
                         pinstar_browser,
                         worldcup_snapshot: self.worldcup_rx.as_ref().map(|rx| rx.borrow().clone()),
                         worldcup_state: &self.worldcup,
+                        clubhouse_state: &self.clubhouse,
+                        clubhouse_own_username: self.profile_state.profile().username.as_str(),
+                        clubhouse_lounge_messages,
+                        clubhouse_graybeard_id: self.clubhouse_graybeard_id,
+                        clubhouse_composer,
                         show_flag_fallback: self.profile_state.profile().show_flag_fallback,
                         terminal_is_kitty: self.terminal_is_kitty,
+                        worldcup_timezone: self.profile_state.profile().timezone.as_deref(),
                         artboard_interacting: self.artboard_interacting,
                         leaderboard: &self.leaderboard,
                         visualizer,
@@ -991,7 +1047,7 @@ impl App {
         frame: &mut Frame,
         area: Rect,
         screen: Screen,
-        ctx: DrawContext<'_>,
+        mut ctx: DrawContext<'_>,
         terminal_images: &mut TerminalImageFrame,
     ) {
         if ctx.show_splash {
@@ -1110,17 +1166,16 @@ impl App {
         match screen {
             Screen::Dashboard => {
                 const HOME_RAIL_WIDTH: u16 = 24;
-                let (rail_area, center_area) =
-                    if ctx.show_room_list_sidebar && content_area.width > HOME_RAIL_WIDTH + 20 {
-                        let split = Layout::horizontal([
-                            Constraint::Length(HOME_RAIL_WIDTH),
-                            Constraint::Fill(1),
-                        ])
-                        .split(content_area);
-                        (Some(split[0]), split[1])
-                    } else {
-                        (None, content_area)
-                    };
+                let (rail_area, center_area) = if ctx.show_room_list_sidebar {
+                    let split = Layout::horizontal([
+                        Constraint::Length(HOME_RAIL_WIDTH),
+                        Constraint::Fill(1),
+                    ])
+                    .split(content_area);
+                    (Some(split[0]), split[1])
+                } else {
+                    (None, content_area)
+                };
 
                 if let Some(rail_area) = rail_area {
                     chat::ui::draw_room_list_rail(frame, rail_area, &ctx.chat_view);
@@ -1286,9 +1341,22 @@ impl App {
                         state: ctx.worldcup_state,
                         show_flags: !ctx.show_flag_fallback,
                         terminal_is_kitty: ctx.terminal_is_kitty,
+                        timezone: crate::app::profile::svc::parse_account_tz(ctx.worldcup_timezone),
                     },
                 );
             }
+            Screen::Clubhouse => crate::app::clubhouse::ui::draw(
+                frame,
+                content_area,
+                crate::app::clubhouse::ui::ClubhouseView {
+                    state: ctx.clubhouse_state,
+                    own_username: ctx.clubhouse_own_username,
+                    now_playing: ctx.now_playing,
+                    lounge_messages: ctx.clubhouse_lounge_messages,
+                    graybeard_user_id: ctx.clubhouse_graybeard_id,
+                    composer: ctx.clubhouse_composer.take(),
+                },
+            ),
         }
 
         if let Some(sidebar_area) = sidebar_area {
@@ -1512,6 +1580,7 @@ fn app_frame_title(screen: Screen, ctx: &DrawContext<'_>) -> Line<'static> {
 
     spans.push(Span::styled("| ", Style::default().fg(theme::BORDER_DIM())));
     let tabs = [
+        (Screen::Clubhouse, "0"),
         (Screen::Dashboard, "1"),
         (Screen::Arcade, "2"),
         (Screen::Games, "3"),
@@ -1560,6 +1629,7 @@ fn app_frame_title(screen: Screen, ctx: &DrawContext<'_>) -> Line<'static> {
         Screen::Rooms => "Tables",
         Screen::Pinstar => "Directory",
         Screen::WorldCup => "World Cup",
+        Screen::Clubhouse => "Clubhouse",
     };
     spans.push(Span::styled(
         " | ",
@@ -1630,6 +1700,18 @@ fn app_frame_title(screen: Screen, ctx: &DrawContext<'_>) -> Line<'static> {
 
     if screen == Screen::Dashboard {
         append_home_title_extras(&mut spans, ctx);
+    }
+
+    // The clubhouse tavern draws no widget chrome of its own, so the
+    // headcount and keybinds live up here.
+    if screen == Screen::Clubhouse {
+        spans.push(Span::styled(
+            format!(
+                "· {} inside · arrows/hjkl walk · Enter interact · i say · s sit · w wave · x dance ",
+                ctx.clubhouse_state.headcount()
+            ),
+            Style::default().fg(theme::TEXT_DIM()),
+        ));
     }
 
     if screen == Screen::WorldCup {

@@ -331,6 +331,7 @@ async fn main() -> anyhow::Result<()> {
             late_ssh::app::arcade::nonogram::state::Library::default()
         }
     };
+    let clubhouse_lobby = late_ssh::app::clubhouse::lobby::SharedLobby::new();
     let ghost_service = GhostService::new(
         db.clone(),
         chat_service.clone(),
@@ -338,6 +339,9 @@ async fn main() -> anyhow::Result<()> {
         blackjack_table_manager.clone(),
         active_users.clone(),
         activity_tx.clone(),
+        username_directory.clone(),
+        chip_service.clone(),
+        clubhouse_lobby.clone(),
     );
     let ssh_attempt_limiter = IpRateLimiter::new(
         config.ssh_max_attempts_per_ip,
@@ -392,6 +396,7 @@ async fn main() -> anyhow::Result<()> {
         conn_limit,
         conn_counts,
         active_users,
+        clubhouse_lobby,
         afk_users,
         username_directory: username_directory.clone(),
         activity_feed: activity_tx,
