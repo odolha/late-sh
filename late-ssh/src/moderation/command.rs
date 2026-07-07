@@ -861,6 +861,7 @@ pub(crate) fn mod_help_lines(topic: Option<&str>) -> Vec<String> {
             "rename-room <#oldname> <#newname>",
             "rename-user <@oldname> <@newname>",
             "room-voice <#room> <on|off>",
+            "tickets <#room> <on|off>",
             "view   <@user|#room|bans|slows|audit|artboard|help> [pagenumber]",
             "artboard curate <live|YYYY-MM-DD> [reason...]",
             "artboard restore [YYYY-MM-DD] [reason...]",
@@ -1062,6 +1063,13 @@ pub(crate) fn mod_help_lines(topic: Option<&str>) -> Vec<String> {
             "date: optional daily snapshot date; defaults to previous UTC day.",
             "reason: optional audit text.",
             "Moderator or admin only. Writes a moderation audit entry and backs up the previous main row.",
+        ],
+        "tickets" => &[
+            "tickets #roomname <on|off>",
+            "Enables or disables the ticket system for a room.",
+            "on: members can submit and browse tickets via Ctrl+K, /tickets, or /submit.",
+            "off: ticket access is disabled for that room.",
+            "Moderator or admin only. Takes effect immediately for all sessions.",
         ],
         "admin" => &[
             "admin <grant|revoke> mod @name",

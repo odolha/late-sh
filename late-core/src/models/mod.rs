@@ -57,6 +57,7 @@ pub mod snake;
 pub mod solitaire;
 pub mod sudoku;
 pub mod tetris;
+pub mod ticket;
 pub mod twenty_forty_eight;
 pub mod ultimate_cooldown;
 pub mod user;

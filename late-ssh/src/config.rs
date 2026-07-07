@@ -89,6 +89,8 @@ pub struct Config {
     pub dopewars_host: String,
     pub dopewars_port: u16,
     pub dopewars_secret: String,
+    /// Max tickets a user may create per UTC day. 0 = unlimited.
+    pub ticket_daily_limit: usize,
 }
 
 fn required(key: &str) -> anyhow::Result<String> {
@@ -402,6 +404,7 @@ impl Config {
                 .unwrap_or_else(|| "127.0.0.1".to_string()),
             dopewars_port: optional_parse("LATE_DOPEWARS_PORT", 2324)?,
             dopewars_secret,
+            ticket_daily_limit: optional_parse("LATE_TICKET_DAILY_LIMIT", 5usize)?,
         })
     }
 }

@@ -42,6 +42,41 @@ impl App {
             let allow_poll_modal = self.screen == Screen::Dashboard;
             crate::app::chat::input::open_requested_poll_modal(self, room_id, allow_poll_modal);
         }
+        if self.chat.take_requested_ticket_list() {
+            crate::app::input::open_ticket_modal_globally(self);
+        }
+        if self.chat.take_requested_ticket_new() {
+            crate::app::input::open_ticket_modal_globally(self);
+            if self.show_ticket_modal {
+                self.ticket_modal_state.open_new_form();
+            }
+        }
+        if let Some((slug, enabled)) = self.chat.take_requested_mod_ticket_toggle() {
+            let room_id = self
+                .chat
+                .rooms
+                .iter()
+                .find(|(r, _)| r.slug.as_deref() == Some(slug.as_str()))
+                .map(|(r, _)| r.id);
+            if let Some(room_id) = room_id {
+                let (result_tx, mut result_rx) = tokio::sync::mpsc::channel::<String>(1);
+                self.ticket_service
+                    .set_room_tickets_enabled_task(room_id, enabled, result_tx);
+                tokio::spawn(async move {
+                    if let Some(msg) = result_rx.recv().await {
+                        tracing::info!("mod tickets toggle: {msg}");
+                    }
+                });
+                self.banner = Some(crate::app::common::primitives::Banner::success(&format!(
+                    "Tickets {} for #{slug}...",
+                    if enabled { "enabling" } else { "disabling" }
+                )));
+            } else {
+                self.banner = Some(crate::app::common::primitives::Banner::error(&format!(
+                    "Room #{slug} not found"
+                )));
+            }
+        }
         // Poll image upload results.
         if let Some(result) = self.chat.poll_image_upload() {
             let target_room_id = self.chat.take_image_upload_target_room_id();
@@ -95,6 +130,9 @@ impl App {
             .take_if(|p| p.time.elapsed() >= crate::app::input::PROFILE_CLICK_DEBOUNCE)
         {
             self.open_profile_modal(pending.user_id, pending.username);
+        }
+        if let Some(b) = self.ticket_modal_state.tick() {
+            self.banner = Some(b);
         }
         if let Some(b) = self.audio.tick() {
             self.banner = Some(b);

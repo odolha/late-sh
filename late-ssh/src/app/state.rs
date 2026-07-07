@@ -244,6 +244,7 @@ pub struct SessionConfig {
     pub nonogram_library: crate::app::arcade::nonogram::state::Library,
     pub chip_service: crate::app::games::chips::svc::ChipService,
     pub initial_chip_balance: i64,
+    pub ticket_service: crate::app::tickets::svc::TicketService,
 
     /// Session / connection
     pub web_url: String,
@@ -347,6 +348,9 @@ pub struct App {
     pub(crate) show_profile_modal: bool,
     pub(crate) show_sheet_modal: bool,
     pub(crate) show_poll_modal: bool,
+    pub(crate) show_ticket_modal: bool,
+    pub(crate) ticket_modal_state: crate::app::tickets::state::TicketModalState,
+    pub(crate) ticket_service: crate::app::tickets::svc::TicketService,
     pub(crate) show_bonsai_modal: bool,
     pub(crate) show_bonsai_v2_modal: bool,
     pub(crate) show_ultimate_modal: bool,
@@ -686,6 +690,7 @@ impl App {
             && !self.show_profile_modal
             && !self.show_sheet_modal
             && !self.show_poll_modal
+            && !self.show_ticket_modal
             && !self.show_bonsai_modal
             && !self.show_bonsai_v2_modal
             && !self.show_ultimate_modal
@@ -1022,6 +1027,9 @@ impl App {
             show_profile_modal: false,
             show_sheet_modal: false,
             show_poll_modal: false,
+            show_ticket_modal: false,
+            ticket_modal_state: crate::app::tickets::state::TicketModalState::new(config.user_id),
+            ticket_service: config.ticket_service,
             show_bonsai_modal: false,
             show_bonsai_v2_modal: false,
             show_ultimate_modal: false,

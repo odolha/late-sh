@@ -116,7 +116,9 @@ const COMMANDS: &[Command] = &[
     global("public", "open public room for everyone"),
     global("roll", "roll dice (e.g. /roll 3d6)"),
     global("settings", "open settings"),
+    global("submit", "open new ticket form"),
     global("tea", "post tea cup"),
+    global("tickets", "open room ticket list"),
     global("unfriend", "unmark user"),
     global("unignore", "unmute user"),
     global("upload", "upload image from url"),
@@ -184,6 +186,7 @@ mod tests {
             language_code: None,
             dm_user_a: None,
             dm_user_b: None,
+            tickets_enabled: false,
         }
     }
 

@@ -367,6 +367,10 @@ pub async fn build_session_config(state: &State, inputs: SessionBootstrapInputs)
         nonogram_library: state.nonogram_library.clone(),
         chip_service: state.chip_service.clone(),
         initial_chip_balance,
+        ticket_service: crate::app::tickets::svc::TicketService::new(
+            state.db.clone(),
+            state.config.ticket_daily_limit,
+        ),
         web_url: state.config.web_url.clone(),
         rebels_enabled: state.config.rebels_enabled,
         rebels_host: state.config.rebels_host.clone(),

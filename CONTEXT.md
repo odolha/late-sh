@@ -767,6 +767,18 @@ An always-running game where every connected SSH session is automatically a part
 - Events (coffee breaks, AMAs, mini coding jams)
 - Personalization (accent color, favorite vibe, custom tagline)
 
+### Ticket manager
+
+Per-room ticket system (`app/tickets/`). Enabled via `tickets_enabled BOOLEAN` on `chat_rooms` (migration 096). Each room independently opts in; the modal is per-room only (no cross-room aggregate view).
+
+- **Open:** `Ctrl+K` global hotkey (only when room's `tickets_enabled = true`), or `/tickets` (list), or `/submit` (new-ticket form).
+- **Mod commands:** `/mod tickets #slug on|off` — enables/disables tickets for a room; requires moderator or admin role.
+- **Rate limit:** `LATE_TICKET_DAILY_LIMIT` env var (default `5`). `0` = unlimited. Enforced via UTC-day DB COUNT in `Ticket::count_today_for_user`.
+- **List view:** sort by priority (`1`), date (`2`), name (`3`); `h` toggles closed-ticket history; mods see `p` (cycle priority) and `c` (close/reopen) extras.
+- **Form view:** Title (max 100), Description (max 2000), Categories (comma-separated tags with autocomplete from existing room categories), Priority (mods only).
+- **Priority ladder:** none → very_low → low → medium → high → very_high → urgent.
+- **State:** `App.ticket_modal_state` (`TicketModalState`) + `App.ticket_service` (`TicketService`). Service is constructed per-session from `db` + `config.ticket_daily_limit`.
+
 ### Chat implementation
 
 Chat-specific refresh/tail loading, commands, rendering, keybindings, synthetic entries, performance notes, and gotchas live in `late-ssh/src/app/chat/CONTEXT.md`.
@@ -1064,6 +1076,7 @@ Content invariants worth preserving when editing `data.rs`:
 | Chat keys | Home / Rooms embedded chat | See `late-ssh/src/app/chat/CONTEXT.md` for room navigation, composer commands, message actions, synthetic entries, favorites, and icon picker behavior. |
 | `Ctrl+O` | Reserved global, except active Artboard editing | Open the settings modal from anywhere, including active Arcade games |
 | `Ctrl+G` | Reserved global, except active Artboard editing | Open Hub on the Shop tab |
+| `Ctrl+K` | Reserved global, except active Artboard editing | Open the ticket manager for the current room (only when `tickets_enabled` for that room). Note: `Ctrl+T` (0x14) is taken by voice mute. |
 | `Ctrl+Q` / `Alt+A` | Reserved global | Toggle the Shop-unlocked Aquarium bottom tray |
 | `Tab` / `Shift+Tab` | Settings modal | Switch tabs: Settings, Bio, Themes, RSS, Account, and hidden Special when available |
 | `↑` / `↓` / `j` / `k` | Settings modal | Move within the active tab. Settings rows include Username, IDE, Terminal, OS, Langs, Theme, Background, Text Brightness, Right sidebar, Room list, Activity boxes, Country, Timezone, DMs, @mentions, Game events, Bell, Cooldown, Format |

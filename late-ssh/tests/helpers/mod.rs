@@ -205,6 +205,7 @@ pub fn test_config(db_config: late_core::db::DbConfig) -> Config {
         dopewars_host: String::new(),
         dopewars_port: 2324,
         dopewars_secret: String::new(),
+        ticket_daily_limit: 5,
     }
 }
 
@@ -498,6 +499,7 @@ fn make_app_with_chat_service_and_permissions(
         nonogram_library: NonogramLibrary::default(),
         chip_service: chip_service.clone(),
         initial_chip_balance: 0,
+        ticket_service: late_ssh::app::tickets::svc::TicketService::new(db.clone(), 5),
         leaderboard_rx: None,
         web_url: "http://localhost:3000".to_string(),
         rebels_enabled: true,
@@ -658,6 +660,7 @@ pub fn make_app_with_paired_client(
         nonogram_library: NonogramLibrary::default(),
         chip_service: chip_service.clone(),
         initial_chip_balance: 0,
+        ticket_service: late_ssh::app::tickets::svc::TicketService::new(db.clone(), 5),
         leaderboard_rx: None,
         web_url: "http://localhost:3000".to_string(),
         rebels_enabled: true,

@@ -467,6 +467,12 @@ pub struct ChatState {
     /// (which owns the paired-CLI voice controls).
     requested_voice_command: Option<VoiceCommand>,
     requested_poll_room: Option<Uuid>,
+    /// Set by /tickets — open ticket list for current room.
+    requested_ticket_list: bool,
+    /// Set by /submit — open new-ticket form for current room.
+    requested_ticket_new: bool,
+    /// Set by /mod tickets #slug on|off — (slug, enabled).
+    pub(crate) requested_mod_ticket_toggle: Option<(String, bool)>,
     /// Set by /brb command; contains the custom message (empty = no message).
     requested_brb: Option<String>,
     /// Set when a real (non-command) chat message is sent; used to clear AFK.
@@ -637,6 +643,9 @@ impl ChatState {
             requested_audio_fallback_url: None,
             requested_audio_skip: false,
             requested_poll_room: None,
+            requested_ticket_list: false,
+            requested_ticket_new: false,
+            requested_mod_ticket_toggle: None,
             requested_brb: None,
             sent_regular_message: false,
             pending_mod_outputs: VecDeque::new(),
@@ -947,6 +956,18 @@ impl ChatState {
 
     pub fn take_requested_poll_room(&mut self) -> Option<Uuid> {
         self.requested_poll_room.take()
+    }
+
+    pub(crate) fn take_requested_ticket_list(&mut self) -> bool {
+        std::mem::take(&mut self.requested_ticket_list)
+    }
+
+    pub(crate) fn take_requested_ticket_new(&mut self) -> bool {
+        std::mem::take(&mut self.requested_ticket_new)
+    }
+
+    pub(crate) fn take_requested_mod_ticket_toggle(&mut self) -> Option<(String, bool)> {
+        self.requested_mod_ticket_toggle.take()
     }
 
     pub fn create_poll(
@@ -1926,6 +1947,24 @@ impl ChatState {
                         .open_profile_by_username_task(self.user_id, name.to_string());
                 }
             }
+            return None;
+        }
+
+        if body.trim() == "/tickets" {
+            self.clear_composer_after_submit();
+            self.requested_ticket_list = true;
+            return None;
+        }
+
+        if body.trim() == "/submit" {
+            self.clear_composer_after_submit();
+            self.requested_ticket_new = true;
+            return None;
+        }
+
+        if let Some(toggle) = parse_mod_tickets_command(body.trim()) {
+            self.clear_composer_after_submit();
+            self.requested_mod_ticket_toggle = Some(toggle);
             return None;
         }
 
@@ -5698,6 +5737,7 @@ mod tests {
                 language_code: None,
                 dm_user_a: None,
                 dm_user_b: None,
+                tickets_enabled: false,
             },
             Vec::new(),
         )
@@ -6087,6 +6127,7 @@ mod tests {
                     language_code: None,
                     dm_user_a: None,
                     dm_user_b: None,
+                    tickets_enabled: false,
                 },
                 vec![],
             ),
@@ -6103,6 +6144,7 @@ mod tests {
                     language_code: None,
                     dm_user_a: None,
                     dm_user_b: None,
+                    tickets_enabled: false,
                 },
                 vec![],
             ),
@@ -6677,6 +6719,7 @@ mod tests {
             language_code: None,
             dm_user_a: Some(user_a),
             dm_user_b: Some(user_b),
+            tickets_enabled: false,
         }
     }
 
@@ -6747,4 +6790,23 @@ mod tests {
         assert_eq!(parse_brb_command("hello /brb"), None);
         assert_eq!(parse_brb_command(""), None);
     }
+}
+
+/// Parse `/mod tickets #slug on|off` → `Some(("slug", true/false))`.
+/// Returns `None` if not this command.
+fn parse_mod_tickets_command(input: &str) -> Option<(String, bool)> {
+    let rest = input.strip_prefix("/mod tickets ")?;
+    let mut parts = rest.splitn(2, char::is_whitespace);
+    let slug_raw = parts.next()?;
+    let slug = slug_raw.strip_prefix('#').unwrap_or(slug_raw).trim();
+    if slug.is_empty() {
+        return None;
+    }
+    let toggle = parts.next()?.trim();
+    let enabled = match toggle {
+        "on" => true,
+        "off" => false,
+        _ => return None,
+    };
+    Some((slug.to_string(), enabled))
 }

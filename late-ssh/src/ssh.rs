@@ -881,6 +881,10 @@ impl russh::server::Handler for ClientHandler {
             nonogram_library,
             chip_service: self.state.chip_service.clone(),
             initial_chip_balance,
+            ticket_service: crate::app::tickets::svc::TicketService::new(
+                self.state.db.clone(),
+                self.state.config.ticket_daily_limit,
+            ),
             leaderboard_rx: Some(self.state.leaderboard_service.subscribe()),
 
             // Session / connection

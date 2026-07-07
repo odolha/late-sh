@@ -23,6 +23,7 @@ use vte::{Params, Parser, Perform};
 
 const PENDING_ESCAPE_FLUSH_DELAY: Duration = Duration::from_millis(40);
 const CTRL_G: u8 = 0x07;
+const CTRL_K: u8 = 0x0B;
 const CTRL_O: u8 = 0x0F;
 const CTRL_T: u8 = 0x14;
 const CTRL_V: u8 = 0x16;
@@ -868,6 +869,11 @@ fn handle_parsed_input_inner(app: &mut App, event: ParsedInput) {
 
     if app.show_poll_modal {
         chat::polls::input::handle_input(app, event);
+        return;
+    }
+
+    if app.show_ticket_modal {
+        crate::app::tickets::input::handle_input(app, event);
         return;
     }
 
@@ -2224,6 +2230,10 @@ fn dispatch_escape(app: &mut App) {
         chat::polls::input::handle_escape(app);
         return;
     }
+    if app.show_ticket_modal {
+        crate::app::tickets::input::handle_escape(app);
+        return;
+    }
     if app.show_bonsai_v2_modal {
         crate::app::bonsai_v2::modal_input::handle_escape(app);
         return;
@@ -2910,6 +2920,7 @@ fn chat_scroll_clicks_blocked(app: &App) -> bool {
         || app.show_profile_modal
         || app.show_sheet_modal
         || app.show_poll_modal
+        || app.show_ticket_modal
         || app.show_quit_confirm
         || app.show_bonsai_modal
         || app.show_cat_modal
@@ -3427,8 +3438,46 @@ fn handle_reserved_global_chord(app: &mut App, event: &ParsedInput) -> bool {
             open_hub_modal_globally(app);
             true
         }
+        CTRL_K => {
+            open_ticket_modal_globally(app);
+            true
+        }
         _ => false,
     }
+}
+
+pub(crate) fn open_ticket_modal_globally(app: &mut App) {
+    let Some(room_id) = app.chat.selected_room_id else {
+        app.banner = Some(crate::app::common::primitives::Banner::error(
+            "No room selected",
+        ));
+        return;
+    };
+    let tickets_enabled = app
+        .chat
+        .rooms
+        .iter()
+        .find(|(r, _)| r.id == room_id)
+        .map(|(r, _)| r.tickets_enabled)
+        .unwrap_or(false);
+    if !tickets_enabled {
+        app.banner = Some(crate::app::common::primitives::Banner::error(
+            "Tickets are not enabled for this room",
+        ));
+        return;
+    }
+    let room_name = app
+        .chat
+        .rooms
+        .iter()
+        .find(|(r, _)| r.id == room_id)
+        .and_then(|(r, _)| r.slug.clone())
+        .unwrap_or_default();
+    app.ticket_modal_state
+        .open(room_id, room_name, app.is_moderator || app.is_admin);
+    app.ticket_service
+        .load_task(room_id, false, app.ticket_modal_state.tx());
+    app.show_ticket_modal = true;
 }
 
 fn handle_voice_global_chord(app: &mut App, ctx: InputContext, event: &ParsedInput) -> bool {

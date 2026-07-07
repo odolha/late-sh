@@ -32,6 +32,7 @@ pub(crate) mod settings_modal;
 pub(crate) mod sheet_modal;
 pub mod state;
 mod tick;
+pub mod tickets;
 pub(crate) mod ultimates;
 pub mod voice;
 pub mod worldcup;

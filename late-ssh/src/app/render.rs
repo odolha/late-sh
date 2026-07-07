@@ -232,6 +232,8 @@ struct DrawContext<'a> {
     sheet_modal_state: &'a sheet_modal::state::SheetModalState,
     show_poll_modal: bool,
     poll_modal_state: &'a chat::polls::state::PollModalState,
+    show_ticket_modal: bool,
+    ticket_modal_state: &'a crate::app::tickets::state::TicketModalState,
     show_bonsai_modal: bool,
     show_bonsai_v2_modal: bool,
     bonsai_care_state: &'a bonsai::care::BonsaiCareState,
@@ -806,6 +808,7 @@ impl App {
             || self.show_profile_modal
             || self.show_sheet_modal
             || self.show_poll_modal
+            || self.show_ticket_modal
             || self.show_bonsai_modal
             || self.show_bonsai_v2_modal
             || self.show_cat_modal
@@ -824,6 +827,7 @@ impl App {
             || self.show_profile_modal
             || self.show_sheet_modal
             || self.show_poll_modal
+            || self.show_ticket_modal
             || self.show_bonsai_modal
             || self.show_bonsai_v2_modal
             || self.show_cat_modal
@@ -950,6 +954,8 @@ impl App {
                         sheet_modal_state: &self.sheet_modal_state,
                         show_poll_modal: self.show_poll_modal,
                         poll_modal_state: &self.poll_modal_state,
+                        show_ticket_modal: self.show_ticket_modal,
+                        ticket_modal_state: &self.ticket_modal_state,
                         show_bonsai_modal: self.show_bonsai_modal,
                         show_bonsai_v2_modal: self.show_bonsai_v2_modal,
                         bonsai_care_state: &self.bonsai_care_state,
@@ -1470,6 +1476,10 @@ impl App {
             chat::polls::ui::draw_modal(frame, inner, ctx.poll_modal_state);
         }
 
+        if ctx.show_ticket_modal {
+            crate::app::tickets::ui::draw_modal(frame, inner, ctx.ticket_modal_state);
+        }
+
         if ctx.show_bonsai_modal {
             bonsai::modal_ui::draw(
                 frame,
@@ -1555,6 +1565,7 @@ fn foreground_terminal_overlay_open(ctx: &DrawContext<'_>) -> bool {
         || ctx.show_aquarium_tray
         || ctx.show_profile_modal
         || ctx.show_poll_modal
+        || ctx.show_ticket_modal
         || ctx.show_bonsai_modal
         || ctx.show_bonsai_v2_modal
         || ctx.show_cat_modal
