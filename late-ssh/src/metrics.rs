@@ -36,6 +36,7 @@ mod inner {
             ActivityGame::TwentyFortyEight => "2048",
             ActivityGame::Tron => "tron",
             ActivityGame::Snake => "snake",
+            ActivityGame::Traffic => "traffic",
         }
     }
 
