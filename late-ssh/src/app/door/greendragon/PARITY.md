@@ -355,7 +355,7 @@ romance NPCs is "your partner", and bard outcome 15. Field
   if drunkenness > 66 ⇒ −1 turn; drunkenness and hard-drink count reset to 0
   daily either way; death/dragon kill also zero drunkenness. **Sober-up**:
   each forest search multiplies drunkenness by 0.9 (round). Comment slurring
-  is a phase-4 chat concern.
+  landed with phase 4's commentary leftovers (see that section).
 - **Romance** (upstream lovers module; our two partner NPCs original; partner
   = opposite style). Once/day (`flirted_today`). Flirt ladder — success test
   `e_rand(charm, T) >= T` (guaranteed at charm ≥ T):
@@ -498,9 +498,11 @@ online-roster path; the session stays authoritative for its own character
 commentary ✓ → roster/HoF ✓ → gypsy ✓ (folded into the commentary slice — it
 is just a paid door onto the shade section) → PvP ✓ → bounties + haunt ✓ →
 barman's enemy intel ✓ + rewards wiring ✓ (the two small leftovers, 2026-07)
-→ clans ✓ (2026-07) → mail(?) → gardens ✓ / veterans' rock ✓. Commentary
-first: five other features are just sections of it. Only the mail
-integration decision remains.
+→ clans ✓ (2026-07) → gardens ✓ / veterans' rock ✓ → bank transfers ✓ + the
+mail decision resolved ✓ (2026-07) → the commentary leftovers ✓ (pagination
++ new-post markers, drunken slurring — 2026-07). Commentary first: five
+other features are just sections of it. **Phase 4 is complete and the
+checklist is empty**: the port is feature-complete against stock 1.1.2.
 
 ### `commentary` — the one chat primitive — DONE
 
@@ -552,11 +554,57 @@ claimed (specs below already fixed):
 - [x] **The gypsy tent** (`gypsy.php`): pay `level * 20` gold per visit to
   project into the shade section. That's the whole building.
 
-Deliberate single-player/TUI adaptations (documented, not oversights):
+**Pagination + new-post markers landed 2026-07** (the long-deferred
+leftover, source-audited first):
 
-- One display window per room, refreshed on demand; no `comscroll`
-  pagination, "first unseen" links, or new-post markers (upstream's
-  `recentcomments`).
+- **Pages** (`comscroll`): page 0 is the newest window, each page one
+  window older (`ORDER BY commentid DESC LIMIT com*limit, limit`). The
+  menu mirrors upstream's nav row: *older* opens off a full window
+  (upstream shows Previous when `rowcount >= limit`), *newer* off a
+  scrolled-back page, and *refresh always lands on page 0* (upstream's
+  link drops the comscroll param — Refresh and "Last Page" share a URL).
+  The `cid`/`lastcommentid` incremental re-fetch is a web caching artifact;
+  skipped.
+- **The watermark** (`recentcomments`): `newday.php:254` sets
+  `recentcomments = lasthit` then `lasthit = now`, and both fire on paid
+  resurrections too — so "new" means *posted since your previous dawn*.
+  Ours: `comments_seen_before_day` on the blob, advanced from `last_day`
+  (exactly upstream's `lasthit` at the blob's day granularity — the one
+  deviation: ≤1 day coarser, erring toward marking more as new). Rows with
+  `day >= watermark` render with a bright marker (upstream's `new.gif`,
+  `postdate >= recentcomments` — the `>=` kept).
+- **First unseen** jump: page `round(count/limit + 0.5) - 1` (PHP
+  half-away rounding, the exact-multiple overshoot quirk included), shown
+  when > 0 and not already open. The count uses the marker's `>=` (upstream
+  counts strict `>` — an instant apart there, a day apart at our
+  granularity, so the jump follows the marker set).
+- **The allowance still counts the loaded window** (upstream's `counttoday`
+  loop runs over the displayed buffer): paging back to a window without
+  your posts frees the speak row even while the newest window is full of
+  you — upstream's own quirk, ported by construction.
+
+**Drunken slurring landed 2026-07** (`modules/drinks/dohook.php` +
+`drunkenize.php`, the other leftover):
+
+- The hook fires exactly where upstream's `modulehook("commentary")` sits —
+  after nothing, before the 45-char run-breaking and verb baking — so a
+  slurred line can outgrow the 200-char typing budget, as upstream's
+  server-side slur does.
+- Above 50 drunkenness the verb gains "drunkenly" — which then bakes even
+  in "says" rooms (the `!= "says"` test trips on "drunkenly says"), 1=1.
+- `drunkenize` 1=1: until replacements reach `drunkenness/500` of the
+  original length, 9-in-10 doubles the *first* occurrence of a random slur
+  letter (case-matched, skipped inside a `*hic*`; repeated picks compound
+  at the same spot — "aa" → "aaa", upstream's quirk) and 1-in-10 inserts
+  `*hic*` at a random spot with the five sequential stagger-shifts;
+  adjacent hics collapse to `*hic*hic*` after. Emotes skip, sober lines
+  skip, the slur is baked into the stored row (permanent, as upstream).
+- Omitted: the backtick color-code skip (no color codes in our bodies) and
+  the `noslur` player pref (no per-player prefs; everyone slurs).
+
+Remaining deliberate single-player/TUI adaptations (documented, not
+oversights):
+
 - Speaker names are the bare character name snapshotted at post time — no
   DK-title prefix (upstream's `accounts.name` carries the title). The clan
   `<TAG>` prefix landed with clans, snapshotted into the name the same way.
@@ -564,8 +612,6 @@ Deliberate single-player/TUI adaptations (documented, not oversights):
   upstream's `::` variant differs only in marker length.
 - No GM `/game` inserts or moderation tools; system lines are reserved for
   future writers (haunts, bounties).
-- Drunken comment slurring (the drinks module's `commentary` hook) stays
-  deferred with the drinks note in phase 3.
 
 ### Online roster + Hall of Fame — DONE
 
@@ -1128,12 +1174,75 @@ Deliberate single-player/TUI adaptations (documented, not oversights):
 - All prose is original: the registrar ("Maren", ours), the lobby, the
   hall, every notice and refusal line.
 
-### Mail — integration decision, not a build
+### Bank gold transfers — DONE
+
+Source: `bank.php` (`op=transfer`/`transfer2`/`transfer3`), `newday.php`
+(the counter resets). Found missing during the 2026-07 mail-decision prep —
+this checklist never listed it, yet `allowgoldtransfer` defaults **1**, so
+stock installs ship it. Audited line-by-line, then implemented 2026-07: the
+last stock multiplayer *feature*.
+
+- [x] **The window's gates** (`bank.php`): the nav shows at level ≥ 3
+  (`mintransferlev`) or any dragon kill; a negative balance is refused at
+  the window itself (upstream's in-debt teller line), not on the nav.
+- [x] **Recipient search** (transfer2): the interleaved-`%` subsequence
+  match, >100 hits = narrow it down, exact matches float first (upstream's
+  `ORDER BY login=... DESC`); ours runs on the roster snapshot through the
+  broker's talk-line flow.
+- [x] **The checks** (transfer3, upstream's order): the whole holding
+  (`gold + goldinbank < amt`, the balance signed), the sender's daily cap
+  (`amountouttoday + amt > level·25`, `maxtransferout`), the recipient's
+  per-transfer cap (`amt > theirLevel·25`, `transferperlevel` — upstream's
+  refusal *says* "per day" but the check is per transfer; kept 1=1), their
+  daily receive count (`transferredtoday >= 3`, `transferreceive`), the
+  worthwhile minimum (`amt < senderLevel`), and the self-transfer refusal.
+- [x] **The settle**: the draw is hand-first with the shortfall out of the
+  bank (upstream's negative-gold overflow branch); the sum lands in the
+  recipient's *bank*; `amount_out_today`/`transfers_received_today` book
+  both sides and reset unconditionally at newday (`newday.php:244`,
+  resurrection days included; neither is in `dragon.php`'s reset list, so
+  a mid-day dragon kill preserves both — same 1=1). The recipient's
+  systemmail becomes a `pvp_reports` line (the established mail
+  adaptation). No news item — transfers are private, like placements.
+- [x] **Cross-player write**: the recipient's half is the PvP shape — the
+  write gate, `SELECT ... FOR UPDATE`, fresh-blob re-checks (upstream's
+  per-transfer cap and receive count are finalize-time reads of the
+  accounts row too), then the deposit, the counter bump, and the clerk's
+  note in one transaction via `update_data_keep_updated`.
+
+Deliberate single-player/TUI adaptations (documented, not oversights):
+
+- **Name first, then the sum** (the broker's two-screen flow); upstream's
+  single form takes both, then confirms. The check set and order are
+  otherwise upstream's; the self-transfer surfaces as a disabled row at
+  pick time (the broker pattern) rather than a finalize refusal.
+- **The gold is drawn up front and refunded on a refusal** (the Five
+  Sixes/bounty pattern), each part back where it came from. The
+  recipient-side checks settle inside the transaction, so a stale roster
+  read can't overfill an account.
+- An in-flight settlement disables the transfer row (one runner at a
+  time); upstream's synchronous page can't race itself.
+- All prose is original; our banker is nameless (upstream's Elessa is
+  theirs).
+
+### Mail — integration decision — RESOLVED (2026-07): in-door reports only
 - Upstream: 50-unread inbox cap, 1024-char bodies, 14-day retention,
-  system mail from id 0. late.sh **already has DMs and notifications** —
-  default plan: map "systemmail" moments (PvP results, bounty payouts, clan
-  applications, haunts) onto the existing notification/DM systems instead of
-  building an in-door mailbox. Revisit only if in-door mail proves wanted.
+  system mail from id 0 — plus an **opt-in email ping** on new mail
+  (`lib/systemmail.php`, `emailonmail`/`systemmail` prefs), upstream's own
+  out-of-game notification.
+- **Decision: no in-door mailbox, and no out-of-door ping for now.** Every
+  stock systemmail moment in our scope already rides the in-blob
+  `pvp_reports` drain (PvP results, haunts, bounty lines, clan notices,
+  bank transfers); player-to-player mail maps onto late.sh's DMs, which
+  exist outside the door. The ping (the email analog) is **deferred
+  pending an app-wide integration discussion**: the site's notification
+  schema is mention-shaped (NOT-NULL actor/message/room FKs onto real chat
+  rows), no door holds a Chat/Notification service handle today, and the
+  session-local terminal notifier can't reach offline players — so a real
+  ping means new design (a bot-user DM à la the clubhouse bartender, or a
+  new notification kind), decided at the app level, not per-door.
+- The remaining upstream mail writers (bios, referrals, admin/su alerts,
+  donator points) belong to systems we don't ship.
 
 ### Gardens + the veterans' rock — DONE
 - Gardens: a commentary room with a 0% random-event chance (stock default)
@@ -1163,8 +1272,171 @@ next to the bounty-closure hook:
   audit; the in-door counterparts (news, titles, dragon points) are the
   ported parts and unchanged.
 
+## Phase 5 — adversarial audit backlog (2026-07)
+
+A multi-agent sweep (2026-07) audited 13 of 19 planned surfaces before being
+stopped; its surviving findings are recorded below. The sweep is replaced by
+the **solo-audit flow**: one Fable session per step, full attention on one
+small part, fix at the end of the step, then reset context.
+
+### Solo-audit flow (read me first, future Fable)
+
+Per-step protocol — one step per session, nothing else:
+
+1. Pick the **first unchecked box** in the step queue below.
+2. Re-read "Target / provenance" at the top of this file. Ground rules:
+   `upstream-lotgd/` is the only source of truth (never memory);
+   `e_rand(a,b)` inclusive; PHP `round()` half-away-from-zero vs `(int)`
+   truncation; verify **comparison operators**, not just formula shapes;
+   shipped `getsetting` defaults only; this file's own claims are claims,
+   not facts. Deliberate deviations and the out-of-scope list are not
+   findings, but verify each deviation still behaves as its bullet says.
+3. For a **fix step**: re-trace every listed finding yourself (both sides,
+   the cited lines) before touching code — including the "verified" ones.
+   Refuted on re-trace ⇒ strike it with a note instead of fixing.
+   For an **audit step**: compare the system number by number, operator by
+   operator, both directions (upstream behavior we lack, port behavior
+   upstream lacks that isn't documented as ours).
+4. Apply the fixes. `cargo check --tests` is the verification; do not run
+   the test suite or commit (the user does both).
+5. Record the outcome here: check the box, strike or annotate the findings
+   handled, append any new findings to the list, correct any doc bullet the
+   work contradicted.
+6. Stop and tell the user the step is done so they can `/clear`.
+
+### Step queue
+
+Fix steps (already audited by the sweep; findings below):
+
+- [ ] **Fix: combat + specialties** — findings 2, 3, 9, 10, 11.
+- [ ] **Fix: dragon approach + flee** — finding 4.
+- [ ] **Fix: healer + bank access** — findings 5, 6.
+- [ ] **Fix: titles ladder** — finding 1 (needs ~22 new original title
+  names for the 0..31 ladder, or an explicit deliberate-deviation bullet).
+- [ ] **Fix: clans** — findings 8, 12.
+- [ ] **Fix: docs** — finding 7 + every PARITY bullet the fixes above
+  invalidate (healer "and at the healer", clan detail "joined", titles
+  thresholds, bank claims).
+
+Audit + fix steps (not reached by the sweep):
+
+- [ ] **Audit: the 8 forest events** — `events.rs` vs the stock forest-event
+  modules (fairy, findgem, findgold, glowingstream, goldmine, sethsong,
+  crazyaudrey, foilwench, cedrikspotions — establish which are forest hooks
+  and stock-enabled); trigger odds, effect formulas, once-per-day limits.
+- [ ] **Audit: masters + dragon + new day** — `train.php`, `dragon.php`,
+  `newday.php`: challenge gating, master stats/rewards, dragon fight,
+  kill resets (verify the documented dragon-point + gold-reset deviations),
+  new-day processing order.
+- [ ] **Audit: commentary + daily news** — `lib/commentary.php`, `news.php`
+  vs `commentary.rs`: windows, allowance, verbs, pagination, recentcomments
+  marker, slurring; news generation/retention/order.
+- [ ] **Audit: PvP + bounty board** — eligibility operators (bounty `<` vs
+  PvP `<=` off-by-one is deliberate — verify both), sleeper rules,
+  resolution, steal percentages, bounty costs/payouts vs `dag`.
+- [ ] **Audit: missing-feature sweep** — walk every player-reachable
+  `addnav()` in village/forest/inn/graveyard/shades + every module's
+  install default; list stock-on features with no port counterpart (this
+  sweep caught bank transfers last time). Reverse direction too.
+- [ ] **Audit: licensing sweep** — every player-visible string in the port
+  vs upstream prose/names; distinctive matches only, generic English is
+  at most a nit.
+
+### Findings (2026-07 sweep)
+
+"Verified" = independently re-traced by a second adversarial agent.
+Re-verify everything anyway before fixing (step 3 above).
+
+Verified:
+
+1. **Title ladder compressed 32 → 10 tiers** — `data.rs:811` vs installer
+   titles seed (`lib/installer/installer_sqlstatements.php:810-841`) +
+   `lib/titles.php:25-72` + `dragon.php:178,212`. Upstream promotes at
+   *every* dk 0..31; the port only at 0,1,2,3,4,5,7,10,15,20 — no promotion
+   at kills 6, 8-9, 11-14, 16-19, 21+. Tier count/thresholds are mechanics
+   under our own names-original/numbers-exact rule. Related: the port gates
+   the title news/log on `title != old_title` (`state.rs:3506,3520`) while
+   upstream fires it on every kill (`dragon.php:238-242`).
+2. **Skeleton Warrior +0.5 atk/def** — `specialty.rs:121-122` adds an outer
+   `.round()` upstream doesn't have (`specialtydarkarts.php:177-178` stores
+   floats ending in .5; the engine consumes them un-rounded). Fix: store
+   companion stats as f64 or halve-adjust; HP formula already matches.
+3. **Regen aura under-heals companions** — `combat.rs:503` truncating
+   `total_regen / 3` vs upstream `(int)round(regen/3)`
+   (`lib/battle-buffs.php:151`): 1 HP short at levels 2, 5, 8, 11, …
+4. **Dragon approach screen missing** — upstream `forest.php:38-52` offers
+   enter-the-cave vs run-away; declining costs 1 charm
+   (`lib/inn/inn_default.php:30-34`), and once inside there is **no** flee
+   (`dragon.php:254-258,295`, `fightnav(false)`). The port
+   (`state.rs:2956`) jumps straight into `Mode::Fight` with a free 1-in-3
+   flee row. Fix: add the approach screen (decline ⇒ −1 charm, floor 0)
+   and remove the flee row from the dragon fight.
+5. **Companion healing absent at the healer's hut** — upstream heals
+   companions at healer *and* merc camp (`healer.php:78-117`); the port
+   only at the merc camp. Formula already ported (`model.rs:2164`);
+   PARITY.md's "here and at the healer" claim is currently false.
+6. **Bank moves are all-or-max only** — `state.rs:3711-3749` hardcodes
+   deposit-all / withdraw-all / borrow-max; upstream `bank.php` takes a
+   typed amount for each (0/blank = all). The transfer window already has
+   `talk_input`, so the input shape exists. Undocumented asymmetry.
+7. **CONTEXT.md:57 stale stat formulas** — `max_hp`/`attack`/`defense`
+   summary omits `vitality_hp` and the race `1+level/5` adds that
+   `model.rs:1025-1043` applies.
+8. **Clan detail page columns** — `state.rs:6064-6080` renders Lv and drops
+   Join Date; upstream `lib/clan/detail.php:60-91` (and PARITY.md:1098's
+   own spec) is rank/name/DKs/joined.
+
+Single-trace (finder confident, no second agent yet):
+
+9. **Field-medic deals attack damage** — `combat.rs:460-469` lets every
+   living companion swing; upstream's heal-ability branch never applies
+   `damage_done` to the foe (riposte only, `lib/extended-battle.php:297-311`).
+   The port's medic is a heal+DPS unit upstream doesn't have.
+10. **Power-move bonus truncates its bounds** — `combat.rs:321-323` uses
+    `as i32` on `patkroll/4` and `/2`; upstream `e_rand` rounds its args
+    (`lib/battle-skills.php:113`, `lib/e_rand.php:12,14`). Port bonus is
+    biased ~1 low on nearly every power move.
+11. **Creature gold rows off by one** — `data.rs:90` L5 gold 198 (formula
+    says 199) and `data.rs:97` L6 gold 234 (formula says 233) vs
+    `creature_gold()` in `lib/creatures.php`. Transcription typos; all
+    other levels verified exact.
+12. **Clan succession notice lost** — `svc.rs:1944-1961` builds the
+    resignation-notice list from pre-promotion ranks; upstream
+    (`lib/clan/clan_withdraw.php:17-48`) promotes first then re-reads, so a
+    plain member inheriting leadership gets the mail there but not here.
+
+Nits (fix only if already in the file; none block parity):
+
+- Slumming nav shown at level 1 (`state.rs:6553` vs `lib/forest.php:15`);
+  mechanically identical at level 1, nav-visibility only.
+- HoF wealth percentile reuses the display fuzz instead of an independent
+  re-fuzz (`state.rs:6471` vs `hof.php:162`); same distribution, cosmetic.
+- Earth Fist drops upstream's `areadamage` flag — inert in our
+  single-target combat model.
+- Clan founding checks the fee before name/tag uniqueness
+  (`state.rs:5505-5519` vs `lib/clan/applicant_new.php:38-56`); refusal
+  message order only, but PARITY.md:1117 "upstream's order" overstates.
+- Healer-companion targeting picks most-wounded vs upstream's
+  first-other-then-self order (`state.rs:3108-3125`); reachable only with
+  medic + summoned skeleton.
+- `bell_rand` is a continuous inverse-normal approximation of upstream's
+  441-row percentile table; z deltas ≲0.002 never move truncated integer
+  damage. Consider a one-line disclosure in "Already 1=1".
+
+Clean under the sweep (audited, zero findings): Dark Horse (all three games
++ enemy intel), graveyard/favor/resurrection/haunt, outhouse/gypsy/gardens,
+stables, inn (room/bard/drinks/flirt/potions/drunkenness), races, roster +
+HoF, forest spawn/jitter/payouts, bank formulas + transfers, clans core
+(ranks/gates/succession/validation), specialties use-economy + the other
+11 skills, healer pricing, combat rolldamage core + tables.
+
 ## Out of scope (not stock / not portable)
 
 - Donator lodge, referrals, translation/admin tooling, logdnet, holiday
   modules, `cities`/travel (add-on, not stock core), petitions/moderation UI.
+- **The "King's tournament" / jousting**: long carried here as "the phase-4
+  tail", but verified 2026-07 to be **absent from stock 1.1.2** — no
+  tournament module ships; the only trace is `source.php:85` hiding
+  `modules/tournament.php` from the view-source listing. A DragonPrime
+  add-on, off-limits like the rest.
 - Upstream prose, creature/master/NPC/drink/title *names* — always original.

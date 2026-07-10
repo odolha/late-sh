@@ -376,6 +376,7 @@ pub async fn build_session_config(state: &State, inputs: SessionBootstrapInputs)
         initial_minesweeper_games,
         lateania_service: state.lateania_service.clone(),
         greendragon_service: state.greendragon_service.clone(),
+        daily_service: state.daily_service.clone(),
         rooms_service: state.rooms_service.clone(),
         room_game_registry: state.room_game_registry.clone(),
         dartboard_server: state.dartboard_server.clone(),
@@ -432,6 +433,7 @@ pub async fn build_session_config(state: &State, inputs: SessionBootstrapInputs)
         clubhouse_tutorial_done: late_core::models::user::extract_clubhouse_tutorial_done(
             &user.settings,
         ),
+        show_aquarium_tray: late_core::models::user::extract_show_aquarium_tray(&user.settings),
         afk_users: state.afk_users.clone(),
         username_directory: Some(state.username_directory.clone()),
         activity_feed_rx,

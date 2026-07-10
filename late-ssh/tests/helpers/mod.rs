@@ -330,6 +330,10 @@ pub fn test_app_state(db: Db, config: Config) -> State {
             chip_service.clone(),
             db.clone(),
         ),
+        daily_service: late_ssh::app::daily::svc::DailyService::new(
+            db.clone(),
+            chip_service.clone(),
+        ),
         rooms_service: rooms_service.clone(),
         blackjack_table_manager: blackjack_table_manager.clone(),
         room_game_registry: RoomGameRegistry::new(
@@ -481,6 +485,10 @@ fn make_app_with_chat_service_and_permissions(
             chip_service.clone(),
             db.clone(),
         ),
+        daily_service: late_ssh::app::daily::svc::DailyService::new(
+            db.clone(),
+            chip_service.clone(),
+        ),
         rooms_service: RoomsService::new(db.clone()),
         room_game_registry: test_room_game_registry(db.clone()),
         dartboard_server: test_dartboard_server(),
@@ -535,6 +543,7 @@ fn make_app_with_chat_service_and_permissions(
         ai_service: None,
         clubhouse_lobby: None,
         clubhouse_tutorial_done: true,
+        show_aquarium_tray: false,
         afk_users: late_ssh::state::new_afk_users(),
         username_directory: None,
         activity_feed_rx: None,
@@ -644,6 +653,10 @@ pub fn make_app_with_paired_client(
             chip_service.clone(),
             db.clone(),
         ),
+        daily_service: late_ssh::app::daily::svc::DailyService::new(
+            db.clone(),
+            chip_service.clone(),
+        ),
         rooms_service: RoomsService::new(db.clone()),
         room_game_registry: test_room_game_registry(db.clone()),
         dartboard_server: test_dartboard_server(),
@@ -698,6 +711,7 @@ pub fn make_app_with_paired_client(
         ai_service: None,
         clubhouse_lobby: None,
         clubhouse_tutorial_done: true,
+        show_aquarium_tray: false,
         afk_users: late_ssh::state::new_afk_users(),
         username_directory: None,
         activity_feed_rx: None,

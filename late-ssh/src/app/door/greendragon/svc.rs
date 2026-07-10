@@ -68,12 +68,16 @@ pub enum NewsLoad {
 pub enum CommentaryLoad {
     Loading,
     Ready {
-        /// The room's newest lines, newest first. Empty means a quiet room
-        /// (or a failed read — the table doesn't distinguish).
+        /// The requested window's lines, newest first. Empty means a quiet
+        /// room, a page past the end, or a failed read.
         lines: Arc<Vec<CommentLine>>,
         /// A post was dropped as an exact repeat of the section's newest
         /// line by the same speaker (upstream's double-post check).
         double_post: bool,
+        /// The "first unseen" jump target (0 = no jump offered): the page
+        /// the reader's oldest-unseen rows sit on, per upstream's
+        /// `round(count/limit + 0.5) - 1`.
+        first_unseen_page: usize,
     },
 }
 
@@ -258,6 +262,31 @@ pub enum HauntLoad {
         target: String,
     },
     /// The target vanished between the search and the attempt; no charge.
+    Gone,
+}
+
+/// The async result of a bank transfer settling onto the recipient
+/// (`bank.php` transfer3's recipient half). The caller has already drawn the
+/// gold; every variant but `Done` means a refund.
+#[derive(Clone)]
+pub enum TransferLoad {
+    Loading,
+    /// The gold is in their bank and the clerk's note in their reports.
+    Done {
+        target: String,
+    },
+    /// They've taken the day's [`model::TRANSFERS_RECEIVED_PER_DAY`]
+    /// transfers already (`transferreceive`).
+    TooManyToday {
+        target: String,
+    },
+    /// The sum beats their per-transfer cap (`transferperlevel`), re-checked
+    /// against the fresh blob's level.
+    OverCap {
+        target: String,
+        cap: u64,
+    },
+    /// The account vanished between the search and the settlement.
     Gone,
 }
 
@@ -681,15 +710,19 @@ async fn promote_to_leader_tx(
     Ok(Some(c.titled_name()))
 }
 
-/// Fetch a section's newest `limit` rows, stamping each with whether it was
-/// posted on the current UTC day (which feeds the daily post allowance).
+/// Fetch one display window of a section (page 0 = the newest rows),
+/// stamping each row with whether it was posted on the current UTC day
+/// (which feeds the daily post allowance) and its day-number (the new-post
+/// marker compares it against the reader's watermark).
 async fn read_commentary(
     client: &tokio_postgres::Client,
     section: &str,
     limit: usize,
+    page: usize,
 ) -> Vec<CommentLine> {
     let today = today();
-    match GreenDragonCommentary::latest(client, section, limit as i64).await {
+    let offset = (page * limit) as i64;
+    match GreenDragonCommentary::latest(client, section, limit as i64, offset).await {
         Ok(rows) => rows
             .into_iter()
             .map(|r| CommentLine {
@@ -697,6 +730,7 @@ async fn read_commentary(
                 name: r.name,
                 body: r.body,
                 today: r.day == today,
+                day: r.day,
             })
             .collect(),
         Err(e) => {
@@ -704,6 +738,23 @@ async fn read_commentary(
             Vec::new()
         }
     }
+}
+
+/// The "first unseen" jump target (`lib/commentary.php`'s
+/// `round(count/limit + 0.5) - 1`, PHP half-away rounding): the page index
+/// to leaf back to when the unseen rows spill past one window; 0 means no
+/// jump is offered.
+async fn first_unseen_page(
+    client: &tokio_postgres::Client,
+    section: &str,
+    seen_day: i64,
+    limit: usize,
+) -> usize {
+    let unseen = GreenDragonCommentary::count_since_day(client, section, seen_day)
+        .await
+        .unwrap_or(0);
+    let val = (unseen as f64 / limit as f64 + 0.5).round() as i64 - 1;
+    val.max(0) as usize
 }
 
 impl GreenDragonService {
@@ -876,20 +927,26 @@ impl GreenDragonService {
         &self,
         section: String,
         limit: usize,
+        page: usize,
+        seen_day: i64,
     ) -> watch::Receiver<CommentaryLoad> {
         let (tx, rx) = watch::channel(CommentaryLoad::Loading);
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            let lines = match inner.db.get().await {
-                Ok(client) => read_commentary(&client, &section, limit).await,
+            let (lines, first_unseen) = match inner.db.get().await {
+                Ok(client) => (
+                    read_commentary(&client, &section, limit, page).await,
+                    first_unseen_page(&client, &section, seen_day, limit).await,
+                ),
                 Err(e) => {
                     tracing::warn!("greendragon db get failed on commentary read: {e}");
-                    Vec::new()
+                    (Vec::new(), 0)
                 }
             };
             let _ = tx.send(CommentaryLoad::Ready {
                 lines: Arc::new(lines),
                 double_post: false,
+                first_unseen_page: first_unseen,
             });
         });
         rx
@@ -903,6 +960,7 @@ impl GreenDragonService {
         &self,
         section: String,
         limit: usize,
+        seen_day: i64,
         user_id: Uuid,
         name: String,
         body: String,
@@ -910,9 +968,9 @@ impl GreenDragonService {
         let (tx, rx) = watch::channel(CommentaryLoad::Loading);
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            let (lines, double_post) = match inner.db.get().await {
+            let (lines, double_post, first_unseen) = match inner.db.get().await {
                 Ok(client) => {
-                    let newest = GreenDragonCommentary::latest(&client, &section, 1)
+                    let newest = GreenDragonCommentary::latest(&client, &section, 1, 0)
                         .await
                         .unwrap_or_default();
                     let double_post = newest
@@ -934,16 +992,23 @@ impl GreenDragonService {
                             tracing::warn!("greendragon commentary prune failed: {e}");
                         }
                     }
-                    (read_commentary(&client, &section, limit).await, double_post)
+                    (
+                        // Posting always lands back on the newest window
+                        // (upstream's redirect drops the comscroll param).
+                        read_commentary(&client, &section, limit, 0).await,
+                        double_post,
+                        first_unseen_page(&client, &section, seen_day, limit).await,
+                    )
                 }
                 Err(e) => {
                     tracing::warn!("greendragon db get failed on commentary write: {e}");
-                    (Vec::new(), false)
+                    (Vec::new(), false, 0)
                 }
             };
             let _ = tx.send(CommentaryLoad::Ready {
                 lines: Arc::new(lines),
                 double_post,
+                first_unseen_page: first_unseen,
             });
         });
         rx
@@ -1377,6 +1442,67 @@ impl GreenDragonService {
                 tracing::warn!("greendragon pvp defeat settle failed: {e}");
             }
         });
+    }
+
+    /// Settle a bank transfer onto the recipient (`bank.php` op=transfer3,
+    /// their half): a row-locked delta write in the PvP shape. The
+    /// recipient-side checks re-run against the fresh blob — upstream SELECTs
+    /// the accounts row at finalize, so its per-transfer cap and daily
+    /// receive count are finalize-time reads too — and the deposit, the
+    /// counter bump, and the clerk's note land in one transaction that never
+    /// touches their presence. The caller has already drawn the gold and
+    /// refunds it on any refusal.
+    pub fn transfer_gold(
+        &self,
+        target_id: Uuid,
+        amount: u64,
+        sender: String,
+    ) -> watch::Receiver<TransferLoad> {
+        let (tx, rx) = watch::channel(TransferLoad::Loading);
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            let gate = inner.gate(target_id);
+            let _held = gate.lock().await;
+            let outcome = async {
+                let mut client = inner.db.get().await?;
+                let db_tx = client.transaction().await?;
+                let Some((blob, _)) =
+                    GreenDragonCharacter::load_for_update(&db_tx, target_id).await?
+                else {
+                    return anyhow::Ok(TransferLoad::Gone);
+                };
+                let mut c = persist::from_json(&blob);
+                let target = c.titled_name();
+                let cap = c.level as u64 * model::TRANSFER_PER_LEVEL;
+                if amount > cap {
+                    return Ok(TransferLoad::OverCap { target, cap });
+                }
+                if c.transfers_received_today >= model::TRANSFERS_RECEIVED_PER_DAY {
+                    return Ok(TransferLoad::TooManyToday { target });
+                }
+                c.gold_in_bank = c.gold_in_bank.saturating_add(amount as i64);
+                c.transfers_received_today += 1;
+                c.pvp_reports.push(format!(
+                    "{sender} sent {amount} gold to your account at the Coinvault; \
+                     the clerks have already entered it in your ledger."
+                ));
+                GreenDragonCharacter::update_data_keep_updated(
+                    &db_tx,
+                    target_id,
+                    persist::to_json(&c),
+                )
+                .await?;
+                db_tx.commit().await?;
+                Ok(TransferLoad::Done { target })
+            }
+            .await;
+            let msg = outcome.unwrap_or_else(|e| {
+                tracing::warn!("greendragon transfer failed: {e}");
+                TransferLoad::Gone
+            });
+            let _ = tx.send(msg);
+        });
+        rx
     }
 
     /// Read the current Five Sixes jackpot (for the tavern's signboard).

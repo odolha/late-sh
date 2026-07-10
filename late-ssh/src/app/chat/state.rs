@@ -189,6 +189,26 @@ pub(crate) enum VoiceCommand {
     Mute,
 }
 
+/// An aquarium control requested from the composer (`/aquarium`,
+/// `/aquarium feed`). `App` owns the tray state and entitlements, so the
+/// composer just records the intent and `App` carries it out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AquariumCommand {
+    Toggle,
+    Feed,
+}
+
+/// A pet action requested from the composer (`/pet` toggles the strip;
+/// `/feed` and `/water` are care). `App` owns the pet state and
+/// entitlements, so the composer just records the intent and `App` carries
+/// it out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PetCommand {
+    Toggle,
+    Feed,
+    Water,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum RoomSlot {
     Room(Uuid),
@@ -455,6 +475,7 @@ pub struct ChatState {
     requested_settings_modal: bool,
     requested_mod_modal: bool,
     requested_ultimate_modal: bool,
+    requested_daily_challenge: Option<DailyChallengeRequest>,
     requested_icon_picker: bool,
     requested_petname: Option<PetnameRequest>,
     requested_open_profile: Option<(Uuid, String)>,
@@ -466,6 +487,10 @@ pub struct ChatState {
     /// Set by /voice or /mute in a voice-enabled room; consumed by `App`
     /// (which owns the paired-CLI voice controls).
     requested_voice_command: Option<VoiceCommand>,
+    /// Set by /aquarium [feed]; consumed by `App` (which owns the tray).
+    requested_aquarium_command: Option<AquariumCommand>,
+    /// Set by /pet, /feed, /water; consumed by `App` (which owns the pet).
+    requested_pet_command: Option<PetCommand>,
     requested_poll_room: Option<Uuid>,
     /// Set by /brb command; contains the custom message (empty = no message).
     requested_brb: Option<String>,
@@ -627,12 +652,15 @@ impl ChatState {
             requested_settings_modal: false,
             requested_mod_modal: false,
             requested_ultimate_modal: false,
+            requested_daily_challenge: None,
             requested_icon_picker: false,
             requested_petname: None,
             requested_open_profile: None,
             requested_open_sheet: None,
             requested_quit: false,
             requested_voice_command: None,
+            requested_aquarium_command: None,
+            requested_pet_command: None,
             requested_audio_url: None,
             requested_audio_fallback_url: None,
             requested_audio_skip: false,
@@ -901,6 +929,10 @@ impl ChatState {
         std::mem::take(&mut self.requested_ultimate_modal)
     }
 
+    pub(crate) fn take_requested_daily_challenge(&mut self) -> Option<DailyChallengeRequest> {
+        self.requested_daily_challenge.take()
+    }
+
     pub(crate) fn take_requested_petname(&mut self) -> Option<PetnameRequest> {
         self.requested_petname.take()
     }
@@ -943,6 +975,14 @@ impl ChatState {
 
     pub(crate) fn take_requested_voice_command(&mut self) -> Option<VoiceCommand> {
         self.requested_voice_command.take()
+    }
+
+    pub(crate) fn take_requested_aquarium_command(&mut self) -> Option<AquariumCommand> {
+        self.requested_aquarium_command.take()
+    }
+
+    pub(crate) fn take_requested_pet_command(&mut self) -> Option<PetCommand> {
+        self.requested_pet_command.take()
     }
 
     pub fn take_requested_poll_room(&mut self) -> Option<Uuid> {
@@ -1883,6 +1923,17 @@ impl ChatState {
             return None;
         }
 
+        if let Some(parsed) = parse_challenge_command(&body) {
+            self.clear_composer_after_submit();
+            match parsed {
+                Some(request) => {
+                    self.requested_daily_challenge = Some(request);
+                    return None;
+                }
+                None => return Some(Banner::error("Usage: /challenge [@user] [chess]")),
+            }
+        }
+
         if body.trim() == "/poll" {
             let room_id = self.visible_real_room_id_for_poll();
             self.clear_composer_after_submit();
@@ -1949,6 +2000,27 @@ impl ChatState {
         } {
             self.clear_composer_after_submit();
             self.requested_voice_command = Some(command);
+            return None;
+        }
+
+        if let Some(command) = match body.trim() {
+            "/aquarium" | "/aq" => Some(AquariumCommand::Toggle),
+            "/aquarium feed" | "/aq feed" => Some(AquariumCommand::Feed),
+            _ => None,
+        } {
+            self.clear_composer_after_submit();
+            self.requested_aquarium_command = Some(command);
+            return None;
+        }
+
+        if let Some(command) = match body.trim() {
+            "/pet" => Some(PetCommand::Toggle),
+            "/feed" => Some(PetCommand::Feed),
+            "/water" => Some(PetCommand::Water),
+            _ => None,
+        } {
+            self.clear_composer_after_submit();
+            self.requested_pet_command = Some(command);
             return None;
         }
 
@@ -4127,6 +4199,18 @@ pub(crate) fn visual_order_for_rooms<U: UsernameResolver + ?Sized>(
         if feeds_available {
             order.push(RoomSlot::Feeds);
         }
+    }
+
+    // Voice sits directly above Discover ("+ browse rooms") at the bottom of Core.
+    if let Some((room, _)) = rooms
+        .iter()
+        .find(|(r, _)| is_chat_list_room(r) && r.permanent && r.slug.as_deref() == Some("voice"))
+        && pushed_rooms.insert(room.id)
+        && !core_collapsed
+    {
+        order.push(RoomSlot::Room(room.id));
+    }
+    if !core_collapsed {
         // Discover ("browse rooms") lives at the bottom of Core.
         order.push(RoomSlot::Discover);
     }
@@ -4137,6 +4221,7 @@ pub(crate) fn visual_order_for_rooms<U: UsernameResolver + ?Sized>(
         if is_chat_list_room(room)
             && room.kind != "dm"
             && !core_order.contains(&room.slug.as_deref().unwrap_or(""))
+            && room.slug.as_deref() != Some("voice")
             && pushed_rooms.insert(room.id)
             && !channels_collapsed
         {
@@ -4349,6 +4434,46 @@ pub(crate) fn parse_gift_command(input: &str) -> Option<GiftParse> {
         username: username.to_string(),
         amount,
         message,
+    })
+}
+
+/// A `/challenge` request drained by `handle_post_submit_requests` (the
+/// composer has no `DailyService` handle of its own).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum DailyChallengeRequest {
+    /// Bare `/challenge`: open the Daily Games modal.
+    Modal,
+    /// `/challenge chess`: post an open-lobby challenge.
+    Open,
+    /// `/challenge @user [chess]`: post a directed challenge.
+    Directed(String),
+}
+
+/// `Some(Some(request))` on a valid `/challenge` line, `Some(None)` on a
+/// malformed one (usage banner), `None` when it isn't `/challenge` at all.
+fn parse_challenge_command(input: &str) -> Option<Option<DailyChallengeRequest>> {
+    let trimmed = input.trim();
+    if trimmed == "/challenge" {
+        return Some(Some(DailyChallengeRequest::Modal));
+    }
+    let rest = trimmed.strip_prefix("/challenge ")?;
+    let mut tokens = rest.split_whitespace();
+    let first = tokens.next()?;
+    if first.eq_ignore_ascii_case("chess") {
+        return Some(match tokens.next() {
+            None => Some(DailyChallengeRequest::Open),
+            Some(_) => None,
+        });
+    }
+    let Some(username) = first.strip_prefix('@').filter(|name| !name.is_empty()) else {
+        return Some(None);
+    };
+    Some(match tokens.next() {
+        None => Some(DailyChallengeRequest::Directed(username.to_string())),
+        Some(game) if game.eq_ignore_ascii_case("chess") && tokens.next().is_none() => {
+            Some(DailyChallengeRequest::Directed(username.to_string()))
+        }
+        Some(_) => None,
     })
 }
 

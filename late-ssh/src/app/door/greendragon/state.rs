@@ -21,7 +21,7 @@ use super::specialty::{self, SkillEffect};
 use super::svc::{
     BountyBoardLoad, BountyPlace, CharacterLoad, ClanFound, ClanListEntry, ClanListLoad, ClanLoad,
     ClanMemberRow, ClanOp, ClanRow, CommentaryLoad, FiveSixLoad, GreenDragonService, HauntLoad,
-    IntelLoad, NewsLoad, PvpEngage, PvpSettle, PvpTarget, RosterEntry, RosterLoad,
+    IntelLoad, NewsLoad, PvpEngage, PvpSettle, PvpTarget, RosterEntry, RosterLoad, TransferLoad,
 };
 use super::tavern;
 
@@ -44,6 +44,11 @@ pub enum Mode {
     Healer,
     /// The Coinvault (bank).
     Bank,
+    /// The vault's transfer window (`bank.php` op=transfer): picking the
+    /// recipient — a name typed on the talk line, then the matches as rows.
+    BankTransferTarget,
+    /// Writing the transfer's sum, typed on the talk line.
+    BankTransferAmount,
     /// The Proving Yard (the master fight gate).
     Training,
     /// A forest special event awaiting the player's accept/decline choice.
@@ -405,6 +410,11 @@ pub struct State {
     commentary_rx: Option<tokio::sync::watch::Receiver<CommentaryLoad>>,
     /// The loaded commentary window for the open room, newest first.
     commentary_lines: Option<std::sync::Arc<Vec<CommentLine>>>,
+    /// The open room's page (upstream's `comscroll`): 0 is the newest
+    /// window, each page up one window older.
+    commentary_page_no: usize,
+    /// The "first unseen" jump target from the last load (0 = no jump).
+    commentary_first_unseen: usize,
     /// The talk line being typed, while composing a commentary post (or a
     /// warrior-list name search). `Some` routes all key bytes into the
     /// buffer instead of the menu.
@@ -459,6 +469,15 @@ pub struct State {
     /// An in-flight bounty placement: the quoted fee'd cost already taken
     /// off the purse (refunded on refusal), and the round-trip.
     bounty_place_rx: Option<(u64, tokio::sync::watch::Receiver<BountyPlace>)>,
+    /// Search matches at the transfer window: `(target, label, sendable)`.
+    transfer_matches: Vec<(Uuid, String, bool)>,
+    /// The picked transfer recipient while writing the sum:
+    /// `(target, level, name)`.
+    transfer_target: Option<(Uuid, u8, String)>,
+    /// An in-flight transfer settlement: `(amount, the bank's share of the
+    /// draw)` — already taken, refunded where it came from on a refusal —
+    /// and the round-trip.
+    transfer_rx: Option<((u64, u64), tokio::sync::watch::Receiver<TransferLoad>)>,
     /// Search matches on the haunt screen: `(target, label)`.
     haunt_matches: Vec<(Uuid, String)>,
     /// An in-flight haunt attempt, drained by [`State::tick`].
@@ -539,6 +558,8 @@ impl State {
             fivesix_rx: None,
             commentary_rx: None,
             commentary_lines: None,
+            commentary_page_no: 0,
+            commentary_first_unseen: 0,
             talk_input: None,
             roster_rx: None,
             roster: None,
@@ -562,6 +583,9 @@ impl State {
             intel_rx: None,
             intel_sheet: None,
             bounty_place_rx: None,
+            transfer_matches: Vec::new(),
+            transfer_target: None,
+            transfer_rx: None,
             haunt_matches: Vec::new(),
             haunt_rx: None,
             clan_rx: None,
@@ -596,6 +620,7 @@ impl State {
         self.tick_bounty();
         self.tick_haunt();
         self.tick_intel();
+        self.tick_transfer();
         self.tick_clan();
         if self.character.is_some() {
             // The presence heartbeat: an idle session re-stamps its save
@@ -700,7 +725,9 @@ impl State {
             Mode::WeaponShop => shop_menu(c, true),
             Mode::ArmorShop => shop_menu(c, false),
             Mode::Healer => healer_menu(c),
-            Mode::Bank => bank_menu(c),
+            Mode::Bank => bank_menu(c, self.transfer_rx.is_none()),
+            Mode::BankTransferTarget => self.transfer_target_menu(),
+            Mode::BankTransferAmount => self.transfer_amount_menu(),
             Mode::Training => training_menu(c),
             Mode::Fight => fight_menu(
                 c,
@@ -736,7 +763,15 @@ impl State {
             Mode::TavernBartender => self.tavern_bartender_menu(),
             Mode::IntelTarget => self.intel_target_menu(),
             Mode::IntelSheet => self.intel_sheet_menu(),
-            Mode::Commentary(room) => commentary_menu(room, self.commentary_posts_left()),
+            Mode::Commentary(room) => commentary_menu(
+                room,
+                self.commentary_posts_left(),
+                self.commentary_lines
+                    .as_ref()
+                    .is_some_and(|l| l.len() >= room.display_limit()),
+                self.commentary_page_no,
+                self.commentary_first_unseen,
+            ),
             Mode::WarriorList => {
                 warrior_list_menu(self.roster_page_view.as_ref(), c.clan_id.is_some())
             }
@@ -795,6 +830,8 @@ impl State {
             Mode::ArmorShop => self.buy_gear(false),
             Mode::Healer => self.select_healer(),
             Mode::Bank => self.select_bank(),
+            Mode::BankTransferTarget => self.select_transfer_target(),
+            Mode::BankTransferAmount => self.select_transfer_amount(),
             Mode::Training => self.select_training(),
             Mode::Fight => self.select_fight(),
             Mode::Event => self.select_event(),
@@ -989,6 +1026,11 @@ impl State {
             }
             Mode::IntelTarget | Mode::IntelSheet => {
                 self.goto(Mode::TavernBartender);
+                Selection::Stay
+            }
+            // The transfer window lets back out to the bank counter.
+            Mode::BankTransferTarget | Mode::BankTransferAmount => {
+                self.leave_transfer();
                 Selection::Stay
             }
             _ => {
@@ -1419,15 +1461,25 @@ impl State {
 
     // --- commentary (the shared chat rooms) ----------------------------------
 
-    /// Open a commentary room and kick off its page load.
+    /// Open a commentary room on its newest window and kick off the load.
     fn open_commentary(&mut self, room: CommentRoom) {
-        self.commentary_lines = None;
+        self.commentary_first_unseen = 0;
         self.talk_input = None;
-        self.commentary_rx = Some(
-            self.svc
-                .load_commentary(room.section(), room.display_limit()),
-        );
+        self.load_commentary_page(room, 0);
         self.goto(Mode::Commentary(room));
+    }
+
+    /// (Re)load one window of the open room (upstream's `comscroll` pages:
+    /// 0 = the newest, each page one window older).
+    fn load_commentary_page(&mut self, room: CommentRoom, page: usize) {
+        self.commentary_page_no = page;
+        self.commentary_lines = None;
+        self.commentary_rx = Some(self.svc.load_commentary(
+            room.section(),
+            room.display_limit(),
+            page,
+            self.comments_seen_day(),
+        ));
     }
 
     /// Drain a finished commentary load (or post round-trip) into the view.
@@ -1436,11 +1488,16 @@ impl State {
             return;
         };
         let ready = match &*rx.borrow_and_update() {
-            CommentaryLoad::Ready { lines, double_post } => Some((lines.clone(), *double_post)),
+            CommentaryLoad::Ready {
+                lines,
+                double_post,
+                first_unseen_page,
+            } => Some((lines.clone(), *double_post, *first_unseen_page)),
             CommentaryLoad::Loading => None,
         };
-        if let Some((lines, double_post)) = ready {
+        if let Some((lines, double_post, first_unseen)) = ready {
             self.commentary_lines = Some(lines);
+            self.commentary_first_unseen = first_unseen;
             self.commentary_rx = None;
             if double_post {
                 self.push_log("You have already said exactly that. The room lets it pass.".into());
@@ -1452,6 +1509,8 @@ impl State {
     fn leave_commentary(&mut self, room: CommentRoom) {
         self.commentary_rx = None;
         self.commentary_lines = None;
+        self.commentary_page_no = 0;
+        self.commentary_first_unseen = 0;
         self.talk_input = None;
         match room {
             CommentRoom::Inn => self.goto(Mode::Inn),
@@ -1501,7 +1560,8 @@ impl State {
         Some(commentary::posts_left(lines, self.user_id, room))
     }
 
-    /// Handle an open room's rows: speak, listen afresh, leave.
+    /// Handle an open room's rows: speak, leaf through the pages (upstream's
+    /// First Unseen / Previous / Refresh / Next nav), or leave.
     fn select_commentary(&mut self, room: CommentRoom) -> Selection {
         match self.cursor {
             0 => {
@@ -1509,7 +1569,10 @@ impl State {
                     self.talk_input = Some(String::new());
                 }
             }
-            1 => self.open_commentary(room),
+            1 => self.load_commentary_page(room, self.commentary_page_no + 1),
+            2 => self.load_commentary_page(room, self.commentary_page_no.saturating_sub(1)),
+            3 => self.load_commentary_page(room, self.commentary_first_unseen),
+            4 => self.load_commentary_page(room, 0),
             _ => self.leave_commentary(room),
         }
         Selection::Stay
@@ -1518,6 +1581,20 @@ impl State {
     /// The loaded commentary window, newest first (`None` while loading).
     pub fn commentary_page(&self) -> Option<&[CommentLine]> {
         self.commentary_lines.as_deref().map(Vec::as_slice)
+    }
+
+    /// The open room's page number (0 = the newest window), for the panel.
+    pub fn commentary_page_no(&self) -> usize {
+        self.commentary_page_no
+    }
+
+    /// The reader's new-post watermark (upstream `recentcomments`): comments
+    /// from this UTC day-number on render marked.
+    pub fn comments_seen_day(&self) -> i64 {
+        self.character
+            .as_ref()
+            .map(|c| c.comments_seen_before_day)
+            .unwrap_or(0)
     }
 
     /// Whether a talk line is being composed: all key bytes go to the buffer.
@@ -1536,11 +1613,13 @@ impl State {
     pub fn talk_push(&mut self, ch: char) {
         let budget = match self.mode {
             Mode::Commentary(room) => commentary::max_post_len(&self.room_verb(room)),
-            Mode::WarriorList | Mode::BountyTarget | Mode::Haunt | Mode::IntelTarget => {
-                SEARCH_QUERY_BUDGET
-            }
+            Mode::WarriorList
+            | Mode::BountyTarget
+            | Mode::Haunt
+            | Mode::IntelTarget
+            | Mode::BankTransferTarget => SEARCH_QUERY_BUDGET,
             // Gold amounts only: digits, capped well under any purse.
-            Mode::BountyAmount => {
+            Mode::BountyAmount | Mode::BankTransferAmount => {
                 if !ch.is_ascii_digit() {
                     return;
                 }
@@ -1608,6 +1687,14 @@ impl State {
             self.submit_bounty_amount();
             return;
         }
+        if self.mode == Mode::BankTransferTarget {
+            self.submit_transfer_search();
+            return;
+        }
+        if self.mode == Mode::BankTransferAmount {
+            self.submit_transfer_amount();
+            return;
+        }
         if self.mode == Mode::Haunt {
             self.submit_haunt_search();
             return;
@@ -1631,7 +1718,21 @@ impl State {
         let Some(raw) = self.talk_input.take() else {
             return;
         };
-        match commentary::prepare_post(&raw, &self.room_verb(room)) {
+        // The drinks module's commentary hook fires first (upstream's
+        // modulehook order): a drunk line slurs, and past 50 drunkenness the
+        // venue verb gains "drunkenly" before it bakes.
+        let drunk = self
+            .character
+            .as_ref()
+            .map(|c| c.drunkenness)
+            .unwrap_or_default();
+        let (raw, verb) = commentary::apply_drunkenness(
+            &raw,
+            &self.room_verb(room),
+            drunk,
+            &mut rand::thread_rng(),
+        );
+        match commentary::prepare_post(&raw, &verb) {
             Some(body) => {
                 // The speaker as every comment area shows them: the clan tag
                 // before the bare name for real members (upstream's live
@@ -1641,9 +1742,13 @@ impl State {
                     .as_ref()
                     .map(|c| c.commentary_name())
                     .unwrap_or_default();
+                // Posting rejoins the newest window (upstream's redirect
+                // drops the comscroll param).
+                self.commentary_page_no = 0;
                 self.commentary_rx = Some(self.svc.post_commentary(
                     room.section(),
                     room.display_limit(),
+                    self.comments_seen_day(),
                     self.user_id,
                     name,
                     body,
@@ -3633,10 +3738,301 @@ impl State {
                     self.push_log("The bank won't extend you any more credit.".into());
                 }
             }
+            3 => {
+                self.open_transfer();
+                return Selection::Stay;
+            }
             _ => return Selection::Stay,
         }
         self.save();
         Selection::Stay
+    }
+
+    // --- the transfer window ------------------------------------------------
+
+    /// Open the vault's transfer window (`bank.php` op=transfer): the level
+    /// gate hangs on the menu row; the banker turns debtors away here, as
+    /// upstream's window does.
+    fn open_transfer(&mut self) {
+        if self.character.as_ref().unwrap().gold_in_bank < 0 {
+            self.push_log(
+                "The banker closes the ledger. \"The vault moves no money for a debtor.\"".into(),
+            );
+            return;
+        }
+        self.transfer_matches.clear();
+        self.transfer_target = None;
+        self.kick_roster_load();
+        self.goto(Mode::BankTransferTarget);
+        self.talk_input = Some(String::new());
+    }
+
+    /// Back to the counter, dropping the window's search state and roster.
+    fn leave_transfer(&mut self) {
+        self.transfer_matches.clear();
+        self.transfer_target = None;
+        self.talk_input = None;
+        self.roster_rx = None;
+        self.roster = None;
+        self.goto(Mode::Bank);
+    }
+
+    /// Run the typed name against the roster for a transfer recipient
+    /// (`bank.php` transfer2's search: the same interleaved-`%` subsequence
+    /// match, >100 hits asks for a narrower name, exact matches float first
+    /// per upstream's `ORDER BY login=... DESC`). Yourself renders refused;
+    /// upstream refuses the self-transfer at finalize, ours surfaces it at
+    /// pick time like the broker's booth does.
+    fn submit_transfer_search(&mut self) {
+        let query = self.talk_input.take().unwrap_or_default();
+        let query = query.trim().to_string();
+        let Some(roster) = self.roster.as_ref() else {
+            self.push_log("The banker is still fetching the ledgers; give him a moment.".into());
+            return;
+        };
+        if query.is_empty() {
+            self.push_log(
+                "The banker looks up over his spectacles. \"A name for the note, please.\"".into(),
+            );
+            return;
+        }
+        let mut matches: Vec<&RosterEntry> = roster
+            .iter()
+            .filter(|e| name_matches(&e.name, &query))
+            .collect();
+        if matches.is_empty() {
+            self.push_log(
+                "The banker runs a finger down the ledger and shakes his head. \
+                 \"No one by that name banks with us.\""
+                    .into(),
+            );
+            return;
+        }
+        if matches.len() > MAX_SEARCH_MATCHES {
+            self.push_log(
+                "The banker sighs at the ledger's weight. \"Half the realm answers \
+                 to that. Narrow it down.\""
+                    .into(),
+            );
+            return;
+        }
+        matches.sort_by(|a, b| {
+            let a_exact = a.handle.eq_ignore_ascii_case(&query);
+            let b_exact = b.handle.eq_ignore_ascii_case(&query);
+            b_exact
+                .cmp(&a_exact)
+                .then_with(|| a.handle.to_lowercase().cmp(&b.handle.to_lowercase()))
+        });
+        let me = self.user_id;
+        self.transfer_matches = matches
+            .iter()
+            .map(|e| {
+                if e.user_id == me {
+                    (
+                        e.user_id,
+                        format!("{} (level {}) - that would be you", e.name, e.level),
+                        false,
+                    )
+                } else {
+                    (e.user_id, format!("{} (level {})", e.name, e.level), true)
+                }
+            })
+            .collect();
+    }
+
+    fn transfer_target_menu(&self) -> Vec<(String, bool)> {
+        let mut rows: Vec<(String, bool)> = self
+            .transfer_matches
+            .iter()
+            .map(|(_, label, ok)| (label.clone(), *ok))
+            .collect();
+        if rows.is_empty() {
+            let note = if self.roster.is_none() {
+                "He fetches the ledgers while you think of a name..."
+            } else {
+                "Name a warrior and he'll find their account."
+            };
+            rows.push((note.into(), false));
+        }
+        rows.push(("Look up another name".into(), self.roster.is_some()));
+        rows.push(("Back to the counter".into(), true));
+        rows
+    }
+
+    fn select_transfer_target(&mut self) -> Selection {
+        let targets = self.transfer_matches.len().max(1);
+        if self.cursor >= targets {
+            match self.cursor - targets {
+                0 => self.talk_input = Some(String::new()),
+                _ => self.leave_transfer(),
+            }
+            return Selection::Stay;
+        }
+        let Some((target_id, _, _)) = self.transfer_matches.get(self.cursor) else {
+            return Selection::Stay;
+        };
+        let target_id = *target_id;
+        let Some(entry) = self
+            .roster
+            .as_ref()
+            .and_then(|r| r.iter().find(|e| e.user_id == target_id).cloned())
+        else {
+            return Selection::Stay;
+        };
+        self.transfer_target = Some((entry.user_id, entry.level, entry.name.clone()));
+        self.goto(Mode::BankTransferAmount);
+        self.talk_input = Some(String::new());
+        Selection::Stay
+    }
+
+    /// The picked recipient while writing the sum, for the panel:
+    /// `(name, level)`.
+    pub fn transfer_target_info(&self) -> Option<(&str, u8)> {
+        self.transfer_target
+            .as_ref()
+            .map(|(_, level, name)| (name.as_str(), *level))
+    }
+
+    /// Gold still sendable today (the `maxtransferout` allowance less what
+    /// has already gone), for the transfer window's panel.
+    pub fn transfer_out_left(&self) -> u64 {
+        self.character
+            .as_ref()
+            .map(|c| {
+                (c.level as u64 * model::MAX_TRANSFER_OUT_PER_LEVEL)
+                    .saturating_sub(c.amount_out_today)
+            })
+            .unwrap_or(0)
+    }
+
+    fn transfer_amount_menu(&self) -> Vec<(String, bool)> {
+        vec![
+            (
+                "Write the sum".into(),
+                self.transfer_rx.is_none() && self.transfer_target.is_some(),
+            ),
+            ("Think better of it".into(), true),
+        ]
+    }
+
+    fn select_transfer_amount(&mut self) -> Selection {
+        match self.cursor {
+            0 => self.talk_input = Some(String::new()),
+            _ => self.leave_transfer(),
+        }
+        Selection::Stay
+    }
+
+    /// Check and send the typed sum (`bank.php` transfer3, upstream's check
+    /// order): the whole holding (purse plus balance), your daily-out cap,
+    /// the recipient's per-transfer cap (upstream's refusal says "per day";
+    /// the check is per transfer, kept 1=1), then the worthwhile minimum.
+    /// The self-transfer was refused at pick time; the recipient's daily
+    /// receive count settles against their fresh blob in the transaction.
+    /// The gold is drawn up front, hand first and the rest from the bank,
+    /// and refunded where it came from on a refusal.
+    fn submit_transfer_amount(&mut self) {
+        let raw = self.talk_input.take().unwrap_or_default();
+        let Some((target_id, level, name)) = self.transfer_target.clone() else {
+            self.leave_transfer();
+            return;
+        };
+        let amount: u64 = raw.trim().parse().unwrap_or(0);
+        let c = self.character.as_ref().unwrap();
+        if (c.gold as i64).saturating_add(c.gold_in_bank) < amount as i64 {
+            self.push_log(
+                "The banker taps the ledger. \"You do not hold that much, \
+                 purse and account together.\""
+                    .into(),
+            );
+            return;
+        }
+        let max_out = c.level as u64 * model::MAX_TRANSFER_OUT_PER_LEVEL;
+        if c.amount_out_today + amount > max_out {
+            self.push_log(format!(
+                "The banker shakes his head. \"The vault moves no more than \
+                 {max_out} gold out for you in a day.\""
+            ));
+            return;
+        }
+        let cap = level as u64 * model::TRANSFER_PER_LEVEL;
+        if amount > cap {
+            self.push_log(format!(
+                "The banker shakes his head. \"{name}'s account takes no more \
+                 than {cap} gold in one note.\""
+            ));
+            return;
+        }
+        if amount < c.level as u64 {
+            self.push_log(
+                "The banker sniffs. \"Make it worth the ink: your level in \
+                 gold, at the least.\""
+                    .into(),
+            );
+            return;
+        }
+        let c = self.character.as_mut().unwrap();
+        let from_bank = c.draw_for_transfer(amount);
+        self.save();
+        let sender = self.character.as_ref().unwrap().titled_name();
+        self.transfer_rx = Some((
+            (amount, from_bank),
+            self.svc.transfer_gold(target_id, amount, sender),
+        ));
+        self.push_log("The banker writes the note and sends a runner to the ledgers...".into());
+    }
+
+    /// Drain a settled transfer: `Done` books the day's outflow; any refusal
+    /// puts the draw back where it came from. The money moves whichever
+    /// screen is open (the player may have wandered off mid-settlement).
+    fn tick_transfer(&mut self) {
+        let Some(((amount, from_bank), rx)) = self.transfer_rx.as_mut() else {
+            return;
+        };
+        let (amount, from_bank) = (*amount, *from_bank);
+        let landed = match &*rx.borrow_and_update() {
+            TransferLoad::Loading => None,
+            landed => Some(landed.clone()),
+        };
+        let Some(landed) = landed else {
+            return;
+        };
+        self.transfer_rx = None;
+        match landed {
+            TransferLoad::Done { target } => {
+                let c = self.character.as_mut().unwrap();
+                c.amount_out_today += amount;
+                self.push_log(format!(
+                    "The runner returns with the note countersigned: {amount} \
+                     gold now sits in {target}'s account."
+                ));
+                self.save();
+                if self.mode == Mode::BankTransferAmount {
+                    self.leave_transfer();
+                }
+            }
+            refusal => {
+                let c = self.character.as_mut().unwrap();
+                c.gold = c.gold.saturating_add(amount - from_bank);
+                c.gold_in_bank = c.gold_in_bank.saturating_add(from_bank as i64);
+                self.save();
+                match refusal {
+                    TransferLoad::TooManyToday { target } => self.push_log(format!(
+                        "The runner returns with the coins. \"{target} has taken \
+                         all the transfers the vault allows in a day.\""
+                    )),
+                    TransferLoad::OverCap { target, cap } => self.push_log(format!(
+                        "The runner returns with the coins. \"{target}'s account \
+                         takes no more than {cap} gold in one note.\""
+                    )),
+                    _ => self.push_log(
+                        "The runner returns with the coins. \"No such account on \
+                         the books any longer.\""
+                            .into(),
+                    ),
+                }
+            }
+        }
     }
 
     // --- the stables ------------------------------------------------------------
@@ -6095,7 +6491,13 @@ fn build_hof_page(
 /// carries the venue flavor and, when close to the limit, the posts left
 /// (upstream surfaces the count under 3); it disables while the page (which
 /// the allowance is counted off) is still loading.
-fn commentary_menu(room: CommentRoom, posts_left: Option<usize>) -> Vec<(String, bool)> {
+fn commentary_menu(
+    room: CommentRoom,
+    posts_left: Option<usize>,
+    window_full: bool,
+    page: usize,
+    first_unseen: usize,
+) -> Vec<(String, bool)> {
     let prompt = match room {
         CommentRoom::Village => "Speak up",
         CommentRoom::Inn => "Join the table talk",
@@ -6122,8 +6524,18 @@ fn commentary_menu(room: CommentRoom, posts_left: Option<usize>) -> Vec<(String,
         CommentRoom::ClanHall(_) => "Back to the hall",
         _ => "Back to the village square",
     };
+    // The pager mirrors upstream's nav row: Previous (older) shows off a
+    // full window, Next (newer) off a scrolled-back page, First Unseen when
+    // the jump target is a real page, and Refresh always lands on page 0
+    // (upstream's link drops the comscroll param).
     vec![
         speak,
+        ("Leaf back to older voices".into(), window_full),
+        ("Leaf forward to newer voices".into(), page > 0),
+        (
+            "Turn to the first unseen page".into(),
+            first_unseen > 0 && first_unseen != page,
+        ),
         ("Listen for new voices".into(), true),
         (back.into(), true),
     ]
@@ -6278,7 +6690,7 @@ fn healer_menu(c: &Character) -> Vec<(String, bool)> {
     rows
 }
 
-fn bank_menu(c: &Character) -> Vec<(String, bool)> {
+fn bank_menu(c: &Character, transfer_idle: bool) -> Vec<(String, bool)> {
     let balance_row = if c.gold_in_bank < 0 {
         (
             format!("Pay down debt ({} owed) with all gold", -c.gold_in_bank),
@@ -6296,6 +6708,13 @@ fn bank_menu(c: &Character) -> Vec<(String, bool)> {
         (
             format!("Take a loan ({} gold available)", c.borrow_available()),
             c.borrow_available() > 0,
+        ),
+        // The transfer window (`bank.php`: `allowgoldtransfer` is stock-on;
+        // the nav opens at `mintransferlev` or any dragon kill). Debtors get
+        // the teller's refusal inside, as upstream's window does.
+        (
+            "Send gold to another warrior".into(),
+            c.can_transfer() && transfer_idle,
         ),
     ]
 }
@@ -6848,19 +7267,34 @@ mod tests {
         let mut c = lvl(3);
         c.gold = 200;
         c.gold_in_bank = 0;
-        let rows = bank_menu(&c);
+        let rows = bank_menu(&c, true);
         assert!(rows[0].1); // can deposit
         assert!(!rows[1].1); // nothing to withdraw
         // The loan row offers the full level-scaled credit line (3 * 20).
         assert!(rows[2].0.contains("60 gold available"));
         assert!(rows[2].1);
+        // At level 3 the transfer window is open (`mintransferlev`).
+        assert!(rows[3].1);
 
         // In debt: the deposit row becomes a pay-down and the credit shrinks.
         c.gold_in_bank = -40;
-        let rows = bank_menu(&c);
+        let rows = bank_menu(&c, true);
         assert!(rows[0].0.starts_with("Pay down debt (40 owed)"));
         assert!(!rows[1].1); // nothing (positive) to withdraw
         assert!(rows[2].0.contains("20 gold available"));
+    }
+
+    #[test]
+    fn bank_transfer_row_gates_on_level_or_dragon_kills() {
+        // Under `mintransferlev` (3) with no kills the window is shut...
+        let mut c = lvl(2);
+        let rows = bank_menu(&c, true);
+        assert!(!rows[3].1);
+        // ...a dragon kill opens it regardless of level...
+        c.dragon_kills = 1;
+        assert!(bank_menu(&c, true)[3].1);
+        // ...and a settling transfer holds the row until the runner returns.
+        assert!(!bank_menu(&c, false)[3].1);
     }
 
     #[test]
@@ -7007,25 +7441,44 @@ mod tests {
     #[test]
     fn commentary_menu_gates_the_speak_row_on_the_allowance() {
         // Loading: nothing to count against, so speaking waits.
-        let rows = commentary_menu(CommentRoom::Village, None);
-        assert_eq!(rows.len(), 3);
+        let rows = commentary_menu(CommentRoom::Village, None, false, 0, 0);
+        assert_eq!(rows.len(), 6);
         assert!(!rows[0].1);
-        assert!(rows[1].1); // refresh
-        assert!(rows[2].1); // leave
+        assert!(rows[4].1); // refresh
+        assert!(rows[5].1); // leave
 
         // Plenty left: a plain prompt.
-        let rows = commentary_menu(CommentRoom::Village, Some(13));
+        let rows = commentary_menu(CommentRoom::Village, Some(13), false, 0, 0);
         assert!(rows[0].1);
         assert!(!rows[0].0.contains("left today"));
 
         // Running low surfaces the count (upstream shows it under 3).
-        let rows = commentary_menu(CommentRoom::Village, Some(2));
+        let rows = commentary_menu(CommentRoom::Village, Some(2), false, 0, 0);
         assert!(rows[0].0.contains("2 left today"));
         assert!(rows[0].1);
 
         // Exhausted: the row closes.
-        let rows = commentary_menu(CommentRoom::DarkHorse, Some(0));
+        let rows = commentary_menu(CommentRoom::DarkHorse, Some(0), false, 0, 0);
         assert!(!rows[0].1);
+    }
+
+    #[test]
+    fn commentary_menu_pages_like_upstreams_nav_row() {
+        // A full newest window: only "older" opens (upstream shows Previous
+        // when the window fills; Next and First Unseen stay dark).
+        let rows = commentary_menu(CommentRoom::Village, Some(13), true, 0, 0);
+        assert!(rows[1].1); // older
+        assert!(!rows[2].1); // newer
+        assert!(!rows[3].1); // first unseen
+
+        // Scrolled back: "newer" opens; the unseen jump lights up when its
+        // target is a different page.
+        let rows = commentary_menu(CommentRoom::Village, Some(13), true, 2, 1);
+        assert!(rows[1].1);
+        assert!(rows[2].1);
+        assert!(rows[3].1);
+        let rows = commentary_menu(CommentRoom::Village, Some(13), true, 1, 1);
+        assert!(!rows[3].1); // already on the unseen page
     }
 
     #[test]

@@ -724,15 +724,16 @@ fn chat_consumable_active(item: &ShopCatalogItem, state: &ShopState) -> bool {
     let Some(effect_kind) = item.effect_kind.as_deref() else {
         return false;
     };
-    if item.requires_room {
-        state.active_room_effects().values().any(|effects| {
-            effects
-                .iter()
-                .any(|effect| effect.source_sku == item.sku || effect.effect_kind == effect_kind)
-        })
-    } else {
-        effect_kind == "bot_username_color" && state.bot_username_color_active()
+    // Every chat consumable is room-targeted. A user-scoped one would need its
+    // own active-effect projection into the snapshot before it could show here.
+    if !item.requires_room {
+        return false;
     }
+    state.active_room_effects().values().any(|effects| {
+        effects
+            .iter()
+            .any(|effect| effect.source_sku == item.sku || effect.effect_kind == effect_kind)
+    })
 }
 
 fn consumable_use_hint(item: &ShopCatalogItem) -> &'static str {
@@ -741,9 +742,9 @@ fn consumable_use_hint(item: &ShopCatalogItem) -> &'static str {
     } else if item.item_kind == CHAT_CONSUMABLE_ITEM_KIND {
         "Enter activates it immediately"
     } else if item.sku == AQUARIUM_FOOD_SKU {
-        "Ctrl+Q opens the tray; Ctrl+F feeds while the tray is open"
+        "/aquarium opens the tray; /aquarium feed spends one"
     } else if item.sku == PET_FOOD_SKU {
-        "press c for your pet, then t to use one"
+        "/feed spends one and sends the pet strolling"
     } else {
         "Enter buys one"
     }

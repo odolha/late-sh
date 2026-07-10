@@ -264,6 +264,9 @@ impl App {
         if let Some(b) = self.tick_rooms() {
             self.banner = Some(b);
         }
+        if let Some(b) = self.daily.tick() {
+            self.banner = Some(b);
+        }
         if let Some(state) = self.dartboard_state.as_mut() {
             state.tick();
         }
@@ -640,9 +643,6 @@ impl App {
                 .set_active_creatures(&self.shop_state.active_aquarium_fish());
             self.aquarium_state
                 .set_hungry(self.shop_state.aquarium_hungry());
-            if !self.shop_state.entitlements().has_aquarium() {
-                self.show_aquarium_tray = false;
-            }
             if !self.shop_state.dynamic_bonsai_enabled() {
                 self.show_bonsai_v2_modal = false;
             }
