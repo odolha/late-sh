@@ -17,7 +17,7 @@ Included here:
 - Home chat rooms, DMs, public/private topic rooms, synthetic entries, and game-backed room chat.
 - Home/Dashboard chat center, room rail, and embedded Rooms chat surfaces.
 - Message composer, replies, edits, deletes, reactions, pinned messages, ignores, overlays, and autocomplete.
-- Synthetic chat entries: RSS, News, Mentions/Notifications, and Discover. Voice is not a synthetic room slot; enabled chat/game rooms render an embedded voice strip and expose `/voice`/`/mute` controls. Showcase/Projects and Work/Profiles still use chat-adjacent services/state, but their UI is hosted on Directory page 7.
+- Synthetic chat entries: RSS, News, Mentions/Notifications, and Discover. Voice is not a synthetic room slot: the dedicated `#voice` room is a real, permanent, public chat room pinned at the bottom of Core (above Discover). Any voice-enabled chat/game room (including `#voice`) renders an embedded voice strip and exposes `/voice`/`/mute` controls while you are inside it. Showcase/Projects and Work/Profiles still use chat-adjacent services/state, but their UI is hosted on Directory page 7.
 - Chat service refresh/tail/event contracts, DB model constraints, keybindings, tests, and gotchas.
 
 Global SSH, audio, games, profile, rooms/blackjack, observability, and repo-wide test policy stay in the root context.
@@ -107,6 +107,8 @@ Normal display flow:
 
 Room tails carry `last_read_at` so render can insert one synthetic `new messages` divider before the first unread message authored by someone else. The divider is render-only state in the chat row cache; do not persist it or count it as a chat message.
 
+System-feed lines: the `#lounge` activity feed (`app/activity/lounge.rs`) posts persisted messages authored by the `system` bot user (`SYSTEM_USERNAME`) with the `· ` body prefix. Rendering treats a message as a system line only when BOTH hold — author is the feed bot (`ui.rs::is_system_author`) and the body parses via `ui_text.rs::parse_system_line` — so neither a human squatting a nick nor a pasted `· ` can spoof the style. A system line renders as exactly one authorless, timestampless dim row (truncated, never wrapped: `wrap_system_to_lines`), and consecutive system lines stack with no blank separator regardless of the 120s continuation window (`prev_was_system` in `ensure_chat_rows_cache`). They are reactable/replyable/pinnable like any message, admins can delete them, they are excluded from unread counts at the SQL layer (`ChatRoomMember::unread_counts_for_user` skips `settings.system` authors), and their bodies never contain `@` so no mentions fire. IRC projects them as ordinary PRIVMSGs from the `system` nick.
+
 `ChatSnapshot` is summary data. `RoomTailLoaded` is history data. Do not merge those responsibilities back together.
 
 Login announcements:
@@ -163,11 +165,11 @@ Notifications:
 
 ## 6. Rooms And Selection
 
-`RoomSlot` represents either a real room or one of the Home synthetic entries: RSS (`RoomSlot::Feeds`), News, Notifications/Mentions, or Discover. `RoomSlot::Showcase` and `RoomSlot::Work` remain in code for state compatibility and focused helpers, but they are no longer emitted by Home visual order, room rail, or room jump. Voice is rendered as an embedded strip on voice-enabled rooms, not as its own room slot.
+`RoomSlot` represents either a real room or one of the Home synthetic entries: RSS (`RoomSlot::Feeds`), News, Notifications/Mentions, or Discover. `RoomSlot::Showcase` and `RoomSlot::Work` remain in code for state compatibility and focused helpers, but they are no longer emitted by Home visual order, room rail, or room jump. The `#voice` room is a normal `RoomSlot::Room` (a permanent public room, pinned at the bottom of Core directly above Discover in both `state.rs::visual_order_for_rooms` and the `ui.rs` hit-test mirror), matched by slug `voice`; being permanent is what keeps it in Core rather than sorting into Channels (which excludes slug `voice`). Voice-enabled rooms additionally render an embedded voice strip when open.
 
 Visual order is defined in `state.rs::visual_order_for_rooms` and mirrored by cozy room-rail rendering in `ui.rs`. The base navigation order is:
 1. Favorite real rooms in `users.settings.favorite_room_ids` order.
-2. Core permanent rooms plus synthetic updates: `lounge`, `announcements`, `suggestions`, `bugs`, Notifications/Mentions, News, RSS when available, and Discover / `+ browse rooms` last. Collapsing Core hides these synthetic update entries too (Discover included).
+2. Core permanent rooms plus synthetic updates: `lounge`, `announcements`, `suggestions`, `bugs`, Notifications/Mentions, News, RSS when available, the permanent `#voice` room (matched by slug, directly above Discover), and Discover / `+ browse rooms` last. Collapsing Core hides these synthetic update entries too (Discover included). A `#voice` room that is not permanent shows nowhere: Core requires `permanent` and Channels excludes slug `voice`, so promote it with `/create-room voice`.
 3. Other non-DM chat-list rooms/channels, excluding favorites.
 4. DMs, sorted by unread status, then snapshot latest-message activity, then peer display name. Do not derive this order from lazily loaded room tails.
 
@@ -208,7 +210,7 @@ Room favorites:
 - Active Shop room highlights are not favorites; they temporarily render above favorites and expire from `shop_consumable_effects`.
 
 Home hot-room shortcuts:
-- The top activity/multiplayer/quest strip was removed; the online count + activity feed moved to the right sidebar's Activity panel (`app/activity/panel.rs`). `dashboard::ui::recent_dashboard_rooms(..., 4)` survives only for the recent-room jump keys.
+- The top activity/multiplayer/quest strip was removed; presence (online count + connected friends) now lives in the right sidebar's pinned core block, and the public activity feed ships into #lounge as system messages (`app/activity/lounge.rs`; the sidebar Activity panel is retired). `dashboard::ui::recent_dashboard_rooms(..., 4)` survives only for the recent-room jump keys.
 - `b1`, `b2`, `b3`, and `b4` enter those rooms through the same `rooms::input::enter_room` path used by the Rooms directory.
 
 `App::sync_visible_chat_room()` is the read/tail-load bridge. It computes the visible chat room from Home/Dashboard or Rooms, stores it in `ChatState`, marks it read, and requests a tail on change. Call it after screen, selected room/synthetic entry, room favorite, or active-room changes.
@@ -289,7 +291,7 @@ User commands:
 - `/upload <url>` downloads a public image URL server-side, reuploads it to configured public file storage, and inserts the resulting URL into the composer for the user to send.
 
 Admin commands:
-- `/create-room #room` creates a permanent auto-join room and bulk-adds existing users. It is idempotent on rooms that are already permanent, but it refuses to promote an existing non-permanent public room: promotion would bulk-add every user to a room nobody can leave, and a mistyped slug must not be able to do that to a user-created `/public` room.
+- `/create-room #room` creates a permanent auto-join room and bulk-adds existing users. It is idempotent on rooms that are already permanent, and it promotes an existing non-permanent public room to permanent + auto-join (`ChatRoom::ensure_permanent` UPDATEs the row, then the caller bulk-adds users) — this is how a user-created `/public #voice` room becomes the permanent `#voice` core room. Because promotion bulk-adds every user to a room nobody can leave, `/create-room` is admin-only and a mistyped slug will promote whatever public room matches it.
 - `/delete-room #room` deletes a permanent room.
 - `/fill-room #room` bulk-adds all users to an existing public room and flips `auto_join=true`; private rooms cannot be filled.
 
