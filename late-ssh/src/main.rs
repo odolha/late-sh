@@ -251,6 +251,11 @@ async fn main() -> anyhow::Result<()> {
         activity_publisher.clone(),
         rooms_service.clone(),
     );
+    let ssnake_table_manager = late_ssh::app::rooms::ssnake::manager::SsnakeTableManager::new(
+        chip_service.clone(),
+        activity_publisher.clone(),
+        rooms_service.clone(),
+    );
     let lateania_service = late_ssh::app::door::lateania::svc::LateaniaService::new(
         activity_publisher.clone(),
         chip_service.clone(),
@@ -274,6 +279,7 @@ async fn main() -> anyhow::Result<()> {
         chess_table_manager,
         poker_table_manager,
         sshattrick_room_manager,
+        ssnake_table_manager,
         tictactoe_table_manager,
         tron_table_manager,
     );
