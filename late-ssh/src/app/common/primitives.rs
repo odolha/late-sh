@@ -13,6 +13,9 @@ use super::theme;
 pub enum BannerKind {
     Success,
     Error,
+    /// Neutral news (a lost daily match, a draw): amber, not red — nothing
+    /// went wrong, the user just needs to know.
+    Info,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +38,14 @@ impl Banner {
         Self {
             message: message.to_string(),
             kind: BannerKind::Error,
+            created_at: Instant::now(),
+        }
+    }
+
+    pub fn info(message: &str) -> Self {
+        Self {
+            message: message.to_string(),
+            kind: BannerKind::Info,
             created_at: Instant::now(),
         }
     }
@@ -131,7 +142,7 @@ pub fn draw_tabs(frame: &mut Frame, area: Rect, current: Screen) {
         Screen::Pinstar => "Directory",
         Screen::WorldCup => "World Cup",
         Screen::Clubhouse => "Clubhouse",
-        Screen::DailyMatch => "Daily Chess",
+        Screen::DailyMatch => "Daily Match",
     };
 
     let current_line = Paragraph::new(Line::from(vec![
@@ -150,6 +161,7 @@ pub fn draw_banner(frame: &mut Frame, area: Rect, banner: &Banner) {
     let (icon, color) = match banner.kind {
         BannerKind::Success => (" ✓ ", theme::SUCCESS()),
         BannerKind::Error => (" ✗ ", theme::ERROR()),
+        BannerKind::Info => (" • ", theme::AMBER()),
     };
 
     let content = Paragraph::new(Line::from(vec![

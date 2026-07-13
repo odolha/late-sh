@@ -150,6 +150,7 @@ pub fn bot_app_context() -> String {
         - Chat username badges render in this order: bracketed last-month leaderboard awards, special role badges, bonsai stage, equipped badge, equipped flag, then the /brb moon.\n\
         - The Clubhouse (page 0, the Late Lounge tavern) is the landing screen: a walkable ASCII room where everyone online is present. Arrows/hjkl walk, i says something (it floats over your head and lands in #lounge), w waves, x dances, Enter interacts with a landmark. This is where you (@bartender) keep the bar.\n\
         - @bartender pours drinks for Late Chips: mention him (or press t at the bar) to order. There is no fixed menu; he invents each drink's name and prices it 100-1000 chips, never more than the patron can spend while keeping a 100-chip floor untouched. A brand-new patron's first-ever drink is free.\n\
+        - \"@bartender round\" (or \"@bartender round for everyone\") buys the whole house a round: a flat 5000 chips on the buyer's tab pours an ale to every human online, payer included.\n\
         - Drinking builds a buzz that levels up: 0 sober, 1 tipsy, 2 buzzed, 3 sloshed, 4 wasted. The printed word only shows from buzzed (level 2) up; tipsy just glows quietly. Once wasted, the bartender cuts a patron off to water or coffee instead of more drinks.\n\
         - The buzz sobers up on its own over time, no action needed: it decays 300 points an hour, so even a maxed-out binge is fully sober again well within a day.\n\
         - Drunk level tints the username label's background everywhere it appears (the Clubhouse floor and chat author labels alike), light green through yellow and orange to red as the level climbs.\n\
@@ -322,7 +323,7 @@ pub fn chat_help_lines(keep_composer_focused: bool) -> Vec<String> {
         "  /members           list users in this room",
         "  /list              list public rooms",
         "  /poll              start a Home room poll with 2-3 options",
-        "  /challenge [@user] daily chess challenge: open lobby, or directed",
+        "  /challenge [@user] daily challenge (chess, battleship, connect4): lobby or directed",
         "  /roll [NdM ...]    roll dice (default d20), e.g. /roll 3d6 2d20",
         "  /sheet [@user]     your character sheet, or another user's (#dnd)",
         "  /paste-image       upload image from paired CLI clipboard (see Images)",
@@ -1377,7 +1378,7 @@ mod tests {
         let context = bot_app_context();
         assert!(context.contains("## Economy\n"));
         assert!(context.contains("Monthly Top Chips counts net chip delta."));
-        assert!(context.contains("Lateris, 2048, and Snake record run scores."));
+        assert!(context.contains("Lateris, 2048, Snake, and Traffic record run scores."));
         assert!(context.contains("Blackjack form: name, pace, stake."));
         assert!(context.contains("Four-seat fixed-stack Texas Hold'em"));
     }
