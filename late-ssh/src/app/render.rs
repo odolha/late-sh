@@ -246,13 +246,11 @@ struct DrawContext<'a> {
     selected_radio_station: late_core::models::user::RadioStation,
     radio_now_playing: Option<&'a str>,
     afk: Option<&'a str>,
-    /// Rolling feed of recent activity events for the sidebar Activity panel.
-    activity: &'a std::collections::VecDeque<crate::app::activity::event::ActivityEvent>,
+    /// Humans currently connected (bots excluded) plus connected friends,
+    /// for the sidebar's pinned presence rows.
     online_count: usize,
     active_friend_names: &'a [String],
-    activity_scroll: u16,
     marquee_tick: usize,
-    activity_rect_slot: Option<&'a std::cell::Cell<Option<Rect>>>,
     chat_state: &'a chat::state::ChatState,
     user_id: uuid::Uuid,
     pet_species: &'a str,
@@ -262,6 +260,7 @@ struct DrawContext<'a> {
     icon_picker_state: &'a icon_picker::IconPickerState,
     icon_catalog: Option<&'a icon_picker::catalog::IconCatalogData>,
     mentions_unread_count: i64,
+    chip_balance: i64,
     voice_badge: Option<String>,
     home_selected: bool,
 }
@@ -270,7 +269,6 @@ impl App {
     pub fn render(&mut self) -> anyhow::Result<Vec<u8>> {
         // Clear last-frame mouse hit-test rects so screens that don't draw
         // them this frame can't leave a stale target behind.
-        self.last_dashboard_activity_rect.set(None);
         self.last_pet_strip_pet_rect.set(None);
         self.last_pet_strip_food_rect.set(None);
         self.last_pet_strip_water_rect.set(None);
@@ -968,12 +966,9 @@ impl App {
                         selected_radio_station,
                         radio_now_playing: radio_now_playing.as_deref(),
                         afk: self.afk.as_deref(),
-                        activity: &self.activity,
                         online_count,
                         active_friend_names: &active_friend_names,
-                        activity_scroll: self.dashboard_activity_scroll,
                         marquee_tick: self.marquee_tick,
-                        activity_rect_slot: Some(&self.last_dashboard_activity_rect),
                         chat_state: &self.chat,
                         user_id: self.user_id,
                         pet_species: &self.pet_state.species,
@@ -983,6 +978,7 @@ impl App {
                         icon_picker_state: &self.icon_picker_state,
                         icon_catalog: self.icon_catalog.as_ref(),
                         mentions_unread_count: self.chat.notifications.unread_count(),
+                        chip_balance: self.chip_balance,
                         voice_badge,
                         home_selected,
                     },
@@ -1117,7 +1113,11 @@ impl App {
             .title(title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::BORDER_ACTIVE()));
-        if let Some(hud) = status_hud_title(ctx.mentions_unread_count, ctx.voice_badge.as_deref()) {
+        if let Some(hud) = status_hud_title(
+            Some(ctx.chip_balance),
+            ctx.mentions_unread_count,
+            ctx.voice_badge.as_deref(),
+        ) {
             block = block.title_top(hud);
         }
         let (help_hint_title, sponsor_title) = app_frame_bottom_titles(area.width);
@@ -1372,12 +1372,9 @@ impl App {
                     radio_now_playing: ctx.radio_now_playing,
                     afk: ctx.afk,
                     daily: ctx.daily,
-                    activity_events: ctx.activity,
                     online_count: ctx.online_count,
                     active_friend_names: ctx.active_friend_names,
-                    activity_scroll: ctx.activity_scroll,
                     marquee_tick: ctx.marquee_tick,
-                    activity_rect_slot: ctx.activity_rect_slot,
                 },
             );
         }
@@ -1407,6 +1404,7 @@ impl App {
             let color = match banner.kind {
                 BannerKind::Success => theme::SUCCESS(),
                 BannerKind::Error => theme::ERROR(),
+                BannerKind::Info => theme::AMBER(),
             };
             // leading space (1) + icon (2) + message + border padding (4)
             let msg_w = (banner.message.len() as u16) + 7;
@@ -1618,7 +1616,7 @@ fn app_frame_title(screen: Screen, ctx: &DrawContext<'_>) -> Line<'static> {
         Screen::Pinstar => "Directory",
         Screen::WorldCup => "World Cup",
         Screen::Clubhouse => "Clubhouse",
-        Screen::DailyMatch => "Daily Chess",
+        Screen::DailyMatch => "Daily Match",
     };
     spans.push(Span::styled(
         " | ",
@@ -1984,23 +1982,16 @@ fn sponsor_line(include_thanks: bool, include_protocol: bool) -> Line<'static> {
     Line::from(spans).right_aligned()
 }
 
-fn status_hud_title(unread: i64, voice_badge: Option<&str>) -> Option<Line<'static>> {
-    if unread <= 0 && voice_badge.is_none() {
+fn status_hud_title(
+    balance: Option<i64>,
+    unread: i64,
+    voice_badge: Option<&str>,
+) -> Option<Line<'static>> {
+    if balance.is_none() && unread <= 0 && voice_badge.is_none() {
         return None;
     }
     let mut spans = Vec::new();
-    if let Some(voice_badge) = voice_badge {
-        spans.push(Span::styled(
-            voice_badge.to_string(),
-            Style::default()
-                .fg(theme::SUCCESS())
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
     if unread > 0 {
-        if !spans.is_empty() {
-            spans.push(Span::styled("|", Style::default().fg(theme::BORDER_DIM())));
-        }
         let noun = if unread == 1 { "mention" } else { "mentions" };
         spans.push(Span::styled(
             format!(" {unread}"),
@@ -2010,6 +2001,32 @@ fn status_hud_title(unread: i64, voice_badge: Option<&str>) -> Option<Line<'stat
         ));
         spans.push(Span::styled(
             format!(" unread {noun} "),
+            Style::default().fg(theme::TEXT_MUTED()),
+        ));
+    }
+    if let Some(voice_badge) = voice_badge {
+        if !spans.is_empty() {
+            spans.push(Span::styled("|", Style::default().fg(theme::BORDER_DIM())));
+        }
+        spans.push(Span::styled(
+            voice_badge.to_string(),
+            Style::default()
+                .fg(theme::SUCCESS())
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    if let Some(balance) = balance {
+        if !spans.is_empty() {
+            spans.push(Span::styled("|", Style::default().fg(theme::BORDER_DIM())));
+        }
+        spans.push(Span::styled(
+            format!(" {balance}"),
+            Style::default()
+                .fg(theme::AMBER())
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            " chips ",
             Style::default().fg(theme::TEXT_MUTED()),
         ));
     }
@@ -2112,20 +2129,20 @@ mod tests {
 
     #[test]
     fn status_hud_title_hidden_when_empty() {
-        assert!(status_hud_title(0, None).is_none());
-        assert!(status_hud_title(-3, None).is_none());
+        assert!(status_hud_title(None, 0, None).is_none());
+        assert!(status_hud_title(None, -3, None).is_none());
     }
 
     #[test]
     fn status_hud_title_renders_right_aligned_pluralized_text() {
         use ratatui::layout::Alignment;
 
-        let one = status_hud_title(1, None).expect("one mention should render");
+        let one = status_hud_title(None, 1, None).expect("one mention should render");
         assert_eq!(one.alignment, Some(Alignment::Right));
         let text: String = one.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(text, " 1 unread mention ");
 
-        let many = status_hud_title(14, None).expect("many mentions should render");
+        let many = status_hud_title(None, 14, None).expect("many mentions should render");
         let text: String = many.iter().map(|s| s.content.as_ref()).collect();
         assert_eq!(text, " 14 unread mentions ");
     }
@@ -2133,9 +2150,27 @@ mod tests {
     #[test]
     fn status_hud_title_combines_voice_and_mentions() {
         let line =
-            status_hud_title(2, Some(" mic #lounge [muted] ")).expect("status should render");
+            status_hud_title(None, 2, Some(" mic #lounge [muted] ")).expect("status should render");
         let text: String = line.iter().map(|s| s.content.as_ref()).collect();
-        assert_eq!(text, " mic #lounge [muted] | 2 unread mentions ");
+        assert_eq!(text, " 2 unread mentions | mic #lounge [muted] ");
+    }
+
+    #[test]
+    fn status_hud_title_renders_balance_right_of_mentions() {
+        use ratatui::layout::Alignment;
+
+        let only = status_hud_title(Some(1_500), 0, None).expect("balance should render alone");
+        assert_eq!(only.alignment, Some(Alignment::Right));
+        let text: String = only.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, " 1500 chips ");
+
+        let combined = status_hud_title(Some(1_500), 2, Some(" mic #lounge [muted] "))
+            .expect("balance + voice + mentions should render");
+        let text: String = combined.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(
+            text,
+            " 2 unread mentions | mic #lounge [muted] | 1500 chips "
+        );
     }
 
     #[test]
@@ -2165,7 +2200,10 @@ mod tests {
     #[test]
     fn help_hint_title_lists_guide_last() {
         let help = app_frame_help_hint_title(HelpHintStyle::DottedCtrl);
-        assert_eq!(line_text(&help), " Settings Ctrl+O · Hub Ctrl+G · Guide ? ");
+        assert_eq!(
+            line_text(&help),
+            " Settings Ctrl+O · Hub Ctrl+G · Lobby Ctrl+Q · Guide ? "
+        );
     }
 
     #[test]
@@ -2173,8 +2211,14 @@ mod tests {
         let dotted = app_frame_help_hint_title(HelpHintStyle::DottedCtrl);
         let spaced = app_frame_help_hint_title(HelpHintStyle::SpacedCtrl);
         let caret = app_frame_help_hint_title(HelpHintStyle::SpacedCaret);
-        assert_eq!(line_text(&spaced), " Settings Ctrl+O  Hub Ctrl+G  Guide ? ");
-        assert_eq!(line_text(&caret), " Settings ^O  Hub ^G  Guide ? ");
+        assert_eq!(
+            line_text(&spaced),
+            " Settings Ctrl+O  Hub Ctrl+G  Lobby Ctrl+Q  Guide ? "
+        );
+        assert_eq!(
+            line_text(&caret),
+            " Settings ^O  Hub ^G  Lobby ^Q  Guide ? "
+        );
 
         let (help, sponsor) = app_frame_bottom_titles((line_width(&dotted) + 2) as u16);
         assert_eq!(line_text(&help), line_text(&dotted));

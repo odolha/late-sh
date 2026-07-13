@@ -19,6 +19,8 @@ crate::model! {
         pub winner_user_id: Option<Uuid>,
         pub result: String,
         pub state: Value,
+        pub challenger_result_seen_at: Option<DateTime<Utc>>,
+        pub opponent_result_seen_at: Option<DateTime<Utc>>,
     }
 }
 
@@ -32,8 +34,12 @@ impl DailyMatch {
     pub const RESULT_DRAW: &'static str = "draw";
     pub const RESULT_RESIGN: &'static str = "resign";
     pub const RESULT_TIMEOUT: &'static str = "timeout";
+    pub const RESULT_FLEET_SUNK: &'static str = "fleet_sunk";
+    pub const RESULT_FOUR_IN_A_ROW: &'static str = "four_in_a_row";
 
     pub const GAME_KIND_CHESS: &'static str = "chess";
+    pub const GAME_KIND_BATTLESHIP: &'static str = "battleship";
+    pub const GAME_KIND_CONNECTFOUR: &'static str = "connect4";
 
     /// Open challenges posted by the user plus active matches they play in.
     pub async fn count_active_entries(client: &Client, user_id: Uuid) -> Result<i64> {
@@ -52,6 +58,7 @@ impl DailyMatch {
 
     pub async fn create_challenge(
         client: &Client,
+        game_kind: &str,
         challenger_id: Uuid,
         target_user_id: Option<Uuid>,
     ) -> Result<Self> {
@@ -61,7 +68,7 @@ impl DailyMatch {
                  VALUES ($1, $2, $3, $4)
                  RETURNING *",
                 &[
-                    &Self::GAME_KIND_CHESS,
+                    &game_kind,
                     &Self::STATUS_OPEN,
                     &challenger_id,
                     &target_user_id,
@@ -136,9 +143,12 @@ impl DailyMatch {
 
     /// Persist a played move: new state, turn flipped to `next_turn_user_id`,
     /// a fresh deadline. Applies only while active, only while it is still
-    /// `by_user_id`'s turn (so a duplicate in-flight move can't double-apply),
-    /// and only when the stored state revision is not ahead of the incoming
-    /// one (same monotonic guard as `GameRoom::update_runtime_state`).
+    /// `by_user_id`'s turn, and only when the stored state revision still
+    /// equals the `expected_revision` the caller loaded. The exact-equality
+    /// guard matches `finish`: a battleship hit keeps the turn on the shooter,
+    /// so the turn guard alone can't reject a duplicate same-revision write —
+    /// only the compare-and-swap makes a superseded move fail loudly instead
+    /// of last-write-wins.
     pub async fn update_state(
         client: &Client,
         match_id: Uuid,
@@ -146,6 +156,7 @@ impl DailyMatch {
         by_user_id: Uuid,
         next_turn_user_id: Uuid,
         turn_deadline_at: DateTime<Utc>,
+        expected_revision: i64,
     ) -> Result<u64> {
         let updated = client
             .execute(
@@ -159,7 +170,7 @@ impl DailyMatch {
                        AND status = $6
                        AND turn_user_id = $3
                        AND {}",
-                    Self::REVISION_GUARD_SQL
+                    Self::STORED_REVISION_EQ_SQL
                 ),
                 &[
                     &match_id,
@@ -168,6 +179,7 @@ impl DailyMatch {
                     &next_turn_user_id,
                     &turn_deadline_at,
                     &Self::STATUS_ACTIVE,
+                    &expected_revision,
                 ],
             )
             .await?;
@@ -271,33 +283,55 @@ impl DailyMatch {
         Ok(rows.into_iter().map(Self::from).collect())
     }
 
-    /// Monotonic revision guard shared by the mutating state writes: apply
-    /// only when the stored `state.revision` is <= the incoming `$2` state's.
-    const REVISION_GUARD_SQL: &'static str = "(
-        COALESCE(
-          CASE
-            WHEN state ? 'revision'
-             AND state->>'revision' ~ '^[0-9]+$'
-            THEN (state->>'revision')::bigint
-            ELSE 0
-          END,
-          0
-        )
-        <=
-        COALESCE(
-          CASE
-            WHEN ($2::jsonb) ? 'revision'
-             AND ($2::jsonb)->>'revision' ~ '^[0-9]+$'
-            THEN (($2::jsonb)->>'revision')::bigint
-            ELSE 0
-          END,
-          0
-        )
-    )";
+    /// Finished matches at least one player hasn't acknowledged yet. The
+    /// 30-day window bounds the snapshot when a player never comes back;
+    /// `updated` is the finish time (`mark_result_seen` deliberately doesn't
+    /// touch it), so old rows age out instead of pinning the list forever.
+    pub async fn list_finished_unseen(client: &Client) -> Result<Vec<Self>> {
+        let rows = client
+            .query(
+                "SELECT * FROM daily_matches
+                 WHERE status = 'finished'
+                   AND (challenger_result_seen_at IS NULL
+                        OR (opponent_id IS NOT NULL AND opponent_result_seen_at IS NULL))
+                   AND updated > current_timestamp - INTERVAL '30 days'
+                 ORDER BY updated DESC, id ASC",
+                &[],
+            )
+            .await?;
+        Ok(rows.into_iter().map(Self::from).collect())
+    }
 
-    /// Optimistic guard for `finish`: apply only when the stored
-    /// `state.revision` still equals the `$7` revision the caller loaded, so a
-    /// concurrent move (which advances the revision) makes the finish a no-op.
+    /// One player acknowledges a finished match's result. Touches only the
+    /// caller's own seen column, and only while it is still NULL, so a repeat
+    /// ack updates 0 rows and the caller can skip republishing. `updated`
+    /// stays the finish timestamp (see `list_finished_unseen`).
+    pub async fn mark_result_seen(client: &Client, match_id: Uuid, user_id: Uuid) -> Result<u64> {
+        let updated = client
+            .execute(
+                "UPDATE daily_matches
+                 SET challenger_result_seen_at = CASE
+                         WHEN challenger_id = $2 THEN current_timestamp
+                         ELSE challenger_result_seen_at
+                     END,
+                     opponent_result_seen_at = CASE
+                         WHEN opponent_id = $2 THEN current_timestamp
+                         ELSE opponent_result_seen_at
+                     END
+                 WHERE id = $1
+                   AND status = $3
+                   AND ((challenger_id = $2 AND challenger_result_seen_at IS NULL)
+                        OR (opponent_id = $2 AND opponent_result_seen_at IS NULL))",
+                &[&match_id, &user_id, &Self::STATUS_FINISHED],
+            )
+            .await?;
+        Ok(updated)
+    }
+
+    /// Optimistic compare-and-swap guard shared by `update_state` and
+    /// `finish`: apply only when the stored `state.revision` still equals the
+    /// `$7` revision the caller loaded, so a concurrent move (which advances
+    /// the revision) makes the write a no-op instead of clobbering it.
     const STORED_REVISION_EQ_SQL: &'static str = "(
         COALESCE(
           CASE

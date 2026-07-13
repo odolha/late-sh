@@ -578,6 +578,11 @@ pub fn handle(app: &mut App, data: &[u8]) {
         // also begin with ESC, so avoid treating those as user cancellation.
         if !saw_terminal_reply && data.contains(&0x1B) {
             app.show_splash = false;
+            // The dismissing ESC was just fed into the parser above, leaving it
+            // wedged mid-escape. Without this reset the next key merges into an
+            // `ESC <key>` Alt chord (e.g. `1` becomes Alt+1, which is swallowed)
+            // so the first post-splash keypress is silently lost.
+            app.vt_input.reset();
         }
         return;
     }
@@ -2670,31 +2675,6 @@ fn handle_mouse_scroll_over_screen(
         return false;
     };
 
-    // Sidebar Activity panel: wheel scrolls the recent-events feed through
-    // the in-memory `activity` buffer. Bigger offset = older events; clamp
-    // to the events outside the visible window so a trim can't strand us
-    // past the end. Works on every screen that renders the sidebar (the
-    // rect is only set on frames where the panel drew).
-    if let Some(rect) = app.last_dashboard_activity_rect.get()
-        && rect_contains(rect, x, y)
-    {
-        let visible = crate::app::activity::panel::visible_event_rows(
-            rect.height,
-            !app.chat.active_friend_names().is_empty(),
-        );
-        let max_offset = app.activity.len().saturating_sub(visible) as u16;
-        let current = app.dashboard_activity_scroll.min(max_offset);
-        // delta > 0 (wheel up) reveals newer events → smaller offset.
-        // delta < 0 (wheel down) reveals older events → larger offset.
-        let next = if delta > 0 {
-            current.saturating_sub(ACTIVITY_SCROLL_STEP)
-        } else {
-            current.saturating_add(ACTIVITY_SCROLL_STEP).min(max_offset)
-        };
-        app.dashboard_activity_scroll = next;
-        return true;
-    }
-
     if !matches!(screen, Screen::Dashboard) {
         return false;
     }
@@ -2750,11 +2730,6 @@ fn handle_pet_strip_click(app: &mut App, x: u16, y: u16) -> bool {
     }
     false
 }
-
-/// One wheel notch moves the Activity feed by this many events. Single-step
-/// keeps the scroll readable on small panels without overshooting the
-/// handful of visible rows.
-const ACTIVITY_SCROLL_STEP: u16 = 1;
 
 fn handle_mouse_click(app: &mut App, screen: Screen, mouse: MouseEvent) -> bool {
     if mouse.kind != MouseEventKind::Down || mouse.button != Some(MouseButton::Left) {
@@ -4597,69 +4572,6 @@ fn selected_raw_icon(app: &mut App, keep_open: bool) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// Pure clone of the offset clamp + step logic from
-    /// `handle_mouse_scroll_over_screen` so we can unit-test it without
-    /// spinning up an `App`. Keep in sync with the call site.
-    fn next_activity_scroll(
-        current: u16,
-        total: usize,
-        panel_height: u16,
-        has_active_friends: bool,
-        delta: isize,
-    ) -> u16 {
-        let visible =
-            crate::app::activity::panel::visible_event_rows(panel_height, has_active_friends);
-        let max_offset = total.saturating_sub(visible) as u16;
-        let current = current.min(max_offset);
-        if delta > 0 {
-            current.saturating_sub(ACTIVITY_SCROLL_STEP)
-        } else {
-            current.saturating_add(ACTIVITY_SCROLL_STEP).min(max_offset)
-        }
-    }
-
-    #[test]
-    fn activity_scroll_wheel_up_decreases_offset_toward_newest() {
-        // 20 events, currently at offset 5; wheel up moves toward newer.
-        assert_eq!(next_activity_scroll(5, 20, 5, true, 1), 4);
-        // At top already → saturating subtract clamps at 0.
-        assert_eq!(next_activity_scroll(0, 20, 5, true, 1), 0);
-    }
-
-    #[test]
-    fn activity_scroll_wheel_down_clamps_at_max_offset() {
-        // 20 events, 5-row panel with active friends → 3 event rows visible
-        // → max_offset = 17.
-        assert_eq!(next_activity_scroll(17, 20, 5, true, -1), 17);
-        assert_eq!(next_activity_scroll(16, 20, 5, true, -1), 17);
-    }
-
-    #[test]
-    fn activity_scroll_uses_panel_height_for_visible_rows() {
-        // 5-row panel without a friends row shows 4 events → max_offset 16.
-        assert_eq!(next_activity_scroll(16, 20, 5, false, -1), 16);
-        assert_eq!(next_activity_scroll(15, 20, 5, false, -1), 16);
-        // A taller (filled) panel shows more events → smaller max_offset.
-        assert_eq!(next_activity_scroll(10, 20, 12, false, -1), 9);
-    }
-
-    #[test]
-    fn activity_scroll_zero_max_when_buffer_smaller_than_visible() {
-        // Only 2 events in buffer; nothing to scroll past.
-        assert_eq!(next_activity_scroll(0, 2, 5, true, -1), 0);
-        assert_eq!(next_activity_scroll(5, 2, 5, false, -1), 0);
-    }
-
-    #[test]
-    fn activity_scroll_clamps_stale_offset_after_buffer_trim() {
-        // User was at offset 30 in a 100-event buffer; buffer trims to 10.
-        // Next wheel event must clamp before stepping so we don't underflow.
-        assert_eq!(next_activity_scroll(30, 10, 5, true, 1), 6);
-        assert_eq!(next_activity_scroll(30, 10, 5, true, -1), 7);
-        assert_eq!(next_activity_scroll(30, 10, 5, false, 1), 5);
-        assert_eq!(next_activity_scroll(30, 10, 5, false, -1), 6);
-    }
-
     #[test]
     fn rect_contains_treats_edges_correctly() {
         let r = Rect {
@@ -4792,6 +4704,25 @@ mod tests {
     fn vt_parser_reads_backtab_sequence() {
         let mut parser = VtInputParser::default();
         assert_eq!(parser.feed(b"\x1b[Z"), vec![ParsedInput::BackTab]);
+    }
+
+    #[test]
+    fn lone_escape_then_key_is_swallowed_as_alt_chord() {
+        // A bare ESC leaves the parser wedged mid-escape (no event yet), so the
+        // following byte merges into an `ESC 1` = Alt+1 chord that esc_dispatch
+        // drops. This is why dismissing the splash with Escape used to eat the
+        // first `1` — the splash path must `reset()` to avoid it.
+        let mut parser = VtInputParser::default();
+        assert_eq!(parser.feed(b"\x1b"), vec![]);
+        assert_eq!(parser.feed(b"1"), vec![]);
+    }
+
+    #[test]
+    fn reset_after_lone_escape_lets_the_next_key_through() {
+        let mut parser = VtInputParser::default();
+        assert_eq!(parser.feed(b"\x1b"), vec![]);
+        parser.reset();
+        assert_eq!(parser.feed(b"1"), vec![ParsedInput::Char('1')]);
     }
 
     #[test]

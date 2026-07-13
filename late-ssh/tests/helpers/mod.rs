@@ -339,6 +339,7 @@ pub fn test_app_state(db: Db, config: Config) -> State {
         daily_service: late_ssh::app::daily::svc::DailyService::new(
             db.clone(),
             chip_service.clone(),
+            ActivityPublisher::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
         ),
         rooms_service: rooms_service.clone(),
         blackjack_table_manager: blackjack_table_manager.clone(),
@@ -383,7 +384,6 @@ pub fn test_app_state(db: Db, config: Config) -> State {
         radio_meta_rx,
         worldcup_service: late_ssh::app::worldcup::svc::WorldCupService::new(),
         activity_feed: activity_tx,
-        activity_history: Arc::new(Mutex::new(VecDeque::new())),
         room_join_feed,
         room_join_history: Arc::new(Mutex::new(VecDeque::new())),
         session_registry,
@@ -499,6 +499,7 @@ fn make_app_with_chat_service_and_permissions(
         daily_service: late_ssh::app::daily::svc::DailyService::new(
             db.clone(),
             chip_service.clone(),
+            ActivityPublisher::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
         ),
         rooms_service: RoomsService::new(db.clone()),
         room_game_registry: test_room_game_registry(db.clone()),
@@ -558,7 +559,6 @@ fn make_app_with_chat_service_and_permissions(
         afk_users: late_ssh::state::new_afk_users(),
         username_directory: None,
         activity_feed_rx: None,
-        initial_activity: VecDeque::new(),
         room_join_rx: None,
         initial_room_joins: VecDeque::new(),
         initial_announcements: None,
@@ -667,6 +667,7 @@ pub fn make_app_with_paired_client(
         daily_service: late_ssh::app::daily::svc::DailyService::new(
             db.clone(),
             chip_service.clone(),
+            ActivityPublisher::new(db.clone(), broadcast::channel::<ActivityEvent>(64).0),
         ),
         rooms_service: RoomsService::new(db.clone()),
         room_game_registry: test_room_game_registry(db.clone()),
@@ -726,7 +727,6 @@ pub fn make_app_with_paired_client(
         afk_users: late_ssh::state::new_afk_users(),
         username_directory: None,
         activity_feed_rx: None,
-        initial_activity: VecDeque::new(),
         room_join_rx: None,
         initial_room_joins: VecDeque::new(),
         initial_announcements: None,

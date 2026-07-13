@@ -44,8 +44,8 @@ use super::{
     discover, feeds, news, notifications,
     notifications::svc::NotificationService,
     showcase,
-    svc::{ChatEvent, ChatService, ChatSnapshot, GIFT_MAX_AMOUNT, RoomMemberListItem},
-    ui_text::{NewsPayload, parse_news_payload},
+    svc::{ChatEvent, ChatService, ChatSnapshot, GIFT_MAX_AMOUNT, ReportKind, RoomMemberListItem},
+    ui_text::{NewsPayload, parse_news_payload, parse_report_payload},
     work,
 };
 
@@ -1930,7 +1930,12 @@ impl ChatState {
                     self.requested_daily_challenge = Some(request);
                     return None;
                 }
-                None => return Some(Banner::error("Usage: /challenge [@user] [chess]")),
+                None => {
+                    return Some(Banner::error(&format!(
+                        "Usage: /challenge [@user] [{}]",
+                        crate::app::daily::games::DailyGame::usage_labels()
+                    )));
+                }
             }
         }
 
@@ -2121,6 +2126,21 @@ impl ChatState {
             }
             self.requested_brb = Some(msg);
             self.clear_composer_after_submit();
+            return None;
+        }
+
+        if let Some((kind, text)) = parse_report_command(&body) {
+            self.clear_composer_after_submit();
+            let Some(text) = text else {
+                return Some(Banner::error(&format!(
+                    "Usage: {} <describe it in a few words or more>",
+                    kind.command()
+                )));
+            };
+            let request_id = Uuid::now_v7();
+            self.pending_send_notices.push_back(request_id);
+            self.service
+                .send_report_task(self.user_id, kind, text, request_id);
             return None;
         }
 
@@ -2915,7 +2935,6 @@ impl ChatState {
         self.drain_username_directory();
         self.drain_snapshot();
         self.drain_pinned_messages();
-        let clipboard_banner = self.expire_pending_clipboard_image_upload();
         let banner = self.drain_events();
         let moderation_banner = self.drain_moderation_events();
         let feeds_banner = self.feeds.tick();
@@ -2924,8 +2943,7 @@ impl ChatState {
         let showcase_banner = self.showcase.tick();
         let work_banner = self.work.tick();
         self.flush_pending_read_cursors_if_due();
-        clipboard_banner
-            .or(moderation_banner)
+        moderation_banner
             .or(banner)
             .or(feeds_banner)
             .or(news_banner)
@@ -4443,15 +4461,19 @@ pub(crate) fn parse_gift_command(input: &str) -> Option<GiftParse> {
 pub(crate) enum DailyChallengeRequest {
     /// Bare `/challenge`: open the Daily Games modal.
     Modal,
-    /// `/challenge chess`: post an open-lobby challenge.
-    Open,
-    /// `/challenge @user [chess]`: post a directed challenge.
-    Directed(String),
+    /// `/challenge <game>`: post an open-lobby challenge.
+    Open(crate::app::daily::games::DailyGame),
+    /// `/challenge @user [game]`: post a directed challenge.
+    Directed(String, crate::app::daily::games::DailyGame),
 }
 
 /// `Some(Some(request))` on a valid `/challenge` line, `Some(None)` on a
 /// malformed one (usage banner), `None` when it isn't `/challenge` at all.
+/// Game names come from the daily roster (`chess`, `battleship`, ...);
+/// omitting one on a directed challenge defaults to the roster's first game.
 fn parse_challenge_command(input: &str) -> Option<Option<DailyChallengeRequest>> {
+    use crate::app::daily::games::DailyGame;
+
     let trimmed = input.trim();
     if trimmed == "/challenge" {
         return Some(Some(DailyChallengeRequest::Modal));
@@ -4459,9 +4481,9 @@ fn parse_challenge_command(input: &str) -> Option<Option<DailyChallengeRequest>>
     let rest = trimmed.strip_prefix("/challenge ")?;
     let mut tokens = rest.split_whitespace();
     let first = tokens.next()?;
-    if first.eq_ignore_ascii_case("chess") {
+    if let Some(game) = DailyGame::from_label(first) {
         return Some(match tokens.next() {
-            None => Some(DailyChallengeRequest::Open),
+            None => Some(DailyChallengeRequest::Open(game)),
             Some(_) => None,
         });
     }
@@ -4469,11 +4491,16 @@ fn parse_challenge_command(input: &str) -> Option<Option<DailyChallengeRequest>>
         return Some(None);
     };
     Some(match tokens.next() {
-        None => Some(DailyChallengeRequest::Directed(username.to_string())),
-        Some(game) if game.eq_ignore_ascii_case("chess") && tokens.next().is_none() => {
-            Some(DailyChallengeRequest::Directed(username.to_string()))
-        }
-        Some(_) => None,
+        None => Some(DailyChallengeRequest::Directed(
+            username.to_string(),
+            DailyGame::ALL[0],
+        )),
+        Some(game_token) => match DailyGame::from_label(game_token) {
+            Some(game) if tokens.next().is_none() => {
+                Some(DailyChallengeRequest::Directed(username.to_string(), game))
+            }
+            _ => None,
+        },
     })
 }
 
@@ -4701,6 +4728,30 @@ fn parse_brb_command(input: &str) -> Option<String> {
     }
     let rest = trimmed.strip_prefix("/brb ")?.trim();
     Some(rest.to_string())
+}
+
+/// Minimum characters of report text, so `/bug lol` bounces with usage help
+/// instead of posting a useless card.
+const REPORT_MIN_CHARS: usize = 10;
+
+/// Parse `/bug <text>` or `/suggest <text>` from the composer. Outer `None`
+/// means not a report command; inner `None` means missing or too-short text
+/// (show usage).
+fn parse_report_command(input: &str) -> Option<(ReportKind, Option<String>)> {
+    let trimmed = input.trim();
+    for kind in [ReportKind::Bug, ReportKind::Suggestion] {
+        if trimmed == kind.command() {
+            return Some((kind, None));
+        }
+        if let Some(rest) = trimmed.strip_prefix(kind.command())
+            && let Some(rest) = rest.strip_prefix(' ')
+        {
+            let text = rest.trim();
+            let text = (text.chars().count() >= REPORT_MIN_CHARS).then(|| text.to_string());
+            return Some((kind, text));
+        }
+    }
+    None
 }
 
 /// Which cup the user asked for. Coffee gets the mug-with-handle silhouette
@@ -5010,6 +5061,18 @@ fn loaded_reply_target_id(msgs: &[ChatMessage], selected_id: Uuid) -> Option<Opt
 fn reply_preview_text(body: &str) -> String {
     if let Some(title) = news_reply_preview_text(body) {
         return title;
+    }
+
+    if let Some((kind, text)) = parse_report_payload(body) {
+        let first_line = text.lines().find_map(|line| {
+            let trimmed = line.trim();
+            (!trimmed.is_empty()).then_some(trimmed)
+        });
+        return truncate_reply_preview(&format!(
+            "{} {}",
+            kind.icon(),
+            first_line.unwrap_or(kind.command())
+        ));
     }
 
     let body_without_reply_quote = match body.split_once('\n') {
@@ -6308,6 +6371,47 @@ mod tests {
         assert_eq!(parse_user_command("ignore alice", "/ignore"), None);
         assert_eq!(parse_user_command("/ignored alice", "/ignore"), None);
         assert_eq!(parse_user_command("/unignored alice", "/unignore"), None);
+    }
+
+    #[test]
+    fn parse_report_command_requires_enough_text() {
+        assert_eq!(
+            parse_report_command("/bug the door ate my hat"),
+            Some((ReportKind::Bug, Some("the door ate my hat".to_string())))
+        );
+        assert_eq!(
+            parse_report_command("  /suggest more cats in the lounge  "),
+            Some((
+                ReportKind::Suggestion,
+                Some("more cats in the lounge".to_string())
+            ))
+        );
+        // Bare or too-short reports show usage instead of posting.
+        assert_eq!(parse_report_command("/bug"), Some((ReportKind::Bug, None)));
+        assert_eq!(
+            parse_report_command("/bug lol"),
+            Some((ReportKind::Bug, None))
+        );
+        assert_eq!(
+            parse_report_command("/suggest   "),
+            Some((ReportKind::Suggestion, None))
+        );
+        // Not report commands at all.
+        assert_eq!(parse_report_command("/buggy thing"), None);
+        assert_eq!(parse_report_command("/suggestions here"), None);
+        assert_eq!(parse_report_command("bug report"), None);
+    }
+
+    #[test]
+    fn reply_preview_text_compacts_report_cards() {
+        assert_eq!(
+            reply_preview_text("---BUG--- the door ate my hat"),
+            "🐛 the door ate my hat"
+        );
+        assert_eq!(
+            reply_preview_text("---SUGGESTION--- more cats\nplease"),
+            "💡 more cats"
+        );
     }
 
     #[test]
