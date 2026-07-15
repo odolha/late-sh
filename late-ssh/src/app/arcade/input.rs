@@ -79,6 +79,12 @@ pub(crate) fn is_nes_selection(selection: usize) -> bool {
 
 pub fn handle_key(app: &mut App, byte: u8) -> bool {
     if app.is_playing_game {
+        // Backtick hops the workspace cycle out of daily puzzles. Real-time
+        // games (Lateris, Snake, Traffic, NES) and personal (non-daily) boards
+        // are not stops and keep the byte for themselves.
+        if byte == b'`' && super::workspace::active_daily_stop(app).is_some() {
+            return crate::app::lobby::workspace::cycle_game_workspace(app);
+        }
         if app.game_selection == GAME_SELECTION_2048 {
             if byte == 0x1B || byte == b'q' || byte == b'Q' {
                 // Exit game mode back to lobby

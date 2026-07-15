@@ -162,6 +162,7 @@ pub struct SessionConfig {
     pub snake_service: crate::app::arcade::snake::svc::SnakeService,
     pub traffic_service: crate::app::arcade::traffic::svc::TrafficService,
     pub rubiks_cube_service: crate::app::arcade::rubiks_cube::svc::RubiksCubeService,
+    pub initial_rubiks_cube_game: Option<late_core::models::rubiks_cube::Game>,
     pub initial_tetris_game: Option<late_core::models::tetris::Game>,
     pub initial_snake_game: Option<late_core::models::snake::Game>,
     pub initial_tetris_high_score: Option<late_core::models::tetris::HighScore>,
@@ -370,8 +371,7 @@ pub struct App {
     /// about once a second (which also steps shimmer); renderers read this
     /// owned map, never the directory mutex.
     pub(crate) name_styles: HashMap<Uuid, crate::app::common::username_effect::NameStyle>,
-    pub(super) flair_directory:
-        Option<crate::app::common::username_effect::NameFlairDirectory>,
+    pub(super) flair_directory: Option<crate::app::common::username_effect::NameFlairDirectory>,
     pub(super) ai_service: Option<crate::app::ai::svc::AiService>,
     pub(super) active_users: Option<ActiveUsers>,
     pub(super) afk_users: crate::state::AfkUsers,
@@ -790,6 +790,7 @@ impl App {
         let rubiks_cube_state = crate::app::arcade::rubiks_cube::state::State::new(
             config.user_id,
             config.rubiks_cube_service.clone(),
+            config.initial_rubiks_cube_game,
         );
         let le_word_state = crate::app::arcade::le_word::state::State::new(
             config.user_id,
