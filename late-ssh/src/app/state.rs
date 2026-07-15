@@ -1712,7 +1712,19 @@ impl App {
         let aquarium_area = aquarium_area_for_terminal(cols, rows);
         self.aquarium_state
             .handle_resize(aquarium_area.width, aquarium_area.height);
-        self.terminal.resize(Rect::new(0, 0, cols, rows))
+        // We can't use `Terminal::resize()` here: since ratatui 0.30.2 its
+        // fixed-viewport clear queries `backend.size()`, which reads the
+        // controlling tty — impossible on the write-only SSH `SharedBuffer`
+        // (same class of failure as the `Terminal::clear()` cursor read in
+        // `force_full_repaint`). Rebuild the terminal instead: `with_options`
+        // with a `Viewport::Fixed` is pure state construction and never
+        // touches the backend, and `force_full_repaint` supplies the client
+        // clear + full redraw that `Terminal::resize` used to perform.
+        let backend = CrosstermBackend::new(self.shared.clone());
+        let viewport = Viewport::Fixed(Rect::new(0, 0, cols, rows));
+        self.terminal = Terminal::with_options(backend, TerminalOptions { viewport })?;
+        self.force_full_repaint();
+        Ok(())
     }
 
     pub fn handle_input(&mut self, data: &[u8]) {
