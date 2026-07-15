@@ -546,9 +546,10 @@ fn split_chat_and_composer(area: Rect, composer_height: u16) -> (Rect, Rect) {
     (messages, composer)
 }
 
-/// Vertical layout for a chat surface: messages fill, then the composer gap
-/// (a blank row plus the activity ticker slot), then an optional pet strip
-/// (0 rows when absent) directly above the composer.
+/// Vertical layout for a chat surface: messages fill, then a blank breather,
+/// then an optional pet strip (0 rows when absent), then the one-row activity
+/// ticker hugging the composer. With the pet absent this collapses to the same
+/// two-row gap (blank + ticker) as before, so the chrome never moves.
 fn split_chat_pet_strip_and_composer(
     area: Rect,
     composer_height: u16,
@@ -556,21 +557,22 @@ fn split_chat_pet_strip_and_composer(
 ) -> (Rect, Rect, Rect, Rect) {
     let layout = Layout::vertical([
         Constraint::Fill(1),
-        Constraint::Length(CHAT_COMPOSER_GAP_HEIGHT),
+        Constraint::Length(CHAT_COMPOSER_GAP_HEIGHT.saturating_sub(1)),
         Constraint::Length(pet_strip_height),
+        Constraint::Length(1),
         Constraint::Length(composer_height),
     ])
     .split(area);
-    (layout[0], layout[1], layout[2], layout[3])
+    (layout[0], layout[3], layout[2], layout[4])
 }
 
 /// The one-row #lounge activity ticker rendered in the composer gap. The
 /// queue packs left to right, newest first — each event as `text (5m)` with
 /// faint `·` separators — until the row is full; whatever doesn't fit is
-/// simply not shown (the queue is sized to outfill the row). It paints the
-/// bottom row of the gap so a blank breather sits between it and the last
-/// chat message, and the ticker hugs the composer below. The gap always
-/// exists, so the chrome never moves; an empty queue just leaves it blank.
+/// simply not shown (the queue is sized to outfill the row). It gets its own
+/// one-row slot hugging the composer (below the pet strip when that is shown),
+/// with a blank breather higher up. The slot always exists, so the chrome
+/// never moves; an empty queue just leaves it blank.
 fn draw_activity_ticker(
     frame: &mut Frame,
     area: Rect,
