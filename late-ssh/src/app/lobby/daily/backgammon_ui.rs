@@ -284,9 +284,7 @@ fn number_line(ctx: &GridCtx, half: usize) -> Line<'static> {
             Style::default().fg(theme::TEXT_FAINT())
         };
         if ctx.cursor == Some(slot) {
-            style = style
-                .fg(theme::AMBER_GLOW())
-                .add_modifier(Modifier::BOLD);
+            style = style.fg(theme::AMBER_GLOW()).add_modifier(Modifier::BOLD);
         }
         spans.push(Span::styled(format!("{label:^0$}", COL_W as usize), style));
     }
@@ -356,7 +354,10 @@ fn stack_cell(count: u8, color: Color, depth: u16, bg_style: Style) -> Span<'sta
     } else {
         " ".repeat(COL_W as usize)
     };
-    Span::styled(text, bg_style.fg(color_fg(color)).add_modifier(Modifier::BOLD))
+    Span::styled(
+        text,
+        bg_style.fg(color_fg(color)).add_modifier(Modifier::BOLD),
+    )
 }
 
 /// The two rows between the halves: the pending roll as dice in the left
@@ -365,11 +366,7 @@ fn stack_cell(count: u8, color: Color, depth: u16, bg_style: Style) -> Span<'sta
 /// player, like the off tray).
 fn gap_line(ctx: &GridCtx, row: usize) -> Line<'static> {
     let side_w = (BAR_COL as u16 * COL_W) as usize;
-    let bar_color = if row == 0 {
-        ctx.seat.other()
-    } else {
-        ctx.seat
-    };
+    let bar_color = if row == 0 { ctx.seat.other() } else { ctx.seat };
     let bar_count = ctx.view.bar[off_idx(bar_color)];
 
     // Left half: the roll as dice tiles, on the top gap row only.

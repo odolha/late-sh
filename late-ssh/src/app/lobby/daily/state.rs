@@ -1255,9 +1255,7 @@ impl DailyState {
                 checkers.pending.clear();
                 true
             }
-            DailyGameDetail::Backgammon(bg)
-                if bg.selected.is_some() || !bg.pending.is_empty() =>
-            {
+            DailyGameDetail::Backgammon(bg) if bg.selected.is_some() || !bg.pending.is_empty() => {
                 bg.selected = None;
                 bg.pending.clear();
                 true

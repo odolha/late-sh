@@ -702,9 +702,11 @@ mod tests {
         assert!(!legal.is_empty());
         assert!(legal.iter().all(|turn| turn.len() == 2));
         // The classic 31 play: 8/5 6/5 (indices 7->4, 5->4).
-        assert!(legal.iter().any(|turn| {
-            turn.contains(&(7, 4)) && turn.contains(&(5, 4))
-        }));
+        assert!(
+            legal
+                .iter()
+                .any(|turn| { turn.contains(&(7, 4)) && turn.contains(&(5, 4)) })
+        );
     }
 
     #[test]
@@ -747,11 +749,7 @@ mod tests {
         assert!(!legal.is_empty());
         assert!(legal.iter().all(|turn| turn.len() == 1));
         // And every single hop uses the 5.
-        assert!(
-            legal
-                .iter()
-                .all(|turn| matches!(turn[0], (7, 2) | (12, 7)))
-        );
+        assert!(legal.iter().all(|turn| matches!(turn[0], (7, 2) | (12, 7))));
     }
 
     #[test]
@@ -779,9 +777,11 @@ mod tests {
         // With a checker outside home nothing bears off.
         board.points[10] = 1;
         assert!(!board.all_home(Color::White));
-        assert!(hops_for_die(&board, Color::White, 4)
-            .iter()
-            .all(|&(_, to)| to != OFF));
+        assert!(
+            hops_for_die(&board, Color::White, 4)
+                .iter()
+                .all(|&(_, to)| to != OFF)
+        );
     }
 
     #[test]
