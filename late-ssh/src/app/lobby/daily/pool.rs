@@ -86,10 +86,34 @@ pub struct DailyPoolState {
     pub rules: PoolRules,
     /// Equipment preset name; resolved through `table::preset`.
     pub table: String,
-    /// Seat 0 breaks. Assigned by coin flip at claim time.
+    /// Seat 0 breaks the first frame. Assigned by coin flip at claim time.
     pub seats: [Uuid; 2],
     /// Rack seed, kept so the opening rack can be rebuilt for a full replay.
+    /// Later frames rack from seeds derived from it (`frame_seed`), so one
+    /// number still rebuilds the whole match.
     pub seed: u64,
+    /// Frames in the match: 1, or an odd number to race to a majority of.
+    /// Chosen by the challenger when the challenge is posted.
+    #[serde(default = "one_frame")]
+    pub best_of: u8,
+    /// The frame being played, from 0. The breaks alternate, so this also says
+    /// who broke it.
+    #[serde(default)]
+    pub frame: u8,
+    /// Frames won so far, by seat. A drawn snooker frame counts for nobody.
+    #[serde(default)]
+    pub frames_won: [u8; 2],
+    /// The frames in `frames_won` that ran to `FRAME_MIN_SHOTS`, which are the
+    /// ones the win payout counts. An eight-ball frame can be thrown in one
+    /// stroke by potting the eight, so paying for every frame would let two
+    /// accounts multiply a pair-day's prize by the match length in a handful
+    /// of shots; a frame somebody actually played is worth the prize.
+    #[serde(default)]
+    pub counted_frames: [u8; 2],
+    /// Index into `shots` of the current frame's break. Everything that asks
+    /// "has this rack been broken" counts from here.
+    #[serde(default)]
+    pub frame_first_shot: usize,
     pub turn: Seat,
     /// Eight-ball groups by seat, `None` while the table is open. Always
     /// `None` in nine-ball.
@@ -103,6 +127,10 @@ pub struct DailyPoolState {
     /// being ahead when there is nothing left to pot.
     #[serde(default)]
     pub scores: [i32; 2],
+    /// Snooker only: points the player at the table has scored in this visit.
+    /// Back to nought the moment the table changes hands.
+    #[serde(default)]
+    pub current_break: i32,
     /// Snooker only: the striker potted a red and is on a colour of their
     /// choosing.
     #[serde(default)]
@@ -119,6 +147,16 @@ pub struct DailyPoolState {
     /// say why they have ball in hand.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_foul: Option<Foul>,
+    /// Snooker: what that foul paid the incoming player, so the board can
+    /// tell them. Nought when the last shot was not a foul.
+    #[serde(default)]
+    pub last_penalty: i32,
+    /// Snooker: the last shot was a foul **and a miss**
+    /// (`rules_snooker::is_miss`), and this is the table as it was struck, for
+    /// the fouled player who calls for the balls to be put back. Cleared the
+    /// moment they choose anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miss: Option<MissReplay>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub winner: Option<Seat>,
     /// The frame is over. Usually implied by `winner`, but snooker can end
@@ -137,15 +175,65 @@ pub struct PoolShotResult {
     pub outcome: ShotOutcome,
     pub label: String,
     pub foul: Option<Foul>,
-    /// The rack is over and this seat took it.
+    /// The match is over and this seat took it.
     pub winner: Option<Seat>,
-    /// The rack is over however it ended — including level, which snooker can
-    /// do and the other two cannot.
+    /// The match is over however it ended — including level, which a snooker
+    /// frame can do and the other two cannot. A frame that ends with more of
+    /// the match to play is not this: the next rack is already set up.
     pub finished: bool,
+}
+
+/// Everything a put-back restores: the balls as they were struck (the cue
+/// ball where it was placed, if it was), and what the offender was on.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MissReplay {
+    pub rack: RackState,
+    pub on_colour: bool,
+    pub free_ball: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ball_in_hand: Option<BallInHand>,
+}
+
+fn one_frame() -> u8 {
+    1
+}
+
+/// The frame lengths a challenge may ask for.
+pub const BEST_OF: [u8; 4] = [1, 3, 5, 7];
+
+/// Shots a frame must run to before it counts toward the win payout
+/// (`counted_frames`). The same five as the whole match's payout gate.
+pub const FRAME_MIN_SHOTS: usize = 5;
+
+/// The rack seed for frame `frame` of a match seeded `seed`. Frame 0 is the
+/// stored seed itself, which is what every match before best-of racked from.
+/// Derived rather than drawn, so a replay racks every later frame exactly as
+/// it was racked — the same reason the first seed is stored at all.
+pub fn frame_seed(seed: u64, frame: u8) -> u64 {
+    if frame == 0 {
+        return seed;
+    }
+    // splitmix64's finaliser: neighbouring frames get unrelated racks.
+    let mut z = seed ^ (frame as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
 }
 
 impl DailyPoolState {
     pub fn new(rules: PoolRules, challenger: Uuid, claimer: Uuid) -> Self {
+        Self::new_match(rules, challenger, claimer, 1)
+    }
+
+    /// A match of `best_of` frames. Anything not on the menu is a single
+    /// frame: an even count could end level, and the option is the
+    /// challenger's to pick from `BEST_OF`, not to invent.
+    pub fn new_match(rules: PoolRules, challenger: Uuid, claimer: Uuid, best_of: u8) -> Self {
+        let best_of = if BEST_OF.contains(&best_of) {
+            best_of
+        } else {
+            1
+        };
         // The coin flip decides who breaks, which in pool is the whole of the
         // opening advantage.
         let seats = if rand::random::<bool>() {
@@ -162,14 +250,22 @@ impl DailyPoolState {
             table: spec.name.to_string(),
             seats,
             seed,
+            best_of,
+            frame: 0,
+            frames_won: [0, 0],
+            counted_frames: [0, 0],
+            frame_first_shot: 0,
             turn: 0,
             groups: None,
             ball_in_hand: opening_ball_in_hand(rules),
             scores: [0, 0],
+            current_break: 0,
             on_colour: false,
             free_ball: false,
             may_return: false,
             last_foul: None,
+            last_penalty: 0,
+            miss: None,
             winner: None,
             finished: false,
             rack: rack::build(spec, rules.rack_kind(), seed).rounded(PERSIST_DECIMALS),
@@ -185,14 +281,21 @@ impl DailyPoolState {
     /// whole reason the seed is stored.
     fn rewound(&self, spec: &TableSpec) -> Self {
         Self {
+            frame: 0,
+            frames_won: [0, 0],
+            counted_frames: [0, 0],
+            frame_first_shot: 0,
             turn: 0,
             groups: None,
             ball_in_hand: opening_ball_in_hand(self.rules),
             scores: [0, 0],
+            current_break: 0,
             on_colour: false,
             free_ball: false,
             may_return: false,
             last_foul: None,
+            last_penalty: 0,
+            miss: None,
             winner: None,
             finished: false,
             rack: rack::build(spec, self.rules.rack_kind(), self.seed).rounded(PERSIST_DECIMALS),
@@ -247,6 +350,20 @@ impl DailyPoolState {
         self.winner.is_some() || self.finished
     }
 
+    /// Frames a seat must win to take the match.
+    pub fn frames_needed(&self) -> u8 {
+        self.best_of / 2 + 1
+    }
+
+    /// Snooker: the most still to be scored off the table, as a scoreboard
+    /// shows it. Nought in the games that do not score.
+    pub fn points_remaining(&self) -> i32 {
+        if !self.rules.scores() {
+            return 0;
+        }
+        rules_snooker::points_remaining(&self.game_state())
+    }
+
     /// The view the rules layer takes of the match right now.
     pub fn game_state(&self) -> rules::GameState {
         rules::GameState {
@@ -255,7 +372,9 @@ impl DailyPoolState {
             rack: self.rack.clone(),
             turn: self.turn,
             groups: self.groups,
-            shots_taken: self.shots.len() as u32,
+            // Counted from this frame's break, so the second rack of a match
+            // is a break like the first.
+            shots_taken: self.shots.len().saturating_sub(self.frame_first_shot) as u32,
             ball_in_hand: self.ball_in_hand,
         }
     }
@@ -398,8 +517,10 @@ impl DailyPoolState {
             );
             self.prev_rack = None;
             self.may_return = false;
+            self.miss = None;
             self.free_ball = false;
             self.on_colour = false;
+            self.current_break = 0;
             // Handing the shot back does not take the cue ball out of the
             // pocket. If the foul was an in-off the offender plays it again
             // from in hand, which is both the rule and the only way the frame
@@ -416,6 +537,39 @@ impl DailyPoolState {
             return Ok(PoolShotResult {
                 outcome: ShotOutcome::default(),
                 label: "play it again".to_string(),
+                foul: None,
+                winner: None,
+                finished: false,
+            });
+        }
+
+        // Foul and a miss, and the fouled player wants the balls put back:
+        // the table as it was struck, and the offender at it again. Like the
+        // hand-back, a move that never reaches the simulator. The penalty
+        // stands; the offender's break, which the foul ended, does not resume.
+        if shot.put_back {
+            let Some(miss) = self.miss.take() else {
+                bail!("there is nothing to put back: the last shot was not a miss");
+            };
+            self.prev_rack = None;
+            self.rack = miss.rack;
+            self.on_colour = miss.on_colour;
+            self.free_ball = miss.free_ball;
+            self.ball_in_hand = miss.ball_in_hand;
+            self.may_return = false;
+            self.last_foul = None;
+            self.current_break = 0;
+            self.turn = rules::other_seat(seat);
+            let label = "balls put back".to_string();
+            self.shots.push(PoolShotRecord {
+                seat,
+                shot: *shot,
+                label: label.clone(),
+                at: Utc::now(),
+            });
+            return Ok(PoolShotResult {
+                outcome: ShotOutcome::default(),
+                label,
                 foul: None,
                 winner: None,
                 finished: false,
@@ -468,12 +622,14 @@ impl DailyPoolState {
             seat,
         );
 
-        let label = shot_label(&outcome, &ruling, self.rules);
+        let mut label = shot_label(&outcome, &ruling, self.rules);
+        let scores_before = self.scores;
         self.prev_rack = Some(self.rack.clone());
         self.rack = rack;
         self.groups = ruling.group_assignment.or(self.groups);
         self.ball_in_hand = ruling.ball_in_hand;
         self.last_foul = ruling.foul;
+        self.last_penalty = ruling.penalty;
         self.scores[seat as usize] += ruling.points;
         self.scores[rules::other_seat(seat) as usize] += ruling.penalty;
         self.on_colour = ruling.next_on_colour;
@@ -496,12 +652,68 @@ impl DailyPoolState {
             Turn::Keep => seat,
             Turn::Pass => rules::other_seat(seat),
         };
+        self.current_break = match ruling.turn {
+            Turn::Keep => self.current_break + ruling.points,
+            Turn::Pass => 0,
+        };
+        // Snooker, down to the black with more than seven in it: the frame is
+        // over, which is the real rule. Anywhere earlier the player behind is
+        // left to play for snookers. Asked of the table the next player faces,
+        // after the re-spots are settled.
+        if self.rules.scores()
+            && !self.finished
+            && rules_snooker::only_black_left(&self.game_state())
+            && let Some(leader) =
+                rules_snooker::out_of_reach(self.scores, rules_snooker::value(rules_snooker::BLACK))
+        {
+            self.winner = Some(leader);
+            self.finished = true;
+            label.push_str(" · frame over, more than the black in it");
+        }
+        // Foul and a miss: keep the table as it was struck, for a put-back.
+        self.miss = (self.rules.scores()
+            && !self.finished
+            && ruling.foul.is_some()
+            && rules_snooker::is_miss(
+                &before,
+                &outcome,
+                scores_before,
+                self.scores,
+                self.points_remaining(),
+            ))
+        .then(|| MissReplay {
+            rack: start.rounded(PERSIST_DECIMALS),
+            on_colour: before.on_colour,
+            free_ball: before.free_ball,
+            ball_in_hand: before.ball_in_hand,
+        });
+        if self.miss.is_some() {
+            label.push_str(" and a miss");
+        }
+        let frame_ended = self.finished;
+        if frame_ended && self.best_of > 1 {
+            if let Some(winner) = self.winner {
+                self.frames_won[winner as usize] += 1;
+                // This shot is not in `shots` yet, hence the one.
+                let length = self.shots.len() + 1 - self.frame_first_shot;
+                if length >= FRAME_MIN_SHOTS {
+                    self.counted_frames[winner as usize] += 1;
+                }
+            }
+            label.push_str(&format!(
+                " · frames {}-{}",
+                self.frames_won[0], self.frames_won[1]
+            ));
+        }
         self.shots.push(PoolShotRecord {
             seat,
             shot: *shot,
             label: label.clone(),
             at: Utc::now(),
         });
+        if frame_ended && !self.match_decided() {
+            self.rack_next_frame(spec);
+        }
 
         Ok(PoolShotResult {
             outcome,
@@ -510,6 +722,45 @@ impl DailyPoolState {
             winner: self.winner,
             finished: self.is_finished(),
         })
+    }
+
+    /// The match has a result: a single frame is over, or a seat has won the
+    /// frames it needs.
+    fn match_decided(&self) -> bool {
+        self.best_of <= 1
+            || self
+                .frames_won
+                .iter()
+                .any(|won| *won >= self.frames_needed())
+    }
+
+    /// Clear the table for the next frame of the match, broken by whoever did
+    /// not break the last one.
+    ///
+    /// `prev_rack` is left alone on purpose: it is the table the frame-ending
+    /// shot was played on, which is what the board re-simulates to show that
+    /// shot. The fresh rack only appears once it has finished playing.
+    fn rack_next_frame(&mut self, spec: &TableSpec) {
+        self.frame = self.frame.saturating_add(1);
+        self.frame_first_shot = self.shots.len();
+        self.turn = self.frame % 2;
+        self.groups = None;
+        self.ball_in_hand = opening_ball_in_hand(self.rules);
+        self.scores = [0, 0];
+        self.current_break = 0;
+        self.on_colour = false;
+        self.free_ball = false;
+        self.may_return = false;
+        self.last_foul = None;
+        self.miss = None;
+        self.winner = None;
+        self.finished = false;
+        self.rack = rack::build(
+            spec,
+            self.rules.rack_kind(),
+            frame_seed(self.seed, self.frame),
+        )
+        .rounded(PERSIST_DECIMALS);
     }
 
     /// The table the incoming player will actually face, and whether they are
@@ -648,7 +899,9 @@ fn shot_label(outcome: &ShotOutcome, ruling: &rules::Ruling, rules_kind: PoolRul
     if let Some(foul) = ruling.foul {
         parts.push(format!("foul: {}", foul.label()));
     }
-    if ruling.winner.is_some() {
+    // Snooker's frame ends on the table running out rather than on a winner,
+    // so it is asked separately or the move list never says so.
+    if ruling.winner.is_some() || ruling.frame_over {
         parts.push(
             match rules_kind {
                 PoolRules::EightBall => "eight ball, rack over",

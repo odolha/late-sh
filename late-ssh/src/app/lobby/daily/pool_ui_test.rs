@@ -411,6 +411,7 @@ fn playback_runs_then_retires() {
                 speed: 7.0,
                 called_pocket: None,
                 play_again: false,
+                put_back: false,
             },
         )
         .expect("the break is legal");
@@ -443,6 +444,7 @@ fn the_panel_keeps_the_result_to_itself_until_the_shot_has_played() {
                 speed: 7.0,
                 called_pocket: None,
                 play_again: false,
+                put_back: false,
             },
         )
         .expect("the break is legal");
@@ -539,4 +541,21 @@ fn the_list_of_balls_on_is_written_in_their_own_colours() {
             .iter()
             .any(|span| span.content == "black" && span.style.fg == Some(rgb(text_colour(BLACK))))
     );
+}
+
+#[test]
+fn the_scoreboard_says_who_needs_snookers_and_how_many() {
+    use crate::app::games::pool_core::rules_snooker::{BLACK, PINK};
+    let mut state = DailyPoolState::new(PoolRules::Snooker, Uuid::new_v4(), Uuid::new_v4());
+    for ball in &mut state.rack.balls {
+        if ![0, PINK, BLACK].contains(&ball.id) {
+            ball.potted = Some(0);
+        }
+    }
+    state.scores = [40, 10];
+    assert_eq!(snooker_scoreboard(&state), "break 0 · lead 30 · 13 left");
+    // Eighteen short at six a snooker on the pink.
+    assert_eq!(snookers_needed(&state), Some((1, 3)));
+    state.scores = [20, 10];
+    assert_eq!(snookers_needed(&state), None, "clearing the table wins it");
 }

@@ -1486,6 +1486,7 @@ fn played_shots(n: usize) -> Vec<PoolShotRecord> {
                 speed: 1.0,
                 called_pocket: None,
                 play_again: false,
+                put_back: false,
             },
             label: "earlier".to_string(),
             at: chrono::Utc::now(),
@@ -1541,6 +1542,7 @@ fn potting_shot(azimuth: f64) -> Shot {
         speed: 1.4,
         called_pocket: None,
         play_again: false,
+        put_back: false,
     }
 }
 
@@ -1607,6 +1609,7 @@ async fn pool_shots_validate_the_turn_and_the_stroke() {
         speed: 7.0,
         called_pocket: None,
         play_again: false,
+        put_back: false,
     };
     assert!(
         svc.play_pool_shot(waiting, claimed.id, break_shot)
@@ -1799,6 +1802,88 @@ async fn nine_ball_out_finishes_the_match_and_pays_the_winner() {
         credited,
         Some(DailyGame::NineBall.win_payout()),
         "the winner never received the nine-ball payout"
+    );
+}
+
+#[tokio::test]
+async fn a_best_of_match_is_claimed_as_one_and_pays_per_frame_won() {
+    let test_db = new_test_db().await;
+    let challenger = create_test_user(&test_db.db, "daily-bo3-winner").await;
+    let opponent = create_test_user(&test_db.db, "daily-bo3-loser").await;
+    let svc = daily_service(&test_db);
+
+    assert!(
+        svc.post_challenge_best_of(challenger.id, DailyGame::Chess, 3)
+            .await
+            .is_err(),
+        "a chess game has no frames to race to"
+    );
+    assert!(
+        svc.post_challenge_best_of(challenger.id, DailyGame::NineBall, 4)
+            .await
+            .is_err(),
+        "and a match of frames is an odd number of them"
+    );
+
+    let challenge = svc
+        .post_challenge_best_of(challenger.id, DailyGame::NineBall, 3)
+        .await
+        .expect("post a best-of-three");
+    assert_eq!(challenge.best_of, 3);
+    let claimed = svc
+        .claim_challenge(opponent.id, challenge.id)
+        .await
+        .expect("claim it");
+    let mut state = pool_state(&claimed);
+    assert_eq!(
+        state.best_of, 3,
+        "the length rides from the row into the rack"
+    );
+    let client = test_db.db.get().await.expect("db client");
+
+    // One frame up, on the nine for the match.
+    let spec = state.spec().expect("known table");
+    let (mouth, cue, azimuth) = hanger(spec);
+    set_rack(&mut state, &[(0, cue), (9, mouth)]);
+    state.revision = 10;
+    state.shots = played_shots(6);
+    let shooter = state.turn_user();
+    let seat = state.seat_of(shooter).expect("seated") as usize;
+    state.frames_won[seat] = 1;
+    state.counted_frames[seat] = 1;
+    install_pool_state(&client, claimed.id, &state).await;
+
+    svc.play_pool_shot(shooter, claimed.id, potting_shot(azimuth))
+        .await
+        .expect("the nine drops");
+    let row = DailyMatch::get(&client, claimed.id)
+        .await
+        .expect("load match")
+        .expect("match exists");
+    assert_eq!(row.status, DailyMatch::STATUS_FINISHED);
+    assert_eq!(row.winner_user_id, Some(shooter));
+
+    // Two frames won, two prizes.
+    let mut credited = None;
+    for _ in 0..100 {
+        let rows = client
+            .query(
+                "SELECT delta FROM chip_ledger
+                 WHERE user_id = $1 AND reason = 'daily_nineball_win'",
+                &[&shooter],
+            )
+            .await
+            .expect("ledger rows");
+        if let Some(row) = rows.first() {
+            credited = Some(row.get::<_, i64>("delta"));
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(credited, Some(DailyGame::NineBall.win_payout() * 2));
+    assert_eq!(
+        crate::app::lobby::daily::svc::win_chips(&row, DailyGame::NineBall, shooter),
+        DailyGame::NineBall.win_payout() * 2
     );
 }
 

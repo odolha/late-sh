@@ -88,6 +88,7 @@ fn the_finish_headline_names_the_winner_and_only_paid_chips() {
             winner_user_id: winner,
             result,
             win_payout: payout,
+            win_chips: DailyGame::EightBall.win_payout(),
             finished_at: Utc::now(),
             move_count: 0,
             board: MatchSummary::of(

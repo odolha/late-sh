@@ -621,6 +621,31 @@ impl ChipService {
         pair_day_key: &str,
         chip_move: ChipMove,
     ) -> anyhow::Result<RewardGrant> {
+        self.credit_per_event_pair_day_reward_template_times(
+            user_id,
+            reward_key,
+            event_key,
+            pair_day_key,
+            chip_move,
+            1,
+        )
+        .await
+    }
+
+    /// The same grant, worth `times` the template's chips: a daily pool match
+    /// of several frames pays the prize once per frame the winner took. The
+    /// claims are unchanged — still one per match and one per pair-day — so a
+    /// longer match pays more, never more often.
+    pub async fn credit_per_event_pair_day_reward_template_times(
+        &self,
+        user_id: Uuid,
+        reward_key: &str,
+        event_key: &str,
+        pair_day_key: &str,
+        chip_move: ChipMove,
+        times: i64,
+    ) -> anyhow::Result<RewardGrant> {
+        anyhow::ensure!(times >= 1, "a reward is paid at least once");
         let mut client = self.db.get().await?;
         let template = RewardTemplate::get_active_by_key(&**client, reward_key).await?;
         template.ensure_claim_policy(REWARD_CLAIM_POLICY_PER_EVENT)?;
@@ -640,12 +665,12 @@ impl ChipService {
                         period_key: pair_day_key,
                     },
                 ],
-                amount: template.reward_chips,
+                amount: template.reward_chips * times,
                 chip_move,
             },
         )
         .await?;
-        Ok(reward_grant(template.reward_chips, claim))
+        Ok(reward_grant(template.reward_chips * times, claim))
     }
 
     /// Credit a `cooldown` reward that also has to be new: it pays once per
